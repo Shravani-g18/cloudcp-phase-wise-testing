@@ -1,0 +1,15 @@
+[
+  {
+    "case_id": "CLI-SMOKE-01",
+    "title": "Basic end-to-end transfer completes",
+    "group": "smoke",
+    "priority": "P0",
+    "start_utc": "2026-08-04T15:59:04.813871+00:00",
+    "end_utc": "2026-08-04T15:59:04.814504+00:00",
+    "transfer_id": 9999,
+    "broker_exit_code": 0,
+    "validation_passed": null,
+    "outcome": "DRY-RUN",
+    "notes": []
+  }
+]
