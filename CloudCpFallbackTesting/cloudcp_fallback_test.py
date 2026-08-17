@@ -496,6 +496,11 @@ def configure_cloud_provider(api, rec: Recorder, creds: dict) -> None:
         keyid=creds.get("secret_access_key"),
         region=creds.get("region"),
     )
+    # 409 CONFLICT means the provider is already configured -> not an error.
+    if getattr(resp, "status_code", None) == 409:
+        rec.steps[-1]["ok"] = True
+        rec.steps[-1]["detail"] = "already configured (HTTP 409 ignored)"
+        return
     ok = resp is not None
     deadline = time.time() + DEF_CONFIGURE_TIMEOUT
     listed = False
@@ -517,6 +522,24 @@ def configure_cloud_provider(api, rec: Recorder, creds: dict) -> None:
     rec.steps[-1]["detail"] = "provider configured" if listed else "configure not confirmed"
 
 
+def _server_error_message(resp) -> str:
+    """Best-effort extraction of the server-side error reason from a Response."""
+    if resp is None:
+        return ""
+    try:
+        payload = resp.json()
+    except (ValueError, AttributeError):
+        return (getattr(resp, "text", "") or "")[:300]
+    if isinstance(payload, dict):
+        err = payload.get("error")
+        if isinstance(err, dict) and err.get("message"):
+            return str(err["message"])
+        for key in ("message", "detail", "result"):
+            if payload.get(key):
+                return str(payload[key])
+    return (getattr(resp, "text", "") or "")[:300]
+
+
 def initiate_transfer(api, rec: Recorder, cloud_type: str, src: str, dst: str) -> str:
     rec.add("initiate transfer", "api",
             f"POST /api/bcloud/transfer src={src} dst={dst}",
@@ -524,9 +547,13 @@ def initiate_transfer(api, rec: Recorder, cloud_type: str, src: str, dst: str) -
     resp = api.initiate_cloud_transfer(cloud_type, src, dst)
     if resp is None or getattr(resp, "status_code", 0) != 200:
         code = getattr(resp, "status_code", "None")
+        reason = _server_error_message(resp)
+        detail = f"initiate failed (HTTP {code})"
+        if reason:
+            detail = f"{detail}: {reason}"
         rec.steps[-1]["ok"] = False
-        rec.steps[-1]["detail"] = f"initiate failed (HTTP {code})"
-        raise TransferInitError(f"initiate failed (HTTP {code})")
+        rec.steps[-1]["detail"] = detail
+        raise TransferInitError(detail)
     tid = _extract_transfer_id(resp.json().get("result"))
     rec.steps[-1]["ok"] = True
     rec.steps[-1]["detail"] = f"transfer_id={tid}"
