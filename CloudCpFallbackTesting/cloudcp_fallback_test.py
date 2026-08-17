@@ -522,6 +522,15 @@ def configure_cloud_provider(api, rec: Recorder, creds: dict) -> None:
     rec.steps[-1]["detail"] = "provider configured" if listed else "configure not confirmed"
 
 
+def _bucket_root(bucket_base: str) -> str:
+    """s3://aditya/fallback -> s3://aditya (bucket root for a recursive wipe)."""
+    if "://" not in bucket_base:
+        return bucket_base
+    scheme, _, path = bucket_base.partition("://")
+    bucket = path.split("/", 1)[0]
+    return f"{scheme}://{bucket}"
+
+
 def _server_error_message(resp) -> str:
     """Best-effort extraction of the server-side error reason from a Response."""
     if resp is None:
@@ -949,6 +958,9 @@ class Runner:
             verdict, reasons = "ERROR", [f"{type(exc).__name__}: {exc}"]
             rec.add("exception", "local", "", ok=False, detail=str(exc))
 
+        # Per-case cleanup: empty the bucket + remove generated /bryck data.
+        self.cleanup_case(rec, case)
+
         result = {
             "case_id": case.cid,
             "group": case.group,
@@ -996,6 +1008,29 @@ class Runner:
         if expected_files and landed is not None and landed < expected_files:
             detail += f" (< expected {expected_files})"
         rec.add("download landing summary", "local", "", ok=True, detail=detail)
+
+    def cleanup_case(self, rec: Recorder, case: Case) -> None:
+        """After a case: empty the object-store bucket and drop generated data."""
+        if self.args.skip_cleanup:
+            rec.add("skip cleanup", "local", "", detail="--skip-cleanup")
+            return
+        ds = case.ds
+        bucket_root = _bucket_root(self.args.bucket_base)
+        aws_cmd = (f"aws s3 rm --recursive {bucket_root} "
+                   f"--endpoint-url {self.args.endpoint_url}")
+        src = f"{self.args.src_base}/{ds.tier_dir}"
+        dl = f"{self.args.dl_base}/{ds.tier_dir}"
+        # Guard: never rm a bare base / root path.
+        src_rm = f"rm -rf {src}" if ds.tier_dir else "true"
+        dl_rm = f"rm -rf {dl}" if ds.tier_dir else "true"
+        if self.host.dry_run:
+            rec.add("cleanup bucket", "plan", aws_cmd, detail="(dry-run)")
+            rec.add("cleanup /bryck source", "plan", src_rm, detail="(dry-run)")
+            rec.add("cleanup /bryck download", "plan", dl_rm, detail="(dry-run)")
+            return
+        self.host.run(rec, "cleanup bucket", aws_cmd, check=False)
+        self.host.run(rec, "cleanup /bryck source", src_rm, check=False)
+        self.host.run(rec, "cleanup /bryck download", dl_rm, check=False)
 
     def finalize(self, rec: Recorder) -> None:
         if self.args.keep_config:
@@ -1160,6 +1195,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                     help="For download cases, reuse existing bucket objects (no seeding upload).")
     ex.add_argument("--keep-config", action="store_true",
                     help="Do not restore the original config after the run.")
+    ex.add_argument("--skip-cleanup", action="store_true",
+                    help="Do not empty the bucket / remove generated /bryck data after each case.")
     ex.add_argument("--seed", type=int, default=DEFAULT_FAULT_SEED,
                     help=f"FAULT_SEED value (default {DEFAULT_FAULT_SEED}).")
     ex.add_argument("--poll-interval", type=int, default=DEF_POLL_INTERVAL)
