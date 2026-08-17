@@ -496,6 +496,11 @@ def configure_cloud_provider(api, rec: Recorder, creds: dict) -> None:
         keyid=creds.get("secret_access_key"),
         region=creds.get("region"),
     )
+    # 409 CONFLICT means the provider is already configured -> not an error.
+    if getattr(resp, "status_code", None) == 409:
+        rec.steps[-1]["ok"] = True
+        rec.steps[-1]["detail"] = "already configured (HTTP 409 ignored)"
+        return
     ok = resp is not None
     deadline = time.time() + DEF_CONFIGURE_TIMEOUT
     listed = False
@@ -517,6 +522,33 @@ def configure_cloud_provider(api, rec: Recorder, creds: dict) -> None:
     rec.steps[-1]["detail"] = "provider configured" if listed else "configure not confirmed"
 
 
+def _bucket_root(bucket_base: str) -> str:
+    """s3://aditya/fallback -> s3://aditya (bucket root for a recursive wipe)."""
+    if "://" not in bucket_base:
+        return bucket_base
+    scheme, _, path = bucket_base.partition("://")
+    bucket = path.split("/", 1)[0]
+    return f"{scheme}://{bucket}"
+
+
+def _server_error_message(resp) -> str:
+    """Best-effort extraction of the server-side error reason from a Response."""
+    if resp is None:
+        return ""
+    try:
+        payload = resp.json()
+    except (ValueError, AttributeError):
+        return (getattr(resp, "text", "") or "")[:300]
+    if isinstance(payload, dict):
+        err = payload.get("error")
+        if isinstance(err, dict) and err.get("message"):
+            return str(err["message"])
+        for key in ("message", "detail", "result"):
+            if payload.get(key):
+                return str(payload[key])
+    return (getattr(resp, "text", "") or "")[:300]
+
+
 def initiate_transfer(api, rec: Recorder, cloud_type: str, src: str, dst: str) -> str:
     rec.add("initiate transfer", "api",
             f"POST /api/bcloud/transfer src={src} dst={dst}",
@@ -524,9 +556,13 @@ def initiate_transfer(api, rec: Recorder, cloud_type: str, src: str, dst: str) -
     resp = api.initiate_cloud_transfer(cloud_type, src, dst)
     if resp is None or getattr(resp, "status_code", 0) != 200:
         code = getattr(resp, "status_code", "None")
+        reason = _server_error_message(resp)
+        detail = f"initiate failed (HTTP {code})"
+        if reason:
+            detail = f"{detail}: {reason}"
         rec.steps[-1]["ok"] = False
-        rec.steps[-1]["detail"] = f"initiate failed (HTTP {code})"
-        raise TransferInitError(f"initiate failed (HTTP {code})")
+        rec.steps[-1]["detail"] = detail
+        raise TransferInitError(detail)
     tid = _extract_transfer_id(resp.json().get("result"))
     rec.steps[-1]["ok"] = True
     rec.steps[-1]["detail"] = f"transfer_id={tid}"
@@ -922,6 +958,9 @@ class Runner:
             verdict, reasons = "ERROR", [f"{type(exc).__name__}: {exc}"]
             rec.add("exception", "local", "", ok=False, detail=str(exc))
 
+        # Per-case cleanup: empty the bucket + remove generated /bryck data.
+        self.cleanup_case(rec, case)
+
         result = {
             "case_id": case.cid,
             "group": case.group,
@@ -969,6 +1008,29 @@ class Runner:
         if expected_files and landed is not None and landed < expected_files:
             detail += f" (< expected {expected_files})"
         rec.add("download landing summary", "local", "", ok=True, detail=detail)
+
+    def cleanup_case(self, rec: Recorder, case: Case) -> None:
+        """After a case: empty the object-store bucket and drop generated data."""
+        if self.args.skip_cleanup:
+            rec.add("skip cleanup", "local", "", detail="--skip-cleanup")
+            return
+        ds = case.ds
+        bucket_root = _bucket_root(self.args.bucket_base)
+        aws_cmd = (f"aws s3 rm --recursive {bucket_root} "
+                   f"--endpoint-url {self.args.endpoint_url}")
+        src = f"{self.args.src_base}/{ds.tier_dir}"
+        dl = f"{self.args.dl_base}/{ds.tier_dir}"
+        # Guard: never rm a bare base / root path.
+        src_rm = f"rm -rf {src}" if ds.tier_dir else "true"
+        dl_rm = f"rm -rf {dl}" if ds.tier_dir else "true"
+        if self.host.dry_run:
+            rec.add("cleanup bucket", "plan", aws_cmd, detail="(dry-run)")
+            rec.add("cleanup /bryck source", "plan", src_rm, detail="(dry-run)")
+            rec.add("cleanup /bryck download", "plan", dl_rm, detail="(dry-run)")
+            return
+        self.host.run(rec, "cleanup bucket", aws_cmd, check=False)
+        self.host.run(rec, "cleanup /bryck source", src_rm, check=False)
+        self.host.run(rec, "cleanup /bryck download", dl_rm, check=False)
 
     def finalize(self, rec: Recorder) -> None:
         if self.args.keep_config:
@@ -1118,11 +1180,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     sel = p.add_argument_group("selection")
     sel.add_argument("--all", action="store_true", help="Run every case (incl. negatives).")
-    sel.add_argument("--one", help="Run one case or a comma-separated list of case ids.")
-    sel.add_argument("--from", dest="from_id", help="Start case id (inclusive) in catalog order.")
-    sel.add_argument("--to", dest="to_id", help="End case id (inclusive) in catalog order.")
+    sel.add_argument("--one", help="Run one case, or a comma-separated list, by # index or case id.")
+    sel.add_argument("--from", dest="from_id", help="Start case (# index or id, inclusive) in catalog order.")
+    sel.add_argument("--to", dest="to_id", help="End case (# index or id, inclusive) in catalog order.")
     sel.add_argument("--negative", action="store_true", help="Run only the FB-N-* negative cases.")
-    sel.add_argument("--negative-case", help="Run one/comma-separated negative case id(s).")
+    sel.add_argument("--negative-case", help="Run one/comma-separated negative case(s) by # index or id.")
     sel.add_argument("--list", action="store_true", help="List all cases and exit.")
 
     ex = p.add_argument_group("execution")
@@ -1133,6 +1195,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                     help="For download cases, reuse existing bucket objects (no seeding upload).")
     ex.add_argument("--keep-config", action="store_true",
                     help="Do not restore the original config after the run.")
+    ex.add_argument("--skip-cleanup", action="store_true",
+                    help="Do not empty the bucket / remove generated /bryck data after each case.")
     ex.add_argument("--seed", type=int, default=DEFAULT_FAULT_SEED,
                     help=f"FAULT_SEED value (default {DEFAULT_FAULT_SEED}).")
     ex.add_argument("--poll-interval", type=int, default=DEF_POLL_INTERVAL)
@@ -1158,6 +1222,31 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return p.parse_args(argv)
 
 
+def _resolve_ids(tokens: list[str], catalog: list[Case]) -> list[str]:
+    """Map selection tokens to case ids, preserving order.
+
+    A token may be a case id (FB-U-01, case-insensitive) or a 1-based catalog
+    index as shown in the '#' column of --list (e.g. 1, 22). Unknown tokens are
+    reported on stderr and skipped.
+    """
+    order = [c.cid for c in catalog]
+    lower = {cid.lower(): cid for cid in order}
+    resolved: list[str] = []
+    unknown: list[str] = []
+    for tok in tokens:
+        if tok.lower() in lower:
+            resolved.append(lower[tok.lower()])
+        elif tok.isdigit() and 1 <= int(tok) <= len(order):
+            resolved.append(order[int(tok) - 1])
+        else:
+            unknown.append(tok)
+    if unknown:
+        print(f"Unknown case id/index: {', '.join(unknown)}. "
+              f"Run --list to see valid ids (1..{len(order)} or FB-U-01).",
+              file=sys.stderr)
+    return resolved
+
+
 def select_cases(args, catalog: list[Case]) -> list[Case]:
     by_id = {c.cid: c for c in catalog}
     order = [c.cid for c in catalog]
@@ -1165,14 +1254,16 @@ def select_cases(args, catalog: list[Case]) -> list[Case]:
     if args.negative and not (args.one or args.from_id or args.negative_case):
         return [c for c in catalog if c.group == "NEGATIVE"]
     if args.negative_case:
-        ids = [x.strip() for x in args.negative_case.split(",") if x.strip()]
-        return [by_id[i] for i in ids if i in by_id]
+        tokens = [x.strip() for x in args.negative_case.split(",") if x.strip()]
+        return [by_id[i] for i in _resolve_ids(tokens, catalog)]
     if args.one:
-        ids = [x.strip() for x in args.one.split(",") if x.strip()]
-        return [by_id[i] for i in ids if i in by_id]
+        tokens = [x.strip() for x in args.one.split(",") if x.strip()]
+        return [by_id[i] for i in _resolve_ids(tokens, catalog)]
     if args.from_id or args.to_id:
-        start = order.index(args.from_id) if args.from_id in order else 0
-        end = order.index(args.to_id) if args.to_id in order else len(order) - 1
+        from_id = _resolve_ids([args.from_id], catalog) if args.from_id else []
+        to_id = _resolve_ids([args.to_id], catalog) if args.to_id else []
+        start = order.index(from_id[0]) if from_id else 0
+        end = order.index(to_id[0]) if to_id else len(order) - 1
         if start > end:
             start, end = end, start
         return [by_id[cid] for cid in order[start:end + 1]]
@@ -1205,12 +1296,13 @@ def main(argv: list[str] | None = None) -> int:
     catalog = build_catalog()
 
     if args.list:
-        print(f"{'CASE':<9} {'GROUP':<10} {'DIR':<8} {'DATASET':<8} "
+        print(f"{'#':<4} {'CASE':<9} {'GROUP':<10} {'DIR':<8} {'DATASET':<8} "
               f"{'PROF':<4} {'HP':<5} {'FB':<5} EXPECT")
-        for c in catalog:
-            print(f"{c.cid:<9} {c.group:<10} {c.direction:<8} {c.dataset:<8} "
+        for i, c in enumerate(catalog, 1):
+            print(f"{i:<4} {c.cid:<9} {c.group:<10} {c.direction:<8} {c.dataset:<8} "
                   f"{c.profile:<4} {str(c.hi_perf):<5} {str(c.fallback_enabled):<5} {c.expect}")
-        print(f"\n{len(catalog)} cases. Profiles: "
+        print(f"\n{len(catalog)} cases. Select by # (1..{len(catalog)}) or case id. "
+              "Profiles: "
               + ", ".join(f"{k}={v.fail_pct}/{v.crash_pct}" for k, v in PROFILES.items()))
         return 0
 
