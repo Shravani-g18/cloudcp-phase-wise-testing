@@ -1118,11 +1118,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     sel = p.add_argument_group("selection")
     sel.add_argument("--all", action="store_true", help="Run every case (incl. negatives).")
-    sel.add_argument("--one", help="Run one case or a comma-separated list of case ids.")
-    sel.add_argument("--from", dest="from_id", help="Start case id (inclusive) in catalog order.")
-    sel.add_argument("--to", dest="to_id", help="End case id (inclusive) in catalog order.")
+    sel.add_argument("--one", help="Run one case, or a comma-separated list, by # index or case id.")
+    sel.add_argument("--from", dest="from_id", help="Start case (# index or id, inclusive) in catalog order.")
+    sel.add_argument("--to", dest="to_id", help="End case (# index or id, inclusive) in catalog order.")
     sel.add_argument("--negative", action="store_true", help="Run only the FB-N-* negative cases.")
-    sel.add_argument("--negative-case", help="Run one/comma-separated negative case id(s).")
+    sel.add_argument("--negative-case", help="Run one/comma-separated negative case(s) by # index or id.")
     sel.add_argument("--list", action="store_true", help="List all cases and exit.")
 
     ex = p.add_argument_group("execution")
@@ -1158,6 +1158,31 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return p.parse_args(argv)
 
 
+def _resolve_ids(tokens: list[str], catalog: list[Case]) -> list[str]:
+    """Map selection tokens to case ids, preserving order.
+
+    A token may be a case id (FB-U-01, case-insensitive) or a 1-based catalog
+    index as shown in the '#' column of --list (e.g. 1, 22). Unknown tokens are
+    reported on stderr and skipped.
+    """
+    order = [c.cid for c in catalog]
+    lower = {cid.lower(): cid for cid in order}
+    resolved: list[str] = []
+    unknown: list[str] = []
+    for tok in tokens:
+        if tok.lower() in lower:
+            resolved.append(lower[tok.lower()])
+        elif tok.isdigit() and 1 <= int(tok) <= len(order):
+            resolved.append(order[int(tok) - 1])
+        else:
+            unknown.append(tok)
+    if unknown:
+        print(f"Unknown case id/index: {', '.join(unknown)}. "
+              f"Run --list to see valid ids (1..{len(order)} or FB-U-01).",
+              file=sys.stderr)
+    return resolved
+
+
 def select_cases(args, catalog: list[Case]) -> list[Case]:
     by_id = {c.cid: c for c in catalog}
     order = [c.cid for c in catalog]
@@ -1165,14 +1190,16 @@ def select_cases(args, catalog: list[Case]) -> list[Case]:
     if args.negative and not (args.one or args.from_id or args.negative_case):
         return [c for c in catalog if c.group == "NEGATIVE"]
     if args.negative_case:
-        ids = [x.strip() for x in args.negative_case.split(",") if x.strip()]
-        return [by_id[i] for i in ids if i in by_id]
+        tokens = [x.strip() for x in args.negative_case.split(",") if x.strip()]
+        return [by_id[i] for i in _resolve_ids(tokens, catalog)]
     if args.one:
-        ids = [x.strip() for x in args.one.split(",") if x.strip()]
-        return [by_id[i] for i in ids if i in by_id]
+        tokens = [x.strip() for x in args.one.split(",") if x.strip()]
+        return [by_id[i] for i in _resolve_ids(tokens, catalog)]
     if args.from_id or args.to_id:
-        start = order.index(args.from_id) if args.from_id in order else 0
-        end = order.index(args.to_id) if args.to_id in order else len(order) - 1
+        from_id = _resolve_ids([args.from_id], catalog) if args.from_id else []
+        to_id = _resolve_ids([args.to_id], catalog) if args.to_id else []
+        start = order.index(from_id[0]) if from_id else 0
+        end = order.index(to_id[0]) if to_id else len(order) - 1
         if start > end:
             start, end = end, start
         return [by_id[cid] for cid in order[start:end + 1]]
@@ -1205,12 +1232,13 @@ def main(argv: list[str] | None = None) -> int:
     catalog = build_catalog()
 
     if args.list:
-        print(f"{'CASE':<9} {'GROUP':<10} {'DIR':<8} {'DATASET':<8} "
+        print(f"{'#':<4} {'CASE':<9} {'GROUP':<10} {'DIR':<8} {'DATASET':<8} "
               f"{'PROF':<4} {'HP':<5} {'FB':<5} EXPECT")
-        for c in catalog:
-            print(f"{c.cid:<9} {c.group:<10} {c.direction:<8} {c.dataset:<8} "
+        for i, c in enumerate(catalog, 1):
+            print(f"{i:<4} {c.cid:<9} {c.group:<10} {c.direction:<8} {c.dataset:<8} "
                   f"{c.profile:<4} {str(c.hi_perf):<5} {str(c.fallback_enabled):<5} {c.expect}")
-        print(f"\n{len(catalog)} cases. Profiles: "
+        print(f"\n{len(catalog)} cases. Select by # (1..{len(catalog)}) or case id. "
+              "Profiles: "
               + ", ".join(f"{k}={v.fail_pct}/{v.crash_pct}" for k, v in PROFILES.items()))
         return 0
 
