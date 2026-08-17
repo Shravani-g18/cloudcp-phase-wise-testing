@@ -1,0 +1,10 @@
+{
+  "bryckapi_host": "192.168.6.32",
+  "bryckapi_scheme": "https",
+  "bryckapi_port": "443",
+  "bryckapi_username": "admin",
+  "bryckapi_password": "Bryck@123456789",
+  "timeout": 300,
+  "bryckserver_username": "bryck",
+  "bryckserver_password": "while(1);"
+}

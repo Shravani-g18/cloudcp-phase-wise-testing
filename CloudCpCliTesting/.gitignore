@@ -1,3 +1,4 @@
 # Test run artifacts
 run_*/
+results/
 __pycache__/

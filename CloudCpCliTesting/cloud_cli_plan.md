@@ -1,0 +1,519 @@
+# CloudCP CLI Test Plan
+
+## Decisions Fixed for This Plan
+
+These answers were confirmed before writing this plan and constrain every
+section below. The execution script must not deviate from them without a
+plan update.
+
+| # | Question | Decision |
+|---|---|---|
+| 1 | Execution target | One Bryck system at a time. |
+| 2 | Transfer modes | Every dataset is run for upload, download, **and** both — not user-selected per run. |
+| 3 | Dataset selection | The script automatically runs all dataset sizes (ZERO/TINY/SMALL/MEDIUM/LARGE/SPARSE); no per-run manual pick. |
+| 4 | Mount behavior | If Bryck is ejected, the script mounts it automatically (no extra prompt beyond the single top-level confirmation gate). |
+| 5 | Eject during transfer | Included as an intentional negative test. |
+| 6 | Format/erase/remove during transfer | Actually executed (not just checked for rejection) — these are real destructive lifecycle tests. |
+| 7 | Service restart | Both `bcloud` and `bryckapi` are restarted during an active transfer. |
+| 8 | Re-transfer | After cancel, a new transfer is started automatically using the same dataset. |
+| 9 | Confirmation level | **One** confirmation before the entire run (the Plan → Execute gate in §13); no per-operation prompts once confirmed. |
+| 10 | Results format | All three: JSON, HTML, and Markdown. |
+| 11 | Logs | Per-test-case directories under `results/<RUN_ID>/<TEST_ID>/`, which also pull in/reference the host's own `/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_<id>/` artifacts for that test. |
+| 12 | Cleanup | Auto-cleanup (dataset + cloud objects) after every test, unless a `--keep` / `--no-cleanup` flag is passed for debugging. |
+| 13 | `cloud_ops.json` | Dynamically updated per test case (`bryck_src` / `cloud_bucket` / `bryck_dst` rewritten per dataset/mode), never edited by hand mid-run. |
+| 14 | `config.json` | Fully read-only reference — the framework only reads tier definitions from it, never writes to it. |
+| 15 | SPARSE dataset | Sourced from a separate YAML/spec file under `datasets/spec_files/` (e.g. the sparse spec used by `CloudCpFallbackTesting`), since `/etc/bryck/bryckcloud/config.json` only defines ZERO/TINY/SMALL/MEDIUM/LARGE. |
+
+Because destructive operations (§8) are executed for real and cleanup is
+automatic, the confirmation gate in §13 is the **only** safety checkpoint —
+it must clearly list every destructive step before the user approves.
+
+---
+
+## 1. Purpose
+
+Validate the CloudCP CLI (`bryckclient-cli` runners: mount/eject/format/erase,
+cloud configure, transfer initiate/status/pause/resume/cancel/report) against a
+real Bryck appliance across the full dataset size range, including disruptive
+conditions (service restarts, ejects, format/erase attempts, cancel +
+re-transfer) — and produce evidence-backed PASS/FAIL results for each
+operation.
+
+## 2. Scope
+
+- Bryck mount/eject lifecycle
+- Dataset generation
+- AWS/cloud configuration
+- Upload/download
+- Pause/resume/cancel
+- Re-transfer
+- Service restart/recovery
+- Transfer verification
+- Data integrity
+- Logs and reports
+
+Out of scope: GCP/Azure cloud types (AWS only, per current `cloud_ops.json`
+usage), multi-Bryck parallel execution.
+
+## 3. Required Files & Paths
+
+| Path | Role |
+|---|---|
+| `bryckclient-cli/login.json` | Bryck REST + SSH credentials (read-only). |
+| `bryckclient-cli/cloud_ops.json` | Cloud provider + src/dst paths — rewritten per test case (see §6, §13 decision). |
+| `bryckclient-cli/format_mount_params.json` | Format/mount parameters (read-only unless a case targets a param change). |
+| `dataset_cloudcp/spec_files/*.yaml` (and `CloudCpFallbackTesting/spec_files/*.yaml` for SPARSE) | Datagen spec catalog. |
+| `/etc/bryck/bryckcloud/config.json` | Tier + TEST/TRANSFER reference config — read-only (decision #14). |
+| `/etc/bryck/bryckcloud/transfer_summary_files.json` | Transfer summary reference for verification. |
+| `/opt/bryck/bryckapi/downloads/cloud_transfer_logs/` | Per-transfer report/log root. |
+| `/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloudcp.log` | Engine log, checked for errors/crashes. |
+| `/opt/bryck/bryckapi/downloads/bcloud_batchmeta` | Broker batch metadata root. |
+
+## 4. Pre-Execution Validation
+
+Performed in `--plan` mode (read-only, no side effects):
+
+1. Validate JSON syntax of `login.json`, `cloud_ops.json`, `format_mount_params.json`.
+2. Validate SSH connectivity (paramiko) and REST API connectivity (`ApiSession.login()`).
+3. Run `bryck_info.py` to read current Bryck state.
+4. Determine whether Bryck is mounted.
+   - If **ejected**, plan includes an explicit "Mount Bryck" step (auto-mount per decision #4) — the plan output must call this out.
+   - **Never generate data while Bryck is ejected.** If ejected, datagen is scheduled *after* the mount step, never before.
+5. Validate the dataset specification(s): each selected tier's YAML exists, parses, and its target root is under the mounted Bryck path.
+
+Any failure here aborts `--plan` before any confirmation prompt is shown.
+
+## 5. Dataset Selection
+
+All sizes are run automatically (decision #3) — no manual per-run picking.
+Each tier maps to one **primary** dataset id from the authoritative catalog
+(`dataset_cloudcp/spec_files/manifest.json` + `dataset_map.json`, 54 datasets
+total) so runs stay fast; a **stress** alternate is available via `--full-scale`
+for perf/regression passes.
+
+| Tier | Primary dataset (default run) | Stress alternate (`--full-scale`) | Spec location | Notes |
+|---|---|---|---|---|
+| `ZERO` | `DS-P1-01` | `DS-P8-02` (single zero-byte smoke) | `dataset_cloudcp/spec_files/DS-P1-01/` | 5,000,000 zero-byte files; `DS-P8-02` is the 1-file smoke variant. |
+| `TINY` | `DS-P1-02` | `DS-P12-01` (tiny/small heavy, 1 M files) | `dataset_cloudcp/spec_files/DS-P1-02/` | 1 B – 1 MB, count-seal/byte-seal mix. |
+| `SMALL` | `DS-P1-03` | `DS-P2-01` (11 exact size boundaries incl. 64 MB multipart edge) | `dataset_cloudcp/spec_files/DS-P1-03/` | 1 MB – 100 MB, crosses the 64 MB multipart threshold. |
+| `MEDIUM` | `DS-P1-04` | `DS-P2-05` (medium count-seal trigger) | `dataset_cloudcp/spec_files/DS-P1-04/` | 100 MB – 1 GB, always multipart. |
+| `LARGE` | `DS-P1-05` (20 files, 5–50 GB smoke) | `DS-P1-06` (200 files, 5–100 GB perf baseline) | `dataset_cloudcp/spec_files/DS-P1-05/` (`DS-P1-06/` for stress) | Multipart + bandwidth stress; `DS-P1-05` is the fast default. |
+| `SPARSE` | `06_sparse_files` | `12_tiny_2million` (scale) | `CloudCpFallbackTesting/spec_files/06_sparse_files.yaml` (separate catalog — decision #15) | Sparse/logical-vs-physical content; no equivalent tier in `/etc/bryck/bryckcloud/config.json`. |
+
+Selection logic: the runner reads `/etc/bryck/bryckcloud/config.json` for the
+tier definitions that exist there (ZERO/TINY/SMALL/MEDIUM/LARGE) and maps each
+to its primary dataset id above via `dataset_cloudcp/spec_files/manifest.json`;
+SPARSE is appended from the separate `CloudCpFallbackTesting/spec_files/`
+catalog since it has no `config.json` tier entry. `dataset_map.json`'s
+category/subcategory fields are used only for the run summary annotation, not
+for selection.
+
+### 5.1 Additional supporting datasets (used by specific test cases below)
+
+| Dataset | Used by | Reason |
+|---|---|---|
+| `DS-P8-01` | `CLI-EDGE-01` | Empty source directory — zero-file transfer edge case. |
+| `DS-P8-04` | `CLI-EDGE-02` | 14-level deep directory tree — scanner/resume stress. |
+| `DS-P9-04` | `CLI-EDGE-03` | Single 64 MB file — first size that must go multipart. |
+| `DS-P4-01` | `CLI-EDGE-04` | Filename/encoding stress (20 filename variants) at tiny tier. |
+
+## 6. Cloud Configuration
+
+Per test case (per dataset x per mode), from `CloudCpCliTesting/bryckclient-cli/`:
+
+1. Rewrite `cloud_ops.json` `bryck_src` / `cloud_bucket` / `bryck_dst` to a
+   dataset+mode-specific path/prefix, e.g. for tier `SMALL`:
+
+   ```jsonc
+   {
+     "cloud_type": "aws",
+     "bryck_src": "/bryck/cloudcp_cli/SMALL",
+     "cloud_bucket": "s3://aditya/cloudcp-cli/SMALL",
+     "bryck_dst": "/bryck/cloudcp_cli_dl/SMALL"
+   }
+   ```
+
+   This is the only file the framework dynamically edits (decision #13); a
+   backup (`cloud_ops.json.bak`) is written to `results/<RUN_ID>/` and restored
+   at the end of the run.
+
+2. Configure the provider on the Bryck:
+
+   ```bash
+   python3 bryck_cloud_configure.py --login login.json --params cloud_ops.json
+   ```
+
+3. Verify the configuration before starting the transfer:
+
+   ```bash
+   python3 bryck_cloud_show.py --login login.json
+   ```
+
+## 7. Transfer Execution
+
+Per test case, still from `CloudCpCliTesting/bryckclient-cli/`:
+
+1. Initiate the transfer (decision #2 — every dataset gets all three modes,
+   run as three separate test cases per tier):
+
+   ```bash
+   # upload:   bryck_src -> cloud_bucket
+   python3 bryck_cloud_transfer_initiate.py --login login.json --params cloud_ops.json --mode upload
+
+   # download: cloud_bucket -> bryck_dst  (requires a prior clean upload of the same tier)
+   python3 bryck_cloud_transfer_initiate.py --login login.json --params cloud_ops.json --mode download
+
+   # both:     upload then download in one call
+   python3 bryck_cloud_transfer_initiate.py --login login.json --params cloud_ops.json --mode both
+   ```
+
+   This prints/returns the created `transfer_id` — capture it.
+
+2. Poll until terminal state (or until a live-intervention test in §8 needs to
+   fire mid-transfer):
+
+   ```bash
+   python3 bryck_cloud_transfer_status.py --login login.json --transfer-id <id>
+   # or, to see every transfer in a given state:
+   python3 bryck_cloud_transfer_status.py --login login.json --state IN_PROGRESS
+   ```
+
+   Valid states returned: `IN_PROGRESS`, `COMPLETED`, `PAUSED`, `FAILED`,
+   `STOPPED`, `CANCELLED`.
+
+3. Every command invocation, its raw response, and a timestamp are appended to
+   that test case's evidence log (§11).
+
+## 8. Live Transfer Intervention Tests
+
+For each active transfer, the following are exercised for real (decisions
+#6/#7 — not merely checked for rejection):
+
+| Action | Command |
+|---|---|
+| Pause | `python3 bryck_cloud_transfer_pause.py --login login.json --transfer-id <id>` |
+| Resume | `python3 bryck_cloud_transfer_resume.py --login login.json --transfer-id <id>` |
+| Cancel | `python3 bryck_cloud_transfer_cancel.py --login login.json --transfer-id <id>` |
+| Re-transfer | After cancel, re-run the §7 initiate command for the same dataset/mode (decision #8) and capture the new `transfer_id` |
+| Mount | `python3 bryck_mount.py --login login.json --params format_mount_params.json` |
+| Eject | `python3 bryck_eject_unmount.py --login login.json` (intentionally run mid-transfer — negative test, decision #5) |
+| Attempt format | `python3 bryck_format.py --login login.json --params format_mount_params.json` |
+| Attempt erase | `python3 bryck_erase.py --login login.json` |
+| Attempt remove | `python3 bryck_remove.py --login login.json` |
+| Restart `bcloud` | SSH: `sudo systemctl restart bcloud.service` (via `ssh_runner.py` / login.json SSH creds) |
+| Restart `bryckapi` | SSH: `sudo systemctl restart bryckapi.service` |
+
+Each operation records, in this exact order:
+
+```
+Before State -> Action -> API/CLI Response -> After State -> Expected Result -> Actual Result -> PASS/FAIL
+```
+
+Before/after state is captured with `bryck_info.py --login login.json` and
+`bryck_cloud_transfer_status.py --login login.json --transfer-id <id>`.
+
+## 9. Test Case Catalog
+
+Every row below is one executable test case (`TEST_ID` is the results-directory
+name, §16). All test cases run against a **single Bryck** (decision #1), with
+all destructive steps executed for real (decisions #5–#8) and cleaned up
+automatically afterward (decision #12).
+
+### 9.1 Transfer Matrix — one case per tier x per mode (18 cases)
+
+Dataset ids and spec paths from §5. Expected result for every row: transfer
+reaches `COMPLETED`, object count/sizes match source, `final_report.csv` row
+count matches expected file count.
+
+| Test ID | Tier | Dataset | Mode | Command (from §7) |
+|---|---|---|---|---|
+| `CLI-U-ZERO` | ZERO | `DS-P1-01` | upload | `bryck_cloud_transfer_initiate.py --mode upload` |
+| `CLI-D-ZERO` | ZERO | `DS-P1-01` | download | `bryck_cloud_transfer_initiate.py --mode download` |
+| `CLI-B-ZERO` | ZERO | `DS-P1-01` | both | `bryck_cloud_transfer_initiate.py --mode both` |
+| `CLI-U-TINY` | TINY | `DS-P1-02` | upload | `bryck_cloud_transfer_initiate.py --mode upload` |
+| `CLI-D-TINY` | TINY | `DS-P1-02` | download | `bryck_cloud_transfer_initiate.py --mode download` |
+| `CLI-B-TINY` | TINY | `DS-P1-02` | both | `bryck_cloud_transfer_initiate.py --mode both` |
+| `CLI-U-SMALL` | SMALL | `DS-P1-03` | upload | `bryck_cloud_transfer_initiate.py --mode upload` |
+| `CLI-D-SMALL` | SMALL | `DS-P1-03` | download | `bryck_cloud_transfer_initiate.py --mode download` |
+| `CLI-B-SMALL` | SMALL | `DS-P1-03` | both | `bryck_cloud_transfer_initiate.py --mode both` |
+| `CLI-U-MEDIUM` | MEDIUM | `DS-P1-04` | upload | `bryck_cloud_transfer_initiate.py --mode upload` |
+| `CLI-D-MEDIUM` | MEDIUM | `DS-P1-04` | download | `bryck_cloud_transfer_initiate.py --mode download` |
+| `CLI-B-MEDIUM` | MEDIUM | `DS-P1-04` | both | `bryck_cloud_transfer_initiate.py --mode both` |
+| `CLI-U-LARGE` | LARGE | `DS-P1-05` | upload | `bryck_cloud_transfer_initiate.py --mode upload` |
+| `CLI-D-LARGE` | LARGE | `DS-P1-05` | download | `bryck_cloud_transfer_initiate.py --mode download` |
+| `CLI-B-LARGE` | LARGE | `DS-P1-05` | both | `bryck_cloud_transfer_initiate.py --mode both` |
+| `CLI-U-SPARSE` | SPARSE | `06_sparse_files.yaml` | upload | `bryck_cloud_transfer_initiate.py --mode upload` |
+| `CLI-D-SPARSE` | SPARSE | `06_sparse_files.yaml` | download | `bryck_cloud_transfer_initiate.py --mode download` |
+| `CLI-B-SPARSE` | SPARSE | `06_sparse_files.yaml` | both | `bryck_cloud_transfer_initiate.py --mode both` |
+
+`download` cases require the tier's objects to already exist in the bucket —
+the runner satisfies this by always executing `CLI-U-<TIER>` before
+`CLI-D-<TIER>` in the plan order (§14).
+
+### 9.2 Live Intervention Matrix — one case per tier (6 cases x 10 actions)
+
+Run against the `CLI-B-<TIER>` transfer while it is `IN_PROGRESS`. Each action
+row is logged with the full before/after state per §8.
+
+| Test ID | Tier | Actions exercised (in order) |
+|---|---|---|
+| `CLI-LC-ZERO` | ZERO | pause -> resume -> cancel -> re-transfer -> mount -> eject -> format attempt -> erase attempt -> remove attempt -> restart bcloud -> restart bryckapi |
+| `CLI-LC-TINY` | TINY | same 10-action sequence |
+| `CLI-LC-SMALL` | SMALL | same 10-action sequence |
+| `CLI-LC-MEDIUM` | MEDIUM | same 10-action sequence |
+| `CLI-LC-LARGE` | LARGE | same 10-action sequence |
+| `CLI-LC-SPARSE` | SPARSE | same 10-action sequence |
+
+Expected results per action:
+
+| Action | Expected result |
+|---|---|
+| Pause | Status transitions to `PAUSED`; no data loss on resume. |
+| Resume | Status returns to `IN_PROGRESS` and eventually `COMPLETED`. |
+| Cancel | Status transitions to `CANCELLED`; no further progress. |
+| Re-transfer | A new `transfer_id` is created and reaches `COMPLETED` independently of the cancelled one. |
+| Mount | Bryck state becomes `Mounted`; no-op if already mounted. |
+| Eject (mid-transfer) | Negative test — transfer must surface a failure/stopped state, not hang or corrupt the report; Bryck ejects cleanly. |
+| Format attempt | Bryck refuses or fully reformats depending on state; if it proceeds, the run's dataset is regenerated afterward before continuing. |
+| Erase attempt | Cloud config/transfer history on the Bryck is reset; runner reconfigures cloud (§6) afterward. |
+| Remove attempt | Bryck is deregistered from `bryckapi`; runner re-adds it (out of band, manual) if needed to continue — flagged as a run-ending case if remove succeeds. |
+| Restart bcloud / bryckapi | Service comes back up within a bounded wait; any `IN_PROGRESS` transfer either resumes or is cleanly marked `FAILED`/`STOPPED` (never silently lost). |
+
+### 9.3 Service Restart Matrix (2 cases, cross-tier)
+
+| Test ID | Restart target | Timing |
+|---|---|---|
+| `CLI-SVC-BCLOUD` | `bcloud.service` | Mid-transfer on `CLI-B-MEDIUM` (multipart in progress). |
+| `CLI-SVC-BRYCKAPI` | `bryckapi.service` | Mid-transfer on `CLI-B-MEDIUM` (multipart in progress). |
+
+### 9.4 Negative / Edge Cases (4 cases)
+
+| Test ID | Dataset | Scenario | Expected result |
+|---|---|---|---|
+| `CLI-EDGE-01` | `DS-P8-01` | Empty source directory upload. | Transfer completes with 0 objects transferred; no error. |
+| `CLI-EDGE-02` | `DS-P8-04` | 14-level deep directory tree upload. | All paths preserved; no scanner stack overflow. |
+| `CLI-EDGE-03` | `DS-P9-04` | Single 64 MB file upload (first multipart size). | Uses multipart upload; single object in report. |
+| `CLI-EDGE-04` | `DS-P4-01` | Tiny tier, 20 filename variants upload. | Every filename variant round-trips byte-for-byte. |
+
+**Total: 18 (transfer) + 60 (6 x 10 intervention actions, tracked as sub-rows
+of the 6 `CLI-LC-*` cases) + 2 (service) + 4 (edge) = 24 top-level test cases,
+60 intervention action sub-results.**
+
+## 10. Verification
+
+- Transfer status (terminal state reached, matches expectation for the case)
+- Transfer summary (`transfer_summary_files.json` cross-check)
+- Object count (source file count vs. transferred/reported count)
+- Source/destination size comparison
+- Missing/partial objects
+- Transfer report (`final_report.csv`, `upload_report.*.csv`)
+- Integrity checks (checksum comparison where the dataset spec supports it)
+
+## 11. Evidence Collection
+
+Every operation (mount/eject/format/erase/service restart/transfer command)
+records:
+
+- Exact command executed
+- Timestamp
+- Return code
+- stdout
+- stderr
+- API response with secrets removed (credentials/keys redacted before write)
+- Transfer ID (where applicable)
+- Before/after Bryck state
+- Relevant log excerpts (`cloudcp.log`, batch metadata)
+- Relevant report file(s)
+
+## 12. Recovery & Cleanup
+
+At the end of each test case (auto, per decision #12, unless `--keep`/`--no-cleanup` given):
+
+1. Complete or cancel any transfer left active by that case.
+2. Restore Bryck to the expected state for the next case (mounted, unless the
+   next case specifically starts from ejected).
+3. Remove the case's generated dataset from the Bryck path.
+4. Remove the case's uploaded cloud objects.
+5. Verify `bcloud` and `bryckapi` services are up and responsive.
+6. Confirm no orphan processes/transfers remain (`bryck_cloud_transfer_status.py`
+   shows nothing `IN_PROGRESS` that belongs to this run).
+7. Restore `cloud_ops.json` to its pre-run contents once the whole run ends.
+
+## 13. Confirmation Gate — VERY IMPORTANT
+
+Before `--execute` runs anything, it prints the full built plan and requires
+explicit confirmation. Example:
+
+```
+CloudCP CLI Test Plan
+=====================
+Target System : <system>
+Dataset(s)    : ZERO, TINY, SMALL, MEDIUM, LARGE, SPARSE   (all sizes — automatic)
+Transfer Mode : upload + download + both                   (all modes — automatic)
+Cloud         : <provider>
+Source        : <path>
+Destination   : <bucket/path>
+
+Planned Operations:
+  [1] Validate Bryck state
+  [2] Mount Bryck if required (AUTO-MOUNT)
+  [3] Generate datasets (ZERO/TINY/SMALL/MEDIUM/LARGE/SPARSE)
+  [4] Configure cloud (cloud_ops.json will be rewritten per case, then restored)
+  [5] Start transfers (upload/download/both x each dataset)
+  [6] Pause/resume/cancel + auto re-transfer tests
+  [7] Mount/eject lifecycle tests (INCLUDES eject-during-active-transfer)
+  [8] Format/erase/remove attempts (EXECUTED FOR REAL, not just rejection checks)
+  [9] Service restart tests (bcloud AND bryckapi, during active transfers)
+ [10] Transfer verification (§10)
+ [11] Live intervention + service restart tests (§9.2/§9.3)
+ [12] Auto-cleanup datasets + cloud objects after each test
+ [13] Generate reports (JSON + HTML + Markdown)
+
+WARNING:
+These operations WILL modify Bryck state, interrupt active transfers,
+restart services, and execute real format/erase/remove commands. Data
+generated per case is deleted automatically after that case completes.
+
+Proceed with execution? [yes/no]:
+```
+
+The script must not proceed until the user explicitly types `yes`.
+
+## 14. Two-Phase Workflow
+
+**Phase 1 — Plan / Confirmation**
+
+```bash
+python3 cloud_cli_runner.py --plan
+```
+
+- Reads all configuration (`login.json`, `cloud_ops.json`, `format_mount_params.json`, `/etc/bryck/bryckcloud/config.json`).
+- Checks paths exist and are valid JSON/YAML.
+- Checks current Bryck state.
+- Resolves all dataset tiers (§5) including SPARSE from its separate catalog.
+- Builds the complete execution plan (every test case from §9, in order).
+- Renders the confirmation screen from §13.
+- Asks for confirmation.
+- **Does not modify anything** — no mount, no datagen, no config writes.
+
+**Phase 2 — Execute**
+
+```bash
+python3 cloud_cli_runner.py --execute --plan-file <plan.json>
+```
+
+- Loads the exact plan produced and confirmed in Phase 1 (no re-derivation, no
+  new assumptions).
+- Executes only the confirmed steps, in the confirmed order, actually
+  performing every test case in §9 (transfers, live interventions, service
+  restarts, edge cases) — this phase does real work, it does not simulate.
+- Writes evidence (§11) to `results/<RUN_ID>/<TEST_ID>/` as it goes.
+- Performs recovery/cleanup (§12) after each case and at run end.
+- Emits final JSON + HTML + Markdown reports (decision #10) to `results/<RUN_ID>/`.
+
+## 15. Directory Layout
+
+```text
+CloudCpCliTesting/
+  cloud_cli_plan.md            # this document
+  cloud_cli_runner.py          # (future) two-phase runner: --plan / --execute
+  bryckclient-cli/
+    login.json
+    cloud_ops.json             # rewritten per case during --execute, restored after
+    format_mount_params.json
+  results/
+    <RUN_ID>/
+      plan.json                # frozen plan from --plan, consumed by --execute
+      cloud_ops.json.bak       # pre-run backup, restored at end
+      <TEST_ID>/
+        commands.log           # exact commands, timestamps, return codes, stdout/stderr
+        api_responses.json     # secrets redacted
+        before_after_state.json
+        cloud_transfer_logs/   # pulled from /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_<id>/
+        report.json
+      summary.json
+      summary.html
+      summary.md
+```
+
+## 16. Step-by-Step Execution Walkthrough (Worked Example: `CLI-B-SMALL`)
+
+This is the exact command sequence the runner performs for one test case —
+tier `SMALL`, dataset `DS-P1-03`, mode `both` — from a mounted, idle Bryck to
+a cleaned-up result. All commands run on the Linux Bryck host from
+`CloudCpCliTesting/bryckclient-cli/` unless noted.
+
+```bash
+# --- 0. Pre-flight (read-only, part of --plan) -----------------------------
+python3 bryck_info.py --login login.json
+#   -> confirm state; if "Ejected", plan schedules step 2 before step 3.
+
+# --- 1. Mount (only if ejected; auto-mount per decision #4) ----------------
+python3 bryck_mount.py --login login.json --params format_mount_params.json
+python3 bryck_info.py --login login.json   # confirm "Mounted"
+
+# --- 2. Generate the dataset (never while ejected) -------------------------
+/home/bryck/rperiyas/datagen --spec dataset_cloudcp/spec_files/DS-P1-03/<spec>.yaml
+#   repeat for every spec file listed under DS-P1-03 in manifest.json
+#   -> materializes files under /bryck/cloudcp_cli/SMALL
+
+# --- 3. Configure cloud_ops.json for this tier (dynamically rewritten) -----
+#   bryck_src    = /bryck/cloudcp_cli/SMALL
+#   cloud_bucket = s3://aditya/cloudcp-cli/SMALL
+#   bryck_dst    = /bryck/cloudcp_cli_dl/SMALL
+python3 bryck_cloud_configure.py --login login.json --params cloud_ops.json
+python3 bryck_cloud_show.py --login login.json
+
+# --- 4. Initiate the transfer (mode=both -> upload then download) ---------
+python3 bryck_cloud_transfer_initiate.py --login login.json --params cloud_ops.json --mode both
+#   -> capture transfer_id, e.g. 4821
+
+# --- 5. Poll status; run live interventions from §9.2 while IN_PROGRESS ----
+python3 bryck_cloud_transfer_status.py --login login.json --transfer-id 4821
+python3 bryck_cloud_transfer_pause.py  --login login.json --transfer-id 4821
+python3 bryck_cloud_transfer_status.py --login login.json --transfer-id 4821   # expect PAUSED
+python3 bryck_cloud_transfer_resume.py --login login.json --transfer-id 4821
+python3 bryck_cloud_transfer_status.py --login login.json --transfer-id 4821   # expect IN_PROGRESS
+python3 bryck_cloud_transfer_cancel.py --login login.json --transfer-id 4821
+python3 bryck_cloud_transfer_status.py --login login.json --transfer-id 4821   # expect CANCELLED
+
+# --- 6. Re-transfer with the same dataset (decision #8) --------------------
+python3 bryck_cloud_transfer_initiate.py --login login.json --params cloud_ops.json --mode both
+#   -> capture new transfer_id, e.g. 4830; poll to COMPLETED
+
+# --- 7. Mount/eject lifecycle + format/erase/remove attempts (§9.2) --------
+python3 bryck_eject_unmount.py --login login.json          # negative test, mid-transfer on a parallel case
+python3 bryck_mount.py --login login.json --params format_mount_params.json
+python3 bryck_format.py --login login.json --params format_mount_params.json
+python3 bryck_erase.py --login login.json
+python3 bryck_remove.py --login login.json
+
+# --- 8. Service restarts (§9.3), via SSH from login.json credentials -------
+ssh <bryckserver_username>@<bryckapi_host> "sudo systemctl restart bcloud.service"
+ssh <bryckserver_username>@<bryckapi_host> "sudo systemctl restart bryckapi.service"
+
+# --- 9. Download the report and verify (§10) -------------------------------
+python3 bryck_cloud_transfer_report.py --login login.json \
+  --cloud-transfer-id 4830 \
+  --report-path ../results/<RUN_ID>/CLI-B-SMALL/cloud_transfer_report_4830.zip
+
+# --- 10. Cleanup (auto, decision #12) --------------------------------------
+#   - remove /bryck/cloudcp_cli/SMALL and /bryck/cloudcp_cli_dl/SMALL
+#   - delete s3://aditya/cloudcp-cli/SMALL objects
+#   - restore cloud_ops.json from results/<RUN_ID>/cloud_ops.json.bak (at run end)
+```
+
+Every command above is captured verbatim (with timestamp, return code,
+stdout/stderr, and redacted API response) into
+`results/<RUN_ID>/CLI-B-SMALL/commands.log` per §11.
+
+## 17. Open Items
+
+1. Confirm the exact SPARSE spec file path to standardize on (currently
+   pointing at `CloudCpFallbackTesting/spec_files/06_sparse_files.yaml`) versus
+   adding a dedicated sparse spec under `dataset_cloudcp/spec_files/`.
+2. Confirm `bcloud`/`bryckapi` restart commands require passwordless `sudo` on
+   the Bryck host for the SSH runner to execute them non-interactively.
+3. Confirm the exact destination bucket/prefix naming convention to avoid
+   collisions with other test suites (`CloudCpFallbackTesting`, `CloudCpBinaryTesting`)
+   running against the same bucket.

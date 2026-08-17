@@ -1,0 +1,29 @@
+version: 1
+mode: flat
+root: /bryck/cloudcp_fallback/sparse_files
+threads: 4
+seed: 42
+
+# Sparse (ftruncate hole) files spanning tiny -> medium logical sizes.
+# Tests logical-vs-physical size handling and reads over holes.
+content:
+  type: sparse
+
+naming:
+  charset: ascii
+  alphabet: [lower, digit]
+  prefix: "sparse-"
+  length: 12
+
+flat:
+  num_files: 60
+
+size:
+  type: range
+  min: 256KB
+  max: 256MB
+  distribution: log-uniform
+
+extensions:
+  - ext: .sparse
+    weight: 1

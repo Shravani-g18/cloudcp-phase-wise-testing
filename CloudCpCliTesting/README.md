@@ -41,6 +41,14 @@ CloudCpCliTesting/
 7. Waits for transfer artifacts under Bryck's transfer log folders.
 8. Validates merged success rows, `final_report.csv`, and leftover retry/failure artifacts.
 
+Naming rule for Bryck-host datasets:
+
+- Local source root is always created as: `<output-base>/<dataset-id>`.
+- Destination is normalized to include `<dataset-id>` as the final prefix segment.
+
+Example: if `--dataset DS-P2-01` and `--dst s3://aditya/cloudcp-cli`,
+the runner uses `s3://aditya/cloudcp-cli/DS-P2-01` automatically.
+
 It is intended to run on the Linux Bryck host. On Windows, use `--list` or `--dry-run`.
 
 ## Quick commands
@@ -57,7 +65,7 @@ Dry-run one dataset:
 python3 CloudCpCliTesting/cloudcpclitesting.py \
   --dataset DS-P2-01 \
   --output-base /bryck/cloudcp_cli_data \
-  --dst s3://aditya/cloudcp-cli/DS-P2-01 \
+  --dst s3://aditya/cloudcp-cli \
   --dry-run
 ```
 
@@ -67,7 +75,7 @@ Real run:
 python3 CloudCpCliTesting/cloudcpclitesting.py \
   --dataset DS-P2-01 \
   --output-base /bryck/cloudcp_cli_data \
-  --dst s3://aditya/cloudcp-cli/DS-P2-01 \
+  --dst s3://aditya/cloudcp-cli \
   --yes
 ```
 
@@ -79,7 +87,7 @@ python3 CloudCpCliTesting/cloudcpclitesting.py \
   --output-base /bryck/cloudcp_cli_data \
   --skip-transfer \
   --transfer-id 1234 \
-  --dst s3://aditya/cloudcp-cli/DS-P2-01
+  --dst s3://aditya/cloudcp-cli
 ```
 
 Append extra arguments to the `bryckcloud` command:
@@ -88,7 +96,7 @@ Append extra arguments to the `bryckcloud` command:
 python3 CloudCpCliTesting/cloudcpclitesting.py \
   --dataset DS-P2-01 \
   --output-base /bryck/cloudcp_cli_data \
-  --dst s3://aditya/cloudcp-cli/DS-P2-01 \
+  --dst s3://aditya/cloudcp-cli \
   --transfer-arg --endpoint-url \
   --transfer-arg https://10.10.10.103:9000 \
   --yes
