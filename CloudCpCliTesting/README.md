@@ -1,29 +1,50 @@
 # CloudCpCliTesting
 
 This folder is structured to mirror the role of `CloudCpBinaryTesting`, but for
-the `bryckcloud transfer add aws` entry point.
+the CloudCP CLI (`bryckclient-cli`) and the `bryckcloud transfer add aws` entry point.
 
 ## Layout
 
 ```text
 CloudCpCliTesting/
   README.md
-  cloudcpclitesting.py
+  cloud_cli_plan.md         # test plan (purpose, scope, test-case catalog, commands)
+  cloud_cli_runner.py       # single entry point: --plan then --execute
+  cloudcpclitesting.py      # underlying dataset/report helpers, imported by cloud_cli_runner.py
   plan_cp_cli.md
   .gitignore
+  bryckclient-cli/          # operator CLI scripts (mount/eject/format/cloud/transfer/...)
   data/
     README.md
-  scripts/
-    run_smoke_cli_test.sh
-    run_boundary_cli_test.sh
-    validate_existing_transfer.sh
-  runs/
-    run_<timestamp>_<dataset>/report.json
+  results/                  # generated per-run: results/<RUN_ID>/<TEST_ID>/{report.json,commands.log}
 ```
 
-## Main runner
+`results/` is gitignored and created on demand — nothing under it is checked in.
 
-`cloudcpclitesting.py` performs one dataset flow end-to-end:
+## Single entry point: `cloud_cli_runner.py`
+
+All test cases (transfers, live intervention/lifecycle tests, service restarts,
+edge cases) are run through one script, in two phases. See `cloud_cli_plan.md`
+for the full test-case catalog and command reference.
+
+```bash
+# Phase 1 — read-only: build + confirm the plan
+python3 cloud_cli_runner.py --plan --only CLI-U-ZERO --yes
+
+# Phase 2 — execute the confirmed plan
+python3 cloud_cli_runner.py --execute --plan-file results/<RUN_ID>/plan.json
+```
+
+Useful flags: `--only <ID> [<ID> ...]` to run specific test cases, `--tiers`/`--modes`
+to scope a batch, `--no-lifecycle`/`--no-service`/`--no-edge` to skip a matrix,
+`--dry-run` to preview commands without touching a real Bryck, `--keep` to skip
+auto-cleanup for debugging.
+
+## `cloudcpclitesting.py` (library + legacy single-dataset runner)
+
+`cloud_cli_runner.py` imports `cloudcpclitesting.py` for dataset generation and
+report-validation helpers, so this file must stay in place. It can still be run
+directly for the older one-off flow it was originally built for:
 
 1. Selects a dataset from `dataset_cloudcp/spec_files/manifest.json`.
 2. Rewrites the dataset's datagen spec roots under your chosen output base.
@@ -102,14 +123,6 @@ python3 CloudCpCliTesting/cloudcpclitesting.py \
   --yes
 ```
 
-## Phase scripts
-
-The `scripts/` folder contains simple Linux-host entry points for common CLI runs:
-
-- `run_smoke_cli_test.sh` for a small smoke test.
-- `run_boundary_cli_test.sh` for a batch-boundary style dataset.
-- `validate_existing_transfer.sh` for report-only validation of an existing transfer id.
-
 ## Expected host inputs
 
 - Datagen binary: `/home/bryck/rperiyas/datagen`
@@ -128,6 +141,10 @@ Override any of those with the corresponding CLI flags if your host differs.
 - No terminal `failed_uploads.*` entries remain.
 - No live `cloudcp_retry_<id>_*.lst` files remain.
 
-Per-run JSON reports are written under `CloudCpCliTesting/runs/`.
+Per-run JSON reports (`cloudcpclitesting.py` standalone runs) are written under
+`CloudCpCliTesting/runs/` if you use that legacy flow directly; the
+`cloud_cli_runner.py` two-phase flow writes everything under `results/<RUN_ID>/` instead.
 
-See `plan_cp_cli.md` for the test-plan style description and `data/README.md` for dataset guidance.
+See `plan_cp_cli.md` for the legacy single-dataset test-plan description, and
+`cloud_cli_plan.md` for the full CLI test plan / test-case catalog, and
+`data/README.md` for dataset guidance.

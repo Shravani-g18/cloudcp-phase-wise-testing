@@ -133,6 +133,8 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--include-edge", action="store_true", default=True)
     parser.add_argument("--no-edge", dest="include_edge", action="store_false",
                          help="Skip the negative/edge-case matrix (§9.4).")
+    parser.add_argument("--only", nargs="+", default=None,
+                         help="Build/run only these test-case IDs (e.g. --only CLI-U-ZERO), ignoring --tiers/--modes/--include-*.")
 
     parser.add_argument("--login", default=str(BRYCK_CLI_DIR / "login.json"))
     parser.add_argument("--params", default=str(BRYCK_CLI_DIR / "cloud_ops.json"),
@@ -157,6 +159,9 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--poll-interval", type=int, default=10)
     parser.add_argument("--intervention-wait", type=int, default=15,
                          help="Seconds to let a transfer run before firing a live-intervention action.")
+    parser.add_argument("--action-timeout", type=int, default=90,
+                         help="Seconds to wait/poll for a lifecycle/service action's expected state "
+                              "transition to be confirmed before marking it FAILED/TIMED_OUT.")
 
     parser.add_argument("--results-dir", default=str(RESULTS_ROOT))
     parser.add_argument("--run-id", default=None, help="Override the generated RUN_ID.")
@@ -501,6 +506,13 @@ def build_plan(args: argparse.Namespace, logger: logging.Logger) -> dict:
                 "description": meta["description"],
             })
 
+    if args.only:
+        wanted = set(args.only)
+        test_cases = [tc for tc in test_cases if tc["id"] in wanted]
+        missing = wanted - {tc["id"] for tc in test_cases}
+        if missing:
+            problems.append(f"--only referenced unknown test case id(s): {sorted(missing)}")
+
     plan = {
         "run_id": run_id,
         "created_at": dt.datetime.now().isoformat(),
@@ -522,6 +534,7 @@ def build_plan(args: argparse.Namespace, logger: logging.Logger) -> dict:
             "wait_timeout": args.wait_timeout,
             "poll_interval": args.poll_interval,
             "intervention_wait": args.intervention_wait,
+            "action_timeout": args.action_timeout,
             "keep": args.keep,
             "aws_cli": args.aws_cli,
             "results_dir": os.path.abspath(args.results_dir),
@@ -687,6 +700,46 @@ class Executor:
         result.commands.append(cmd.as_dict())
         return state
 
+    def require_ok(self, result: TestCaseResult, cmd: CommandResult, step_name: str) -> bool:
+        """Validate a command actually succeeded before letting the caller proceed."""
+        if self.args.dry_run:
+            return True
+        ok = cmd.returncode == 0
+        if not ok:
+            self.logger.error("%s failed (rc=%s): %s", step_name, cmd.returncode, (cmd.stderr or cmd.stdout)[:400])
+            result.notes.append(f"{step_name} FAILED rc={cmd.returncode}")
+        return ok
+
+    def wait_for_bryck_state(
+        self, result: TestCaseResult, matches: List[str], timeout: int,
+    ) -> tuple[bool, str]:
+        """Poll bryck_info until its State contains one of `matches` (case-insensitive)."""
+        if self.args.dry_run:
+            return True, "DRYRUN"
+        deadline = time.time() + timeout
+        state = "UNKNOWN"
+        while time.time() < deadline:
+            state = self.bryck_state(result)
+            if any(m.lower() in state.lower() for m in matches):
+                return True, state
+            time.sleep(self.cfg["poll_interval"])
+        return False, state
+
+    def wait_for_transfer_state(
+        self, result: TestCaseResult, transfer_id: str, matches: List[str], timeout: int,
+    ) -> tuple[bool, str]:
+        """Poll transfer status until it is one of `matches` (exact, case-insensitive)."""
+        if self.args.dry_run:
+            return True, "DRYRUN"
+        deadline = time.time() + timeout
+        state = "UNKNOWN"
+        while time.time() < deadline:
+            state = self.transfer_status(result, transfer_id)
+            if state.upper() in {m.upper() for m in matches}:
+                return True, state
+            time.sleep(self.cfg["poll_interval"])
+        return False, state
+
     def write_cloud_ops(self, tier: str) -> str:
         cfg = dict(self.base_cloud_ops)
         cfg["bryck_src"] = f"{self.cfg['output_base']}/{tier}"
@@ -697,11 +750,16 @@ class Executor:
                 json.dump(cfg, handle, indent=2)
         return cfg["cloud_bucket"]
 
-    def configure_cloud(self, result: TestCaseResult, tier: str) -> str:
+    def configure_cloud(self, result: TestCaseResult, tier: str) -> tuple[bool, str]:
+        """Configure + verify cloud settings; only returns success if BOTH steps confirm."""
         bucket = self.write_cloud_ops(tier)
-        self.run_py(result, "bryck_cloud_configure.py", ["--login", self.cfg["login"], "--params", self.cfg["params"]])
-        self.run_py(result, "bryck_cloud_show.py", ["--login", self.cfg["login"]])
-        return bucket
+        configure_cmd = self.run_py(result, "bryck_cloud_configure.py", ["--login", self.cfg["login"], "--params", self.cfg["params"]])
+        if not self.require_ok(result, configure_cmd, "bryck_cloud_configure.py"):
+            return False, bucket
+        show_cmd = self.run_py(result, "bryck_cloud_show.py", ["--login", self.cfg["login"]])
+        if not self.require_ok(result, show_cmd, "bryck_cloud_show.py"):
+            return False, bucket
+        return True, bucket
 
     def initiate_transfer(self, result: TestCaseResult, mode: str) -> Optional[str]:
         cmd = self.run_py(
@@ -711,7 +769,12 @@ class Executor:
         )
         if self.args.dry_run:
             return "DRYRUN-ID"
-        return parse_transfer_id(cmd.stdout + cmd.stderr)
+        if not self.require_ok(result, cmd, "bryck_cloud_transfer_initiate.py"):
+            return None
+        transfer_id = parse_transfer_id(cmd.stdout + cmd.stderr)
+        if not transfer_id:
+            result.notes.append("initiate succeeded (rc=0) but no transfer_id could be parsed from its output")
+        return transfer_id
 
     def poll_until_terminal(self, result: TestCaseResult, transfer_id: str) -> str:
         if self.args.dry_run:
@@ -760,7 +823,13 @@ class Executor:
             self.bryck_state(result)
             dataset_root, gen_summary = generate_tier_dataset(tier, self.cfg["output_base"], self._ns(), self.logger)
             result.notes.append(f"generated: {gen_summary}")
-            self.configure_cloud(result, tier)
+
+            configured_ok, _bucket = self.configure_cloud(result, tier)
+            if not configured_ok:
+                result.status = "BLOCKED"
+                result.notes.append("cloud configuration did not succeed; transfer not attempted")
+                return result
+
             transfer_id = self.initiate_transfer(result, mode)
             if not transfer_id:
                 result.status = "BLOCKED"
@@ -802,7 +871,12 @@ class Executor:
         tier = tc["tier"]
         try:
             generate_tier_dataset(tier, self.cfg["output_base"], self._ns(), self.logger)
-            self.configure_cloud(result, tier)
+            configured_ok, _bucket = self.configure_cloud(result, tier)
+            if not configured_ok:
+                result.status = "BLOCKED"
+                result.notes.append("cloud configuration did not succeed; lifecycle test not attempted")
+                return result
+
             transfer_id = self.initiate_transfer(result, "both")
             if not transfer_id:
                 result.status = "BLOCKED"
@@ -810,46 +884,80 @@ class Executor:
                 return result
             time.sleep(0 if self.args.dry_run else self.cfg["intervention_wait"])
 
+            action_timeout = self.cfg.get("action_timeout", 90)
+            any_failed = False
             for action in LIFECYCLE_ACTIONS:
-                sub = {"action": action}
-                before_state = self.bryck_state(result)
-                before_transfer = self.transfer_status(result, transfer_id)
-                sub["before_state"] = before_state
-                sub["before_transfer_state"] = before_transfer
+                sub: Dict[str, Any] = {"action": action}
+                sub["before_state"] = self.bryck_state(result)
+                sub["before_transfer_state"] = self.transfer_status(result, transfer_id)
+                self.logger.info("--- lifecycle action: %s (transfer_id=%s) ---", action, transfer_id)
 
+                cmd: Optional[CommandResult] = None
                 if action == "pause":
-                    self.run_py(result, "bryck_cloud_transfer_pause.py", ["--login", self.cfg["login"], "--transfer-id", transfer_id])
+                    cmd = self.run_py(result, "bryck_cloud_transfer_pause.py", ["--login", self.cfg["login"], "--transfer-id", transfer_id])
+                    step_ok = self.require_ok(result, cmd, "pause")
+                    matched, state = self.wait_for_transfer_state(result, transfer_id, ["PAUSED"], action_timeout) if step_ok else (False, "SKIPPED")
+                    sub.update(command_ok=step_ok, expected="PAUSED", observed=state, status="PASS" if step_ok and matched else "FAIL")
                 elif action == "resume":
-                    self.run_py(result, "bryck_cloud_transfer_resume.py", ["--login", self.cfg["login"], "--transfer-id", transfer_id])
+                    cmd = self.run_py(result, "bryck_cloud_transfer_resume.py", ["--login", self.cfg["login"], "--transfer-id", transfer_id])
+                    step_ok = self.require_ok(result, cmd, "resume")
+                    matched, state = self.wait_for_transfer_state(result, transfer_id, ["IN_PROGRESS", "COMPLETED"], action_timeout) if step_ok else (False, "SKIPPED")
+                    sub.update(command_ok=step_ok, expected="IN_PROGRESS/COMPLETED", observed=state, status="PASS" if step_ok and matched else "FAIL")
                 elif action == "cancel":
-                    self.run_py(result, "bryck_cloud_transfer_cancel.py", ["--login", self.cfg["login"], "--transfer-id", transfer_id])
+                    cmd = self.run_py(result, "bryck_cloud_transfer_cancel.py", ["--login", self.cfg["login"], "--transfer-id", transfer_id])
+                    step_ok = self.require_ok(result, cmd, "cancel")
+                    matched, state = self.wait_for_transfer_state(result, transfer_id, ["CANCELLED"], action_timeout) if step_ok else (False, "SKIPPED")
+                    sub.update(command_ok=step_ok, expected="CANCELLED", observed=state, status="PASS" if step_ok and matched else "FAIL")
                 elif action == "retransfer":
                     new_id = self.initiate_transfer(result, "both")
                     sub["new_transfer_id"] = new_id
+                    sub.update(command_ok=bool(new_id), expected="new transfer_id", observed=new_id, status="PASS" if new_id else "FAIL")
                     if new_id:
                         transfer_id = new_id
                 elif action == "mount":
-                    self.run_py(result, "bryck_mount.py", ["--login", self.cfg["login"], "--params", self.cfg["format_mount_params"]])
+                    cmd = self.run_py(result, "bryck_mount.py", ["--login", self.cfg["login"], "--params", self.cfg["format_mount_params"]])
+                    step_ok = self.require_ok(result, cmd, "mount")
+                    matched, state = self.wait_for_bryck_state(result, ["mount"], action_timeout) if step_ok else (False, "SKIPPED")
+                    sub.update(command_ok=step_ok, expected="*Mounted*", observed=state, status="PASS" if step_ok and matched else "FAIL")
                 elif action == "eject":
-                    self.run_py(result, "bryck_eject_unmount.py", ["--login", self.cfg["login"]])
+                    cmd = self.run_py(result, "bryck_eject_unmount.py", ["--login", self.cfg["login"]])
+                    step_ok = self.require_ok(result, cmd, "eject")
+                    matched, state = self.wait_for_bryck_state(result, ["eject", "remov"], action_timeout) if step_ok else (False, "SKIPPED")
+                    sub.update(command_ok=step_ok, expected="*Ejected/Removed*", observed=state, status="PASS" if step_ok and matched else "FAIL")
                 elif action == "format":
-                    self.run_py(result, "bryck_format.py", ["--login", self.cfg["login"], "--params", self.cfg["format_mount_params"]])
+                    cmd = self.run_py(result, "bryck_format.py", ["--login", self.cfg["login"], "--params", self.cfg["format_mount_params"]])
+                    step_ok = self.require_ok(result, cmd, "format")
+                    sub.update(command_ok=step_ok, expected="command succeeds (destructive; verify manually)", observed=cmd.returncode, status="PASS" if step_ok else "FAIL")
                 elif action == "erase":
-                    self.run_py(result, "bryck_erase.py", ["--login", self.cfg["login"]])
+                    cmd = self.run_py(result, "bryck_erase.py", ["--login", self.cfg["login"]])
+                    step_ok = self.require_ok(result, cmd, "erase")
+                    sub.update(command_ok=step_ok, expected="command succeeds (destructive; verify manually)", observed=cmd.returncode, status="PASS" if step_ok else "FAIL")
                 elif action == "remove":
-                    self.run_py(result, "bryck_remove.py", ["--login", self.cfg["login"]])
+                    cmd = self.run_py(result, "bryck_remove.py", ["--login", self.cfg["login"]])
+                    step_ok = self.require_ok(result, cmd, "remove")
+                    sub.update(command_ok=step_ok, expected="command succeeds (destructive; verify manually)", observed=cmd.returncode, status="PASS" if step_ok else "FAIL")
                 elif action == "restart_bcloud":
-                    self.ssh(result, "sudo systemctl restart bcloud.service")
+                    cmd = self.ssh(result, "sudo systemctl restart bcloud.service")
+                    step_ok = self.require_ok(result, cmd, "restart_bcloud")
+                    matched, state = self.wait_for_bryck_state(result, ["mount", "eject", "remov"], action_timeout) if step_ok else (False, "SKIPPED")
+                    sub.update(command_ok=step_ok, expected="bryck reachable after restart", observed=state, status="PASS" if step_ok and matched else "FAIL")
                 elif action == "restart_bryckapi":
-                    self.ssh(result, "sudo systemctl restart bryckapi.service")
+                    cmd = self.ssh(result, "sudo systemctl restart bryckapi.service")
+                    step_ok = self.require_ok(result, cmd, "restart_bryckapi")
+                    matched, state = self.wait_for_bryck_state(result, ["mount", "eject", "remov"], action_timeout) if step_ok else (False, "SKIPPED")
+                    sub.update(command_ok=step_ok, expected="bryck reachable after restart", observed=state, status="PASS" if step_ok and matched else "FAIL")
 
                 sub["after_state"] = self.bryck_state(result)
                 sub["after_transfer_state"] = self.transfer_status(result, transfer_id)
                 result.sub_results.append(sub)
+                self.logger.info("--- lifecycle action %s -> %s ---", action, sub.get("status"))
+                if sub.get("status") == "FAIL":
+                    any_failed = True
 
             # Best-effort recovery so subsequent test cases start clean.
-            self.run_py(result, "bryck_mount.py", ["--login", self.cfg["login"], "--params", self.cfg["format_mount_params"]])
-            result.status = "PASS"
+            recovery_cmd = self.run_py(result, "bryck_mount.py", ["--login", self.cfg["login"], "--params", self.cfg["format_mount_params"]])
+            self.require_ok(result, recovery_cmd, "post-lifecycle recovery mount")
+            result.status = "FAIL" if any_failed else "PASS"
             self.cleanup_tier(result, tier)
         except Exception as exc:  # noqa: BLE001
             result.status = "FAIL"
@@ -861,7 +969,12 @@ class Executor:
         tier = tc["tier"]
         try:
             generate_tier_dataset(tier, self.cfg["output_base"], self._ns(), self.logger)
-            self.configure_cloud(result, tier)
+            configured_ok, _bucket = self.configure_cloud(result, tier)
+            if not configured_ok:
+                result.status = "BLOCKED"
+                result.notes.append("cloud configuration did not succeed; service-restart test not attempted")
+                return result
+
             transfer_id = self.initiate_transfer(result, "both")
             if not transfer_id:
                 result.status = "BLOCKED"
@@ -870,7 +983,20 @@ class Executor:
             time.sleep(0 if self.args.dry_run else self.cfg["intervention_wait"])
 
             before_state = self.transfer_status(result, transfer_id)
-            self.ssh(result, f"sudo systemctl restart {tc['target_service']}")
+            restart_cmd = self.ssh(result, f"sudo systemctl restart {tc['target_service']}")
+            if not self.require_ok(result, restart_cmd, f"restart {tc['target_service']}"):
+                result.status = "FAIL"
+                result.notes.append(f"before_restart={before_state}")
+                return result
+
+            action_timeout = self.cfg.get("action_timeout", 90)
+            reachable, state_after_restart = self.wait_for_bryck_state(result, ["mount", "eject", "remov"], action_timeout)
+            result.notes.append(f"reachable_after_restart={reachable} state={state_after_restart}")
+            if not reachable:
+                result.status = "FAIL"
+                result.notes.append("Bryck did not become reachable again within action-timeout after service restart")
+                return result
+
             final_state = self.poll_until_terminal(result, transfer_id)
             result.notes.append(f"before_restart={before_state} final_state={final_state}")
             result.status = "PASS" if final_state in TERMINAL_STATES else "FAIL"
@@ -890,7 +1016,13 @@ class Executor:
             ns.output_base = str(pathlib.Path(self.cfg["output_base"]) / tier)
             dataset_root, gen_summary = base.generate_dataset(ns, dataset, SPEC_ROOT, self.logger)
             result.notes.append(f"generated: {gen_summary}")
-            self.configure_cloud(result, tier)
+
+            configured_ok, _bucket = self.configure_cloud(result, tier)
+            if not configured_ok:
+                result.status = "BLOCKED"
+                result.notes.append("cloud configuration did not succeed; edge case not attempted")
+                return result
+
             transfer_id = self.initiate_transfer(result, "upload")
             if not transfer_id:
                 result.status = "BLOCKED"
