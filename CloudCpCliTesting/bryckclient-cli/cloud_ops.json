@@ -1,17 +1,17 @@
 {
     "cloud_type": "aws",
-    "access_key_id": "AKIAIOSFODNN7EXAMPLE",
-    "secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-    "region": "us-east-1",
+    "access_key_id": "minioadmin",
+    "secret_access_key": "minioadmin",
+    "region": "us-west-1",
     "keyfile": "",
     "tenant_id": "",
     "bryck_src": "/bryck/source-directory",
-    "cloud_bucket": "s3://example-bucket/destination-path",
+    "cloud_bucket": "s3://shravani",
     "bryck_dst": "/bryck/download-directory",
     "notification": {
-        "sns_topic": "arn:aws:sns:us-east-1:123456789012:example-topic",
-        "sqs_queue": "arn:aws:sqs:us-east-1:123456789012:example-queue",
-        "emails": ["user@example.com"],
+        "sns_topic": "sns-testing",
+        "sqs_queue": "sqs-testing",
+        "emails": ["shravani.g@tsecond.ai"],
         "states": ["COMPLETED", "FAILED", "PAUSED"]
     }
 }

@@ -15,7 +15,7 @@
     "raid_level": 5
   },
   "mount": {
-    "key_file": "/home/atanu/project/key_file.txt",
+    "key_file": "None",
     "mountonreboot": true,
     "force_check": false,
     "encryption_option": ""
