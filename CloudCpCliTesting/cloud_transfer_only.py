@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
-"""Transfer-only runner: datagen -> configure cloud -> REST-API initiate ->
+"""Transfer-only runner: datagen -> configure cloud -> CLI initiate ->
 poll to terminal state -> perf capture -> (optional) cleanup.
 
 No test matrix, no lifecycle/negative/edge cases -- just one real transfer,
 run directly on the Bryck host (same execution model as cloud_cli_runner.py).
 
 Reuses proven pieces instead of re-inventing them:
-  - dataset generation, status-fallback helpers (journal/log-based), and
+  - dataset generation, status polling (with journal/log-based fallbacks), and
     command/redaction plumbing from cloud_cli_runner.py;
-  - the REST-API transfer initiate/status pattern (BryckApi.initiate_cloud_transfer
-    + get_cloud_transfer_status, via a persistent ApiSession) proven reliable in
-    CloudCpFallbackTesting/cloudcp_fallback_test.py -- imported from there, not
-    duplicated, and that file is never modified;
+  - transfer initiation via the same CLI command cloud_cli_runner.py's --cli
+    adapter uses: `bryckcloud transfer add aws --src <path> --dst <path>`;
   - performance capture (journalctl + cloudcp.log tailing, HTML report) from
     cli_perf_capture.py, the same collector cloud_cli_runner.py uses.
 
@@ -31,21 +29,17 @@ import pathlib
 import sys
 import time
 import types
-from typing import Any, Optional
+from typing import Optional
 
 HERE = pathlib.Path(__file__).resolve().parent
-REPO_ROOT = HERE.parent
 BRYCK_CLI_DIR = HERE / "bryckclient-cli"
 RESULTS_ROOT = HERE / "results"
-FALLBACK_DIR = REPO_ROOT / "CloudCpFallbackTesting"
 
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(BRYCK_CLI_DIR))
-sys.path.insert(0, str(FALLBACK_DIR))
 
-import cloud_cli_runner as ccr  # noqa: E402  (datagen, status fallbacks, run helpers)
+import cloud_cli_runner as ccr  # noqa: E402  (datagen, status polling/fallbacks, run helpers)
 import cli_perf_capture as perf_mod  # noqa: E402
-import cloudcp_fallback_test as fb  # noqa: E402  (proven REST initiate/status pattern; read-only reference)
 
 LOG = logging.getLogger("cloud_transfer_only")
 
@@ -86,6 +80,10 @@ def parse_args(argv: Optional[list] = None) -> argparse.Namespace:
 
     p.add_argument("--datagen-bin", default=ccr.DEFAULT_DATAGEN)
     p.add_argument("--python-bin", default=ccr.DEFAULT_PYTHON_BIN)
+    p.add_argument("--bryckcloud-bin", default=ccr.DEFAULT_BRYCKCLOUD,
+                   help="bryckcloud CLI binary used to initiate the transfer "
+                        "(transfer add aws --src <path> --dst <path>).")
+    p.add_argument("--batchmeta-dir", default=ccr.DEFAULT_BATCHMETA)
     p.add_argument("--skip-datagen", action="store_true")
     p.add_argument("--skip-mount-check", action="store_true")
 
@@ -171,32 +169,54 @@ def configure_cloud(args: argparse.Namespace, base_cloud_ops: dict, tier: str, r
     return cfg["cloud_bucket"]
 
 
-def poll_until_terminal(api, args: argparse.Namespace, transfer_id: str,
-                        active_journal_raw: Optional[pathlib.Path]) -> str:
-    """Poll to a terminal state via the REST API (the pattern proven reliable
-    in cloudcp_fallback_test.py's poll_transfer/_status_entry), falling back
+def initiate_transfer_cli(args: argparse.Namespace, src: str, dst: str, redact) -> Optional[str]:
+    """`/opt/bryck/.venv/bryck/bin/bryckcloud transfer add aws --src <src> --dst <dst>`
+    -- same CLI adapter cloud_cli_runner.py's --cli transfer method uses."""
+    batchmeta_dir = pathlib.Path(args.batchmeta_dir)
+    transfer_logs_dir = pathlib.Path(args.transfer_logs_dir)
+    before_ids = set() if args.dry_run else ccr.base.collect_transfer_ids(batchmeta_dir, transfer_logs_dir)
+    cmd = ccr.run_argv(
+        "bryckcloud transfer add aws",
+        [args.bryckcloud_bin, "transfer", "add", "aws", "--src", src, "--dst", dst],
+        LOG, args.dry_run, redact, timeout=args.wait_timeout,
+    )
+    if args.dry_run:
+        return "DRYRUN-ID"
+    if cmd.returncode != 0:
+        raise RuntimeError(f"bryckcloud transfer add aws failed (rc={cmd.returncode}): {cmd.stderr or cmd.stdout}")
+    transfer_id = ccr.base.parse_transfer_id_from_output((cmd.stdout or "") + (cmd.stderr or ""))
+    if transfer_id is None:
+        transfer_id = ccr.base.detect_transfer_id(
+            argparse.Namespace(transfer_id=None, poll_interval=args.poll_interval),
+            before_ids, "", batchmeta_dir, transfer_logs_dir,
+        )
+    return str(transfer_id) if transfer_id is not None else None
+
+
+def poll_until_terminal(args: argparse.Namespace, transfer_id: str,
+                        active_journal_raw: Optional[pathlib.Path], redact) -> str:
+    """Poll to a terminal state via bryck_cloud_transfer_status.py, falling back
     -- in order -- to the live journal_raw.log tail, transfer_summary.txt on
     disk, and a bounded journalctl re-query, exactly like cloud_cli_runner.py's
-    transfer_status(), since the REST status endpoint can return 409 "Failed
-    to find the transfer/s" for a transfer that is still running or just
-    finished."""
+    transfer_status(), since the status API/script can report UNKNOWN for a
+    transfer that is still running or just finished."""
     if args.dry_run:
         return TERMINAL_SUCCESS
     deadline = time.time() + args.wait_timeout
     state = "UNKNOWN"
+    ns = argparse.Namespace(login=args.login, dry_run=args.dry_run, python_bin=args.python_bin)
     while time.time() < deadline:
-        entry = fb._status_entry(api, transfer_id)
-        state = str((entry or {}).get("state") or "").upper()
-        if not state:
+        state, _cmd = ccr.get_transfer_status(ns, transfer_id, LOG, redact)
+        if state == "UNKNOWN":
             if active_journal_raw is not None:
                 live = ccr.read_live_journal_transfer_status(active_journal_raw, transfer_id)
                 if live != "UNKNOWN":
                     state = live
-            if not state or state == "UNKNOWN":
+            if state == "UNKNOWN":
                 local = ccr.read_local_transfer_status(pathlib.Path(args.transfer_logs_dir), transfer_id)
                 if local != "UNKNOWN":
                     state = local
-            if not state or state == "UNKNOWN":
+            if state == "UNKNOWN":
                 journal = ccr.read_journalctl_transfer_status(transfer_id, args.journal_tag)
                 if journal != "UNKNOWN":
                     state = journal
@@ -273,71 +293,44 @@ def main(argv: Optional[list] = None) -> int:
         collector.start()
         active_journal_raw = collector.perf_dir / "journal_raw.log"
 
-    creds = {"cloud_type": "aws", "access_key_id": None, "secret_access_key": None, "region": "us-east-1"}
-    api = None
-    session = None
     transfer_id: Optional[str] = None
     final_state = "UNKNOWN"
     error: Optional[str] = None
 
     try:
-        if not args.dry_run:
-            creds = fb._load_creds(pathlib.Path(args.params))
-            from session import ApiSession  # type: ignore
-            from bryck_api import BryckApi  # type: ignore
-            session = ApiSession.from_login_json(args.login)
-            session.login()
-            api = BryckApi(session)
-
-        rec = fb.Recorder(run_id)
-        if not args.dry_run:
-            fb.configure_cloud_provider(api, rec, creds)
-
         local_src = str(dataset_root)
         s3_path = f"{args.bucket}/{tier}"
         local_dst = f"{args.download_base}/{tier}"
 
-        def do_initiate(src: str, dst: str) -> Optional[str]:
-            if args.dry_run:
-                LOG.info("(dry-run) would POST /api/bcloud/transfer src=%s dst=%s", src, dst)
-                return "DRYRUN-ID"
-            return fb.initiate_transfer(api, rec, creds["cloud_type"], src, dst)
-
         if args.mode == "upload":
-            transfer_id = do_initiate(local_src, s3_path)
+            transfer_id = initiate_transfer_cli(args, local_src, s3_path, redact)
         elif args.mode == "download":
             # Standalone download needs source data in the bucket first --
             # seed it with an untracked upload, matching cloud_cli_runner.py's
             # _seed_upload_for_download().
-            seed_id = do_initiate(local_src, s3_path)
+            seed_id = initiate_transfer_cli(args, local_src, s3_path, redact)
             if seed_id and not args.dry_run:
-                seed_state = poll_until_terminal(api, args, seed_id, active_journal_raw)
+                seed_state = poll_until_terminal(args, seed_id, active_journal_raw, redact)
                 LOG.info("seed upload (transfer %s) finished with state=%s", seed_id, seed_state)
                 if seed_state != TERMINAL_SUCCESS:
                     raise RuntimeError(f"seed upload did not complete (state={seed_state}); "
                                        f"cannot proceed with download")
-            transfer_id = do_initiate(s3_path, local_dst)
+            transfer_id = initiate_transfer_cli(args, s3_path, local_dst, redact)
         else:  # both
-            upload_id = do_initiate(local_src, s3_path)
+            upload_id = initiate_transfer_cli(args, local_src, s3_path, redact)
             if upload_id and not args.dry_run:
-                upload_state = poll_until_terminal(api, args, upload_id, active_journal_raw)
+                upload_state = poll_until_terminal(args, upload_id, active_journal_raw, redact)
                 LOG.info("upload (transfer %s) finished with state=%s", upload_id, upload_state)
-            transfer_id = do_initiate(s3_path, local_dst)
+            transfer_id = initiate_transfer_cli(args, s3_path, local_dst, redact)
 
         if not transfer_id:
             raise RuntimeError("transfer initiate did not return a transfer_id")
 
-        final_state = poll_until_terminal(api, args, transfer_id, active_journal_raw)
+        final_state = poll_until_terminal(args, transfer_id, active_journal_raw, redact)
         LOG.info("transfer %s finished with state=%s", transfer_id, final_state)
-    except (fb.TransferInitError, RuntimeError) as exc:
+    except RuntimeError as exc:
         error = str(exc)
         LOG.error("transfer failed: %s", error)
-    finally:
-        if session is not None:
-            try:
-                session.close()
-            except Exception:  # noqa: BLE001
-                pass
 
     perf_data = None
     if collector is not None:
