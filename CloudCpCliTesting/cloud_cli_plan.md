@@ -68,6 +68,8 @@ usage), multi-Bryck parallel execution.
 | `/opt/bryck/bryckapi/downloads/cloud_transfer_logs/` | Per-transfer report/log root. |
 | `/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloudcp.log` | Engine log, checked for errors/crashes. |
 | `/opt/bryck/bryckapi/downloads/bcloud_batchmeta` | Broker batch metadata root. |
+| `/home/bryck/shravani/<RUN_ID>/<TEST_ID>/` | **Downloaded** transfer reports (`bryck_cloud_transfer_report.py --report-path`) land here, not under `results/` (which stays Windows/host-portable). Overridable with `--report-save-dir`. |
+| `/home/bryck/shravani/<RUN_ID>/_final_diagnostic_report/` | `bryck_report.py --output-dir` diagnostic dump, downloaded once at the end of every `--execute` run. |
 
 ## 4. Pre-Execution Validation
 
@@ -80,8 +82,14 @@ Performed in `--plan` mode (read-only, no side effects):
    - If **ejected**, plan includes an explicit "Mount Bryck" step (auto-mount per decision #4) — the plan output must call this out.
    - **Never generate data while Bryck is ejected.** If ejected, datagen is scheduled *after* the mount step, never before.
 5. Validate the dataset specification(s): each selected tier's YAML exists, parses, and its target root is under the mounted Bryck path.
+6. **Strictly validate `/etc/bryck/bryckcloud/config.json`** (`validate_bryck_config_json()`): on a JSON parse
+   error (e.g. "Extra data"), the plan output prints a dedicated, impossible-to-miss
+   `CONFIG ERROR` banner — with an `nl -ba`-style context snippet around the failing
+   line/column — instead of burying it in a generic warning line. This file is read-only
+   reference config (decision #14) that no test case currently depends on operationally,
+   so the run is **not** blocked by it, but the error can no longer be silently ignored.
 
-Any failure here aborts `--plan` before any confirmation prompt is shown.
+Any failure in steps 1-5 aborts `--plan` before any confirmation prompt is shown.
 
 ## 5. Dataset Selection
 
@@ -396,6 +404,62 @@ file) and runs `bryck_cloud_configure.py`/`bryck_cloud_deconfigure.py`.
 of the 6 `CLI-LC-*` cases) + 2 (service) + 4 (edge) + 9 (CLI-input) + 8
 (AWS-negative) = 41 top-level test cases, 60 intervention action sub-results.**
 
+### 9.7 Environment-Aware Pipeline (CLI-input / AWS-negative execution model)
+
+`CLI-*`/`AWS-*` cases run through a shared 10-step pipeline
+(`Executor._run_negative_pipeline()`), not a flat "build args, run one
+command, done" execution — this mirrors the inspect/prepare/validate/
+execute/cleanup/verify architecture of the reference `negative_environment_runner.py`:
+
+1. **Inspect environment** — `bryck_info.py`, current Bryck state.
+2. **Validate configuration** — `login.json`/`cloud_ops.json` must already have
+   parsed successfully at `Executor` init; otherwise the case is `BLOCKED`
+   immediately (never falsely reported PASS).
+3. **Establish Bryck mounted state** — `SKIPPED` for these cases (pure
+   input/config validation needs no dataset access); real transfer/lifecycle
+   cases call `ensure_mounted()` here instead.
+4. **Capture baseline** — Bryck state snapshot before the operation.
+5. **Create negative fixture** — a private per-case JSON copy (e.g.
+   `CLI-03/cli03_cloud_ops.json`), never the shared `login.json`/`cloud_ops.json`.
+6. **Execute operation** — the one command under test; labeled
+   `EXPECTED FAILURE` when `expect_fail=True`.
+7. **Validate rejection/success** — return code checked against the expected
+   outcome.
+8. **Verify no unintended state change** — Bryck state re-checked; a
+   before/after mismatch is a `FAIL` even if step 7 passed.
+9. **Cleanup** — no shared config was touched; the per-case fixture is left
+   in place as evidence.
+10. **Verify final environment** — final Bryck state snapshot.
+
+Each step is printed live during `--execute` as a numbered block
+(`TestCaseResult.render_block()`) and persisted into that case's
+`report.json` (`steps`, `expected`, `actual`, `state_change`), for example:
+
+```
+============================================================
+CLI-03 | Upload with empty bryck_src in cloud_ops.json
+============================================================
+[1] Inspect environment                    PASS  (bryck_state=Mounted)
+[2] Validate configuration                 PASS  (login.json/cloud_ops.json parse OK)
+[3] Establish Bryck mounted state          SKIPPED  (not required — pure input/config validation, no dataset access)
+[4] Capture baseline                       PASS  (state=Mounted)
+[5] Create negative fixture                PASS  (cli03_cloud_ops.json: bryck_src='')
+[6] Execute operation                      EXPECTED FAILURE  (rc=2)
+[7] Validate rejection                     PASS
+[8] Verify no unintended state change      PASS  (before='Mounted' after='Mounted')
+[9] Cleanup                                PASS  (no shared login.json/cloud_ops.json modified; per-case fixture retained as evidence)
+[10] Verify final environment              PASS  (state=Mounted)
+
+Expected:     Upload must be rejected because bryck_src is empty.
+Actual:       rc=2
+State change: Mounted -> Mounted
+RESULT:       PASS
+```
+
+`AWS-07`/`AWS-08` are explicitly **observational**: both return codes are
+captured for evidence but never used to force PASS/FAIL, matching "documented
+idempotence, not a hard rc check" from `NEGATIVE_TEST_PLAN.md`.
+
 ## 10. Verification
 
 - Transfer status (terminal state reached, matches expectation for the case)
@@ -420,7 +484,12 @@ records:
 - Transfer ID (where applicable)
 - Before/after Bryck state
 - Relevant log excerpts (`cloudcp.log`, batch metadata)
-- Relevant report file(s)
+- Relevant report file(s) — **downloaded transfer reports and the final diagnostic
+  report are saved on the Bryck host under `--report-save-dir`
+  (default `/home/bryck/shravani/<RUN_ID>/<TEST_ID>/`)**, separate from the
+  `results/<RUN_ID>/` evidence tree (which stays portable/host-agnostic).
+- For CLI-input/AWS-negative cases (§9.5/§9.6): the full numbered pipeline
+  (`steps`), plus `expected`/`actual`/`state_change`, per §9.7.
 
 ## 12. Recovery & Cleanup
 
@@ -513,7 +582,7 @@ python3 cloud_cli_runner.py --execute --plan-file <plan.json>
 ```text
 CloudCpCliTesting/
   cloud_cli_plan.md            # this document
-  cloud_cli_runner.py          # (future) two-phase runner: --plan / --execute
+  cloud_cli_runner.py          # two-phase runner: --plan / --execute
   bryckclient-cli/
     login.json
     cloud_ops.json             # rewritten per case during --execute, restored after
@@ -524,13 +593,16 @@ CloudCpCliTesting/
       cloud_ops.json.bak       # pre-run backup, restored at end
       <TEST_ID>/
         commands.log           # exact commands, timestamps, return codes, stdout/stderr
-        api_responses.json     # secrets redacted
-        before_after_state.json
-        cloud_transfer_logs/   # pulled from /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_<id>/
-        report.json
+        report.json            # status, notes, steps[]/expected/actual/state_change (§9.7)
       summary.json
       summary.html
       summary.md
+
+/home/bryck/shravani/            # --report-save-dir (Bryck-host only; NOT under results/)
+  <RUN_ID>/
+    <TEST_ID>/
+      cloud_transfer_report_<transfer_id>.zip   # bryck_cloud_transfer_report.py output
+    _final_diagnostic_report/                    # bryck_report.py --output-dir, once per run
 ```
 
 ## 16. Step-by-Step Execution Walkthrough (Worked Example: `CLI-B-SMALL`)
@@ -592,7 +664,8 @@ ssh <bryckserver_username>@<bryckapi_host> "sudo systemctl restart bryckapi.serv
 # --- 9. Download the report and verify (§10) -------------------------------
 python3 bryck_cloud_transfer_report.py --login login.json \
   --cloud-transfer-id 4830 \
-  --report-path ../results/<RUN_ID>/CLI-B-SMALL/cloud_transfer_report_4830.zip
+  --report-path /home/bryck/shravani/<RUN_ID>/CLI-B-SMALL/cloud_transfer_report_4830.zip
+#   (default --report-save-dir; override with --report-save-dir <path>)
 
 # --- 10. Cleanup (auto, decision #12) --------------------------------------
 #   - remove /bryck/cloudcp_cli/SMALL and /bryck/cloudcp_cli_dl/SMALL
@@ -614,3 +687,41 @@ stdout/stderr, and redacted API response) into
 3. Confirm the exact destination bucket/prefix naming convention to avoid
    collisions with other test suites (`CloudCpFallbackTesting`, `CloudCpBinaryTesting`)
    running against the same bucket.
+
+## 18. Selecting Test Cases (`--suite` / `--only`)
+
+`--suite <name>...` filters the built test-case list by **kind**, so you can
+run a named group instead of remembering individual test IDs:
+
+| Suite name | Test-case kind included |
+|---|---|
+| `transfer` | Upload/download/both transfer cases across all dataset tiers |
+| `lifecycle` | Mount/eject/format/erase/remove lifecycle cases |
+| `service` | `bcloud`/`bryckapi` restart-during-transfer cases |
+| `edge` | Live-intervention edge cases (eject/cancel/pause/resume during transfer) |
+| `cli-input` | `CLI-01..CLI-09` input-validation negative cases |
+| `aws-negative` | `AWS-01..AWS-08` cloud/AWS configuration negative cases |
+| `all` | No filtering — every case built from `--tiers`/`--modes`/`--include-*` |
+
+Example: `python cloud_cli_runner.py --plan --suite cli-input aws-negative`
+builds a plan containing only the 17 negative-test cases. `--only <ID> <ID>...`
+still works for picking exact test-case IDs and takes precedence over
+`--suite` if both are given.
+
+## 19. Fixed: Mount-State Always `UNKNOWN` on Real Host
+
+`bryck_info.py` prints the **unwrapped** `bryck_info` dict to stdout (i.e.
+`"State"` is a top-level key), but `get_bryck_state()` in
+`cloud_cli_runner.py` originally looked for it nested under a `"bryck_info"`
+key (`payload["bryck_info"]["State"]`), which never existed in the actual
+output. This meant `get_bryck_state()` always returned `"UNKNOWN"` on the real
+Bryck host, which made `Executor.ensure_mounted()` believe Bryck was never
+mounted and call `bryck_mount.py` before every single test case — failing
+with rc=2 each time (since it actually was already mounted) and cascading to
+`BLOCKED` for every transfer/lifecycle/service/edge test.
+
+Fixed by reading `payload.get("State")` first (matching `bryck_info.py`'s
+actual output shape), with a fallback to the nested `payload["bryck_info"]`
+shape for resilience if that script's output format changes again. CLI-input
+and AWS-negative cases were unaffected by this bug since they don't call
+`ensure_mounted()`.

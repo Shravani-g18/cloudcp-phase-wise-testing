@@ -180,6 +180,10 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
                          help="Skip the cloud/AWS configuration negative cases (AWS-01..AWS-08).")
     parser.add_argument("--only", nargs="+", default=None,
                          help="Build/run only these test-case IDs (e.g. --only CLI-U-ZERO), ignoring --tiers/--modes/--include-*.")
+    parser.add_argument("--suite", nargs="+", default=None,
+                         choices=["transfer", "lifecycle", "service", "edge", "cli-input", "aws-negative", "all"],
+                         help="Run by suite NAME instead of test-case IDs, e.g. --suite cli-input, "
+                              "--suite transfer lifecycle, or --suite all. Ignored if --only is also given.")
 
     parser.add_argument("--login", default=str(BRYCK_CLI_DIR / "login.json"))
     parser.add_argument("--params", default=str(BRYCK_CLI_DIR / "cloud_ops.json"),
@@ -209,6 +213,9 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
                               "transition to be confirmed before marking it FAILED/TIMED_OUT.")
 
     parser.add_argument("--results-dir", default=str(RESULTS_ROOT))
+    parser.add_argument("--report-save-dir", default="/home/bryck/shravani",
+                         help="Bryck-host directory where downloaded transfer/diagnostic reports are saved "
+                              "(one subfolder per test case). Created if missing.")
     parser.add_argument("--run-id", default=None, help="Override the generated RUN_ID.")
     parser.add_argument("--keep", "--no-cleanup", dest="keep", action="store_true",
                          help="Skip auto-cleanup of datasets/cloud objects (debugging).")
@@ -400,10 +407,17 @@ def get_bryck_state(args: argparse.Namespace, logger: logging.Logger, redact) ->
         return "UNKNOWN", result
     try:
         payload = json.loads(result.stdout)
-        state = str(payload.get("bryck_info", {}).get("State", "UNKNOWN")).strip()
-        return state or "UNKNOWN", result
     except (json.JSONDecodeError, AttributeError):
+        logger.warning("bryck_info.py returned non-JSON stdout (first 200 chars): %r", result.stdout[:200])
         return "UNKNOWN", result
+    # bryck_info.py prints the *unwrapped* bryck_info dict ("State" at the top
+    # level); a "bryck_info"-wrapped shape is tolerated too in case that ever
+    # changes back.
+    state = payload.get("State")
+    if state is None and isinstance(payload.get("bryck_info"), dict):
+        state = payload["bryck_info"].get("State")
+    state = str(state if state is not None else "UNKNOWN").strip()
+    return state or "UNKNOWN", result
 
 
 def get_transfer_status(args: argparse.Namespace, transfer_id: str, logger: logging.Logger, redact) -> tuple[str, CommandResult]:
@@ -704,6 +718,13 @@ def build_plan(args: argparse.Namespace, logger: logging.Logger) -> dict:
         missing = wanted - {tc["id"] for tc in test_cases}
         if missing:
             problems.append(f"--only referenced unknown test case id(s): {sorted(missing)}")
+    elif args.suite and "all" not in args.suite:
+        suite_to_kind = {
+            "transfer": "transfer", "lifecycle": "lifecycle", "service": "service",
+            "edge": "edge", "cli-input": "cli_input", "aws-negative": "cloud_negative",
+        }
+        wanted_kinds = {suite_to_kind[s] for s in args.suite}
+        test_cases = [tc for tc in test_cases if tc["kind"] in wanted_kinds]
 
     plan = {
         "run_id": run_id,
@@ -730,6 +751,7 @@ def build_plan(args: argparse.Namespace, logger: logging.Logger) -> dict:
             "keep": args.keep,
             "aws_cli": args.aws_cli,
             "results_dir": os.path.abspath(args.results_dir),
+            "report_save_dir": args.report_save_dir,
             "journal_tag": args.journal_tag,
             "cloudcp_log": args.cloudcp_log,
             "capture_lead": args.capture_lead,
@@ -887,6 +909,29 @@ class Executor:
         path = self.run_dir / test_id
         path.mkdir(parents=True, exist_ok=True)
         return path
+
+    def report_dir_for(self, test_id: str) -> pathlib.Path:
+        """Bryck-host destination for downloaded transfer/diagnostic reports (--report-save-dir),
+        one subfolder per test case so concurrent/repeat runs never overwrite each other."""
+        path = pathlib.Path(self.cfg["report_save_dir"]) / self.plan["run_id"] / test_id
+        if not self.args.dry_run:
+            path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def download_final_diagnostic_report(self) -> None:
+        """Best-effort bryck_report.py diagnostic dump for the whole run, saved under
+        --report-save-dir alongside the per-case transfer reports."""
+        out_dir = pathlib.Path(self.cfg["report_save_dir"]) / self.plan["run_id"] / "_final_diagnostic_report"
+        if not self.args.dry_run:
+            out_dir.mkdir(parents=True, exist_ok=True)
+        cmd = run_py_script(
+            "bryck_report.py", ["--login", self.cfg["login"], "--output-dir", str(out_dir)],
+            self.logger, self.args.dry_run, self.redact, self.cfg["python_bin"], timeout=900,
+        )
+        if not self.args.dry_run and cmd.returncode != 0:
+            self.logger.warning("Final diagnostic bryck_report.py failed (rc=%s); see %s", cmd.returncode, out_dir)
+        else:
+            self.logger.info("Final diagnostic report saved under %s", out_dir)
 
     def write_case_result(self, result: TestCaseResult) -> None:
         path = self.case_dir(result.test_id) / "report.json"
@@ -1146,13 +1191,13 @@ class Executor:
                               tier=tier, mode=mode, gen_summary=gen_summary)
             perf_collector = None
 
-            report_dir = self.case_dir(tc["id"]) / "cloud_transfer_logs"
-            report_dir.mkdir(parents=True, exist_ok=True)
+            report_dir = self.report_dir_for(tc["id"])
             self.run_py(
                 result, "bryck_cloud_transfer_report.py",
                 ["--login", self.cfg["login"], "--cloud-transfer-id", str(transfer_id),
                  "--report-path", str(report_dir / f"cloud_transfer_report_{transfer_id}.zip")],
             )
+            result.notes.append(f"transfer report saved under {report_dir}")
 
             expected_files = gen_summary.get("actual_files", 0)
             validation = {}
@@ -1365,6 +1410,15 @@ class Executor:
             self._finish_perf(perf_collector, result, transfer_id,
                               tier=tier, mode="upload", gen_summary=gen_summary)
             perf_collector = None
+
+            report_dir = self.report_dir_for(tc["id"])
+            self.run_py(
+                result, "bryck_cloud_transfer_report.py",
+                ["--login", self.cfg["login"], "--cloud-transfer-id", str(transfer_id),
+                 "--report-path", str(report_dir / f"cloud_transfer_report_{transfer_id}.zip")],
+            )
+            result.notes.append(f"transfer report saved under {report_dir}")
+
             result.status = "PASS" if final_state == "COMPLETED" else "FAIL"
             self.cleanup_tier(result, tier)
         except Exception as exc:  # noqa: BLE001
@@ -1710,6 +1764,7 @@ def phase_execute(args: argparse.Namespace, logger: logging.Logger) -> int:
 
     executor = Executor(args, plan, logger)
     results = executor.run_all()
+    executor.download_final_diagnostic_report()
     write_summary(executor.run_dir, plan, results)
     counts: Dict[str, int] = {}
     for r in results:
