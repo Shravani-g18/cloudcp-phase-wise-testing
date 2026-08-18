@@ -47,7 +47,6 @@ HERE = pathlib.Path(__file__).resolve().parent
 REPO_ROOT = HERE.parent
 BRYCK_CLI_DIR = HERE / "bryckclient-cli"
 SPEC_ROOT = REPO_ROOT / "dataset_cloudcp" / "spec_files"
-FALLBACK_SPEC_ROOT = REPO_ROOT / "CloudCpFallbackTesting" / "spec_files"
 RESULTS_ROOT = HERE / "results"
 
 sys.path.insert(0, str(HERE))
@@ -58,19 +57,12 @@ import cli_perf_capture as perf_mod  # noqa: E402
 
 DEFAULT_DATAGEN = "/home/bryck/rperiyas/datagen"
 DEFAULT_PYTHON_BIN = "python3"
+DEFAULT_BRYCKCLOUD = "/opt/bryck/.venv/bryck/bin/bryckcloud"
 DEFAULT_BATCHMETA = "/opt/bryck/bryckapi/downloads/bcloud_batchmeta"
 DEFAULT_TRANSFER_LOGS = "/opt/bryck/bryckapi/downloads/cloud_transfer_logs"
 DEFAULT_BRYCK_CONFIG_JSON = "/etc/bryck/bryckcloud/config.json"
 
-TIER_DATASET_MAP = {
-    "ZERO": "DS-P1-01",
-    "TINY": "DS-P1-02",
-    "SMALL": "DS-P1-03",
-    "MEDIUM": "DS-P1-04",
-    "LARGE": "DS-P1-05",
-}
-ALL_TIERS = ["ZERO", "TINY", "SMALL", "MEDIUM", "LARGE", "SPARSE"]
-SPARSE_SPEC_FILE = FALLBACK_SPEC_ROOT / "06_sparse_files.yaml"
+LIFECYCLE_DATASET = "DS-P1-04"  # single representative dataset for lifecycle/service tests
 SPEC_FILES_DIR = HERE / "spec_files"
 
 MODES = ["upload", "download", "both"]
@@ -146,24 +138,32 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--plan", action="store_true", help="Phase 1: build + confirm the plan. No side effects.")
-    mode.add_argument("--execute", action="store_true", help="Phase 2: run the confirmed plan.")
+    mode.add_argument("--run", action="store_true",
+                      help="ONE-SHOT: plan + confirm + execute immediately in a single command "
+                           "(recommended). Actually performs dataset generation, transfers, etc. "
+                           "Use --plan/--execute separately only if you want to inspect plan.json first.")
+    mode.add_argument("--plan", action="store_true",
+                      help="Phase 1 ONLY: build + confirm the plan and write plan.json. "
+                           "Does NOT run any test case yet -- follow up with --execute --plan-file <path>.")
+    mode.add_argument("--execute", action="store_true", help="Phase 2: run a plan.json written by --plan.")
     mode.add_argument("--list-cases", action="store_true",
-                      help="Print every test-case ID that the current --tiers/--modes/--dataset-catalog/"
+                      help="Print every test-case ID that the current --modes/--dataset-catalog/"
                            "--include-*/--suite/--only selection would build, then exit. No side effects.")
+    parser.add_argument("--all", dest="dataset_catalog", action="store_const", const="all",
+                         default=argparse.SUPPRESS,
+                         help="Alias for --dataset-catalog all (the default): every DS-P1-01..DS-P12-02 dataset.")
+    parser.add_argument("--test-name", dest="suite", nargs="+", default=argparse.SUPPRESS,
+                         choices=["transfer", "lifecycle", "service", "edge", "cli-input", "aws-negative", "all"],
+                         help="Alias for --suite: run one named test group by name, e.g. --test-name transfer.")
 
     parser.add_argument("--plan-file", help="Path to plan.json (required for --execute).")
-    parser.add_argument("--tiers", nargs="+", default=ALL_TIERS, choices=ALL_TIERS,
-                         help="Subset of tiers to include (default: all). Ignored when --dataset-catalog all is used.")
     parser.add_argument("--modes", nargs="+", default=MODES, choices=MODES,
                          help="Subset of transfer modes to include (default: all).")
-    parser.add_argument("--dataset-catalog", choices=["tiers", "all", "specfiles"], default="all",
+    parser.add_argument("--dataset-catalog", choices=["all", "specfiles"], default="all",
                          help="'all' (default) runs every dataset in dataset_cloudcp/spec_files/manifest.json "
                               "(DS-P1-01..DS-P12-02; optionally narrowed with --datasets) as its own transfer "
-                              "round. 'tiers' runs one representative size-tier dataset "
-                              "(ZERO/TINY/SMALL/MEDIUM/LARGE/SPARSE) instead. "
-                              "'specfiles' runs every *.yaml spec under CloudCpCliTesting/spec_files/ "
-                              "(optionally narrowed with --datasets, e.g. 01_zero_byte 12_tiny_2million).")
+                              "round. 'specfiles' runs every *.yaml spec under CloudCpCliTesting/spec_files/ "
+                              "(optionally narrowed with --datasets, e.g. 09_unicode_names).")
     parser.add_argument("--datasets", nargs="+", default=None,
                          help="Explicit dataset IDs (--dataset-catalog all, e.g. DS-P1-01) or spec names "
                               "(--dataset-catalog specfiles, e.g. 01_zero_byte). Defaults to the full catalog.")
@@ -183,7 +183,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--no-aws-negative", dest="include_aws_negative", action="store_false",
                          help="Skip the cloud/AWS configuration negative cases (AWS-01..AWS-08).")
     parser.add_argument("--only", nargs="+", default=None,
-                         help="Build/run only these test-case IDs (e.g. --only CLI-U-ZERO), ignoring --tiers/--modes/--include-*.")
+                         help="Build/run only these test-case IDs (e.g. --only CLI-U-DS-P1-01), ignoring --modes/--include-*.")
     parser.add_argument("--suite", nargs="+", default=None,
                          choices=["transfer", "lifecycle", "service", "edge", "cli-input", "aws-negative", "all"],
                          help="Run by suite NAME instead of test-case IDs, e.g. --suite cli-input, "
@@ -196,14 +196,17 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--bryck-config-json", default=DEFAULT_BRYCK_CONFIG_JSON,
                          help="Read-only reference config (decision #14); only tier names are read from it.")
 
-    parser.add_argument("--output-base", default="/bryck/cloudcp_cli",
-                         help="Bryck-side root for materialized upload datasets.")
+    parser.add_argument("--output-base", default="/bryck",
+                         help="Bryck-side root for materialized upload datasets (e.g. /bryck/<dataset-id>).")
     parser.add_argument("--download-base", default="/bryck/cloudcp_cli_dl",
                          help="Bryck-side root for download-mode destinations.")
     parser.add_argument("--bucket", default="s3://aditya/cloudcp-cli",
                          help="S3 bucket+prefix root; each tier gets its own sub-prefix.")
 
     parser.add_argument("--datagen-bin", default=DEFAULT_DATAGEN)
+    parser.add_argument("--bryckcloud-bin", default=DEFAULT_BRYCKCLOUD,
+                         help="Path to the bryckcloud CLI, used to start transfers directly "
+                              "(bryckcloud transfer add aws --src <path> --dst <path>).")
     parser.add_argument("--python-bin", default=DEFAULT_PYTHON_BIN)
     parser.add_argument("--batchmeta-dir", default=DEFAULT_BATCHMETA)
     parser.add_argument("--transfer-logs-dir", default=DEFAULT_TRANSFER_LOGS)
@@ -445,11 +448,6 @@ def parse_transfer_id(text: str) -> Optional[str]:
 # Dataset resolution (reuses cloudcpclitesting.py helpers where possible)
 # =============================================================================
 
-def resolve_tier_dataset(tier: str) -> "base.DatasetSelection":
-    dataset_id = TIER_DATASET_MAP[tier]
-    return base.select_dataset(SPEC_ROOT, dataset_id)
-
-
 def all_catalog_dataset_ids() -> List[str]:
     """Every dataset id declared in dataset_cloudcp/spec_files/manifest.json, sorted."""
     _manifest, dataset_map = base.load_manifest(SPEC_ROOT)
@@ -471,15 +469,13 @@ def generate_tier_dataset(
     output_base: str,
     args: argparse.Namespace,
     logger: logging.Logger,
-    dataset_id: Optional[str] = None,
+    dataset_id: str,
 ) -> tuple[pathlib.Path, dict]:
-    """Materialize one dataset under output_base/<TIER>, reusing the
+    """Materialize one dataset under output_base/<tier-label>, reusing the
     single-dataset datagen flow already validated by cloudcpclitesting.py.
 
-    `dataset_id` overrides the tier->dataset lookup so any dataset in the
-    manifest catalog, or any single-spec YAML under CloudCpCliTesting/spec_files/,
-    can be driven through the same tier-shaped folder layout (used by
-    --dataset-catalog all / --dataset-catalog specfiles).
+    `tier` is only used as the folder-name label; `dataset_id` (a DS-P* manifest
+    id, or a CloudCpCliTesting/spec_files/*.yaml name) selects what gets generated.
     """
     ns = types.SimpleNamespace(
         output_base=str(pathlib.Path(output_base) / tier),
@@ -488,14 +484,12 @@ def generate_tier_dataset(
         dry_run=args.dry_run,
         verbose=args.verbose,
     )
-    local_spec = local_spec_file_path(dataset_id) if dataset_id else None
+    local_spec = local_spec_file_path(dataset_id)
     if local_spec is not None:
         return generate_named_spec_dataset(local_spec, tier, output_base, ns, logger)
-    if tier == "SPARSE" and dataset_id is None:
-        return generate_named_spec_dataset(SPARSE_SPEC_FILE, "SPARSE", output_base, ns, logger)
-    dataset = base.select_dataset(SPEC_ROOT, dataset_id) if dataset_id else resolve_tier_dataset(tier)
+    dataset = base.select_dataset(SPEC_ROOT, dataset_id)
     # generate_dataset() writes under <output_base>/<dataset_id>; point
-    # output_base one level up so files land at <output_base>/<TIER>/<dataset_id>.
+    # output_base one level up so files land at <output_base>/<tier-label>/<dataset_id>.
     ns.output_base = str(pathlib.Path(output_base) / tier)
     dataset_root, summary = base.generate_dataset(ns, dataset, SPEC_ROOT, logger)
     return dataset_root, summary
@@ -508,7 +502,7 @@ def generate_named_spec_dataset(
     ns: types.SimpleNamespace,
     logger: logging.Logger,
 ) -> tuple[pathlib.Path, dict]:
-    """Materialize a single-spec YAML (SPARSE, or any CloudCpCliTesting/spec_files/*.yaml)
+    """Materialize a single-spec YAML (any CloudCpCliTesting/spec_files/*.yaml)
     under output_base/<name>, rewriting its `root:` line to match."""
     target_root = pathlib.Path(output_base) / name
     summary = {"dataset_root": str(target_root), "spec_file": str(spec_path)}
@@ -602,23 +596,6 @@ def build_plan(args: argparse.Namespace, logger: logging.Logger) -> dict:
     redact = build_redactor(login_cfg or {}, cloud_ops_cfg or {})
     state, info_cmd = get_bryck_state(args, logger, redact)
 
-    tiers = [t for t in ALL_TIERS if t in args.tiers]
-    dataset_specs: Dict[str, dict] = {}
-    for tier in tiers:
-        if tier == "SPARSE":
-            dataset_specs[tier] = {"dataset_id": None, "spec": str(SPARSE_SPEC_FILE)}
-            continue
-        try:
-            dataset = resolve_tier_dataset(tier)
-            dataset_specs[tier] = {
-                "dataset_id": dataset.dataset_id,
-                "name": dataset.name,
-                "expected_files": dataset.expected_files,
-                "spec_dir": str(SPEC_ROOT / dataset.dataset_id),
-            }
-        except SystemExit as exc:
-            problems.append(str(exc))
-
     test_cases: List[dict] = []
     if args.dataset_catalog == "all":
         try:
@@ -653,37 +630,25 @@ def build_plan(args: argparse.Namespace, logger: logging.Logger) -> dict:
                     "dataset": dataset_id,
                     "description": f"{mode} transfer for spec_files/{dataset_id}.yaml",
                 })
-    else:
-        for tier in tiers:
-            for mode in args.modes:
-                test_cases.append({
-                    "id": f"CLI-{MODE_CODE[mode]}-{tier}",
-                    "kind": "transfer",
-                    "tier": tier,
-                    "mode": mode,
-                    "dataset": dataset_specs.get(tier, {}).get("dataset_id") or "06_sparse_files.yaml",
-                    "description": f"{mode} transfer for {tier} tier",
-                })
     if args.include_lifecycle:
-        for tier in tiers:
-            test_cases.append({
-                "id": f"CLI-LC-{tier}",
-                "kind": "lifecycle",
-                "tier": tier,
-                "mode": "both",
-                "dataset": dataset_specs.get(tier, {}).get("dataset_id") or "06_sparse_files.yaml",
-                "description": f"Live intervention matrix on {tier} ({', '.join(LIFECYCLE_ACTIONS)})",
-            })
+        test_cases.append({
+            "id": f"CLI-LC-{LIFECYCLE_DATASET}",
+            "kind": "lifecycle",
+            "tier": LIFECYCLE_DATASET,
+            "mode": "both",
+            "dataset": LIFECYCLE_DATASET,
+            "description": f"Live intervention matrix on {LIFECYCLE_DATASET} ({', '.join(LIFECYCLE_ACTIONS)})",
+        })
     if args.include_service:
         for target in ("bcloud", "bryckapi"):
             test_cases.append({
                 "id": f"CLI-SVC-{target.upper()}",
                 "kind": "service",
-                "tier": "MEDIUM",
+                "tier": LIFECYCLE_DATASET,
                 "mode": "both",
-                "dataset": dataset_specs.get("MEDIUM", {}).get("dataset_id", "DS-P1-04"),
+                "dataset": LIFECYCLE_DATASET,
                 "target_service": f"{target}.service",
-                "description": f"Restart {target}.service mid-transfer on MEDIUM",
+                "description": f"Restart {target}.service mid-transfer on {LIFECYCLE_DATASET}",
             })
     if args.include_edge:
         for test_id, meta in EDGE_CASES.items():
@@ -745,6 +710,7 @@ def build_plan(args: argparse.Namespace, logger: logging.Logger) -> dict:
             "download_base": args.download_base,
             "bucket": args.bucket,
             "datagen_bin": args.datagen_bin,
+            "bryckcloud_bin": args.bryckcloud_bin,
             "python_bin": args.python_bin,
             "batchmeta_dir": args.batchmeta_dir,
             "transfer_logs_dir": args.transfer_logs_dir,
@@ -763,8 +729,6 @@ def build_plan(args: argparse.Namespace, logger: logging.Logger) -> dict:
             "perf_capture": args.perf_capture,
         },
         "dataset_catalog": args.dataset_catalog,
-        "tiers": tiers,
-        "datasets": dataset_specs,
         "bryck_config_tiers_seen": bryck_config_tiers,
         "bryck_config_valid": config_ok,
         "bryck_config_message": config_msg,
@@ -780,12 +744,9 @@ def render_confirmation(plan: dict) -> str:
     if catalog == "all":
         dataset_line = f"ALL {len(transfer_datasets)} datasets from dataset_cloudcp/spec_files/manifest.json"
         generate_line = f"Generate datasets ({len(transfer_datasets)} datasets, full catalog round)"
-    elif catalog == "specfiles":
+    else:
         dataset_line = f"{len(transfer_datasets)} spec_files/*.yaml datasets: {', '.join(transfer_datasets)}"
         generate_line = f"Generate datasets ({len(transfer_datasets)} local spec_files/ datasets)"
-    else:
-        dataset_line = ", ".join(plan["tiers"]) + "   (all sizes — automatic)"
-        generate_line = f"Generate datasets ({', '.join(plan['tiers'])})"
     modes_seen = sorted({tc["mode"] for tc in plan["test_cases"] if tc["kind"] == "transfer"})
     modes_line = (" + ".join(modes_seen) + "   (all modes — automatic)") if modes_seen else "n/a (no transfer-type cases selected)"
     lines = [
@@ -1074,20 +1035,52 @@ class Executor:
             return False, bucket
         return True, bucket
 
-    def initiate_transfer(self, result: TestCaseResult, mode: str) -> Optional[str]:
-        cmd = self.run_py(
-            result, "bryck_cloud_transfer_initiate.py",
-            ["--login", self.cfg["login"], "--params", self.cfg["params"], "--mode", mode],
-            timeout=self.cfg["wait_timeout"],
-        )
-        if self.args.dry_run:
-            return "DRYRUN-ID"
-        if not self.require_ok(result, cmd, "bryck_cloud_transfer_initiate.py"):
-            return None
-        transfer_id = parse_transfer_id(cmd.stdout + cmd.stderr)
-        if not transfer_id:
-            result.notes.append("initiate succeeded (rc=0) but no transfer_id could be parsed from its output")
-        return transfer_id
+    def initiate_transfer(self, result: TestCaseResult, mode: str, tier: str) -> Optional[str]:
+        """Start a transfer via the bryckcloud CLI directly
+        (bryckcloud transfer add aws --src <path> --dst <path>), not the API-based
+        bryck_cloud_transfer_initiate.py wrapper."""
+        local_src = f"{self.cfg['output_base']}/{tier}"
+        s3_path = f"{self.cfg['bucket']}/{tier}"
+        local_dst = f"{self.cfg['download_base']}/{tier}"
+
+        def run_one(src: str, dst: str) -> Optional[str]:
+            batchmeta_dir = pathlib.Path(self.cfg["batchmeta_dir"])
+            transfer_logs_dir = pathlib.Path(self.cfg["transfer_logs_dir"])
+            before_ids = set() if self.args.dry_run else base.collect_transfer_ids(batchmeta_dir, transfer_logs_dir)
+            cmd = run_argv(
+                "bryckcloud transfer add aws",
+                [self.cfg["bryckcloud_bin"], "transfer", "add", "aws", "--src", src, "--dst", dst],
+                self.logger, self.args.dry_run, self.redact, timeout=self.cfg["wait_timeout"],
+            )
+            result.commands.append(cmd.as_dict())
+            if self.args.dry_run:
+                return "DRYRUN-ID"
+            if not self.require_ok(result, cmd, "bryckcloud transfer add aws"):
+                return None
+            transfer_id = base.parse_transfer_id_from_output((cmd.stdout or "") + (cmd.stderr or ""))
+            if transfer_id is None:
+                try:
+                    transfer_id = base.detect_transfer_id(
+                        argparse.Namespace(transfer_id=None, poll_interval=self.cfg["poll_interval"]),
+                        before_ids, "", batchmeta_dir, transfer_logs_dir,
+                    )
+                except RuntimeError as exc:
+                    result.notes.append(f"could not detect transfer id: {exc}")
+                    return None
+            return str(transfer_id)
+
+        if mode == "upload":
+            return run_one(local_src, s3_path)
+        if mode == "download":
+            return run_one(s3_path, local_dst)
+        # mode == "both": start the upload then the download; the upload's id
+        # is treated as primary for polling/pause/resume/cancel, the download's
+        # id is recorded in notes for traceability.
+        upload_id = run_one(local_src, s3_path)
+        download_id = run_one(s3_path, local_dst)
+        if download_id:
+            result.notes.append(f"download_transfer_id={download_id}")
+        return upload_id or download_id
 
     def poll_until_terminal(self, result: TestCaseResult, transfer_id: str) -> str:
         if self.args.dry_run:
@@ -1182,7 +1175,7 @@ class Executor:
 
             perf_collector = self._start_perf(tc["id"])
 
-            transfer_id = self.initiate_transfer(result, mode)
+            transfer_id = self.initiate_transfer(result, mode, tier)
             if not transfer_id:
                 result.status = "BLOCKED"
                 result.notes.append("could not determine transfer_id from initiate output")
@@ -1240,7 +1233,7 @@ class Executor:
 
             perf_collector = self._start_perf(tc["id"])
 
-            transfer_id = self.initiate_transfer(result, "both")
+            transfer_id = self.initiate_transfer(result, "both", tier)
             if not transfer_id:
                 result.status = "BLOCKED"
                 result.notes.append("could not start transfer for lifecycle test")
@@ -1272,7 +1265,7 @@ class Executor:
                     matched, state = self.wait_for_transfer_state(result, transfer_id, ["CANCELLED"], action_timeout) if step_ok else (False, "SKIPPED")
                     sub.update(command_ok=step_ok, expected="CANCELLED", observed=state, status="PASS" if step_ok and matched else "FAIL")
                 elif action == "retransfer":
-                    new_id = self.initiate_transfer(result, "both")
+                    new_id = self.initiate_transfer(result, "both", tier)
                     sub["new_transfer_id"] = new_id
                     sub.update(command_ok=bool(new_id), expected="new transfer_id", observed=new_id, status="PASS" if new_id else "FAIL")
                     if new_id:
@@ -1347,7 +1340,7 @@ class Executor:
 
             perf_collector = self._start_perf(tc["id"])
 
-            transfer_id = self.initiate_transfer(result, "both")
+            transfer_id = self.initiate_transfer(result, "both", tier)
             if not transfer_id:
                 result.status = "BLOCKED"
                 result.notes.append("could not start transfer for service-restart test")
@@ -1404,7 +1397,7 @@ class Executor:
 
             perf_collector = self._start_perf(tc["id"])
 
-            transfer_id = self.initiate_transfer(result, "upload")
+            transfer_id = self.initiate_transfer(result, "upload", tier)
             if not transfer_id:
                 result.status = "BLOCKED"
                 result.notes.append("could not determine transfer_id")
@@ -1758,14 +1751,7 @@ a {{ color: #2563eb; }}
     (run_dir / "summary.html").write_text(html, encoding="utf-8")
 
 
-def phase_execute(args: argparse.Namespace, logger: logging.Logger) -> int:
-    if not args.plan_file:
-        raise SystemExit("--plan-file is required with --execute")
-    with open(args.plan_file, "r", encoding="utf-8") as handle:
-        plan = json.load(handle)
-    if not plan.get("confirmed"):
-        raise SystemExit(f"plan {args.plan_file} was not confirmed (run --plan and answer 'yes' first)")
-
+def _execute_confirmed_plan(args: argparse.Namespace, plan: dict, logger: logging.Logger) -> int:
     executor = Executor(args, plan, logger)
     results = executor.run_all()
     executor.download_final_diagnostic_report()
@@ -1784,6 +1770,42 @@ def phase_execute(args: argparse.Namespace, logger: logging.Logger) -> int:
     return 1 if failed else 0
 
 
+def phase_execute(args: argparse.Namespace, logger: logging.Logger) -> int:
+    if not args.plan_file:
+        raise SystemExit("--plan-file is required with --execute")
+    with open(args.plan_file, "r", encoding="utf-8") as handle:
+        plan = json.load(handle)
+    if not plan.get("confirmed"):
+        raise SystemExit(f"plan {args.plan_file} was not confirmed (run --plan and answer 'yes' first)")
+    return _execute_confirmed_plan(args, plan, logger)
+
+
+def phase_run(args: argparse.Namespace, logger: logging.Logger) -> int:
+    """One-shot: build the plan, show the confirmation gate, and (on yes) execute
+    it immediately in this same process -- no separate --execute/--plan-file step."""
+    plan = build_plan(args, logger)
+    print(render_confirmation(plan))
+
+    answer = "yes" if args.yes else input("Proceed with execution? [yes/no]: ").strip().lower()
+    run_dir = pathlib.Path(args.results_dir) / plan["run_id"]
+    run_dir.mkdir(parents=True, exist_ok=True)
+    plan_path = run_dir / "plan.json"
+
+    if answer not in {"y", "yes"}:
+        plan["confirmed"] = False
+        with plan_path.open("w", encoding="utf-8") as handle:
+            json.dump(plan, handle, indent=2)
+        logger.info("Not confirmed. Wrote unconfirmed plan to %s. Nothing was executed.", plan_path)
+        return 1
+
+    plan["confirmed"] = True
+    plan["confirmed_at"] = dt.datetime.now().isoformat()
+    with plan_path.open("w", encoding="utf-8") as handle:
+        json.dump(plan, handle, indent=2)
+    logger.info("Plan confirmed (%s). Executing %s test case(s) now...", plan_path, len(plan["test_cases"]))
+    return _execute_confirmed_plan(args, plan, logger)
+
+
 # =============================================================================
 # Entry point
 # =============================================================================
@@ -1796,8 +1818,7 @@ def phase_list_cases(args: argparse.Namespace, logger: logging.Logger) -> int:
     for tc in test_cases:
         print(f"  {tc['id']:<20} kind={tc['kind']:<10} {tc['description']}")
     print("\nRun one at a time with, e.g.:")
-    print(f"  python cloud_cli_runner.py --plan --only {test_cases[0]['id'] if test_cases else '<ID>'} --yes")
-    print("  python cloud_cli_runner.py --execute --plan-file results/<RUN_ID>/plan.json")
+    print(f"  python cloud_cli_runner.py --run --only {test_cases[0]['id'] if test_cases else '<ID>'} --yes")
     return 0
 
 
@@ -1806,6 +1827,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     logger = setup_logging(args.verbose)
     if args.list_cases:
         return phase_list_cases(args, logger)
+    if args.run:
+        return phase_run(args, logger)
     if args.plan:
         return phase_plan(args, logger)
     return phase_execute(args, logger)

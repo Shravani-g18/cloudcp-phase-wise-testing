@@ -731,3 +731,45 @@ actual output shape), with a fallback to the nested `payload["bryck_info"]`
 shape for resilience if that script's output format changes again. CLI-input
 and AWS-negative cases were unaffected by this bug since they don't call
 `ensure_mounted()`.
+
+## 20. Size-Tier Catalog Removed; Transfers Now Use the `bryckcloud` CLI Directly
+
+Two behavior changes supersede everything above that still mentions
+ZERO/TINY/SMALL/MEDIUM/LARGE/SPARSE tiers or `bryck_cloud_transfer_initiate.py`:
+
+1. **Size-tier dataset catalog removed.** `--dataset-catalog tiers`, `--tiers`,
+   `TIER_DATASET_MAP`, and the size-tier local spec files
+   (`CloudCpCliTesting/spec_files/02_tiny_files.yaml` through
+   `06_sparse_files.yaml`) no longer exist. The **only** dataset sources are:
+   - `--dataset-catalog all` (default) — every dataset in
+     `dataset_cloudcp/spec_files/manifest.json` (`DS-P1-01`..`DS-P12-02`, 54
+     datasets, each with its own `datagen` YAML specs under
+     `dataset_cloudcp/spec_files/<dataset-id>/`).
+   - `--dataset-catalog specfiles` — the remaining non-tier local specs under
+     `CloudCpCliTesting/spec_files/` (`01_zero_byte`, `07_fill_files`,
+     `08_deep_tree`, `09_unicode_names`, `10_special_char_names`,
+     `11_mixed_realistic`, `12_tiny_2million`).
+
+   Lifecycle (`CLI-LC-*`) and service-restart (`CLI-SVC-*`) test cases now run
+   against one fixed representative dataset, `DS-P1-04`
+   (`LIFECYCLE_DATASET` in `cloud_cli_runner.py`), instead of looping over
+   tiers.
+
+2. **Transfers are initiated via the `bryckcloud` CLI directly**, not the
+   API-based `bryck_cloud_transfer_initiate.py` wrapper:
+   ```bash
+   /opt/bryck/.venv/bryck/bin/bryckcloud transfer add aws --src <bryck-path> --dst s3://<bucket>/<prefix>
+   ```
+   `Executor.initiate_transfer()` builds this command with `--src`/`--dst`
+   swapped for `upload` vs `download` mode (`both` runs the upload command
+   then the download command, tracking the upload's transfer id as primary
+   and recording the download's id in that test case's notes). The transfer
+   id is parsed from the command's stdout/stderr, falling back to diffing
+   `bcloud_batchmeta`/`cloud_transfer_logs` directory listings
+   (`cloudcpclitesting.py`'s `collect_transfer_ids`/`detect_transfer_id`,
+   the same mechanism already used by the older single-dataset runner).
+   `bryck_cloud_configure.py`/`bryck_cloud_deconfigure.py`/`bryck_cloud_show.py`
+   are unchanged — they still handle cloud-provider credential setup via the
+   REST API before the CLI transfer command runs. Override the CLI path with
+   `--bryckcloud-bin` (default `/opt/bryck/.venv/bryck/bin/bryckcloud`).
+
