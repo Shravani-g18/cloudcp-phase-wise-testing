@@ -922,6 +922,22 @@ class Executor:
         except OSError as exc:
             self.logger.warning("Could not copy run logs to %s: %s", dest, exc)
 
+    def copy_case_logs_to_report_dir(self, test_id: str) -> None:
+        """Copy one test case's commands.log/report.json/perf/ (crucial
+        evidence -- perf HTML/JSON/journal logs) to --report-save-dir
+        immediately after it finishes, instead of waiting for the whole run
+        to end -- so nothing is lost if the process is killed/disconnected
+        (SSH drop, kill -9, etc.) partway through a long multi-dataset run."""
+        if self.args.dry_run:
+            return
+        src = self.case_dir(test_id)
+        dest = pathlib.Path(self.cfg["report_save_dir"]) / self.plan["run_id"] / test_id
+        try:
+            dest.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(src, dest, dirs_exist_ok=True)
+        except OSError as exc:
+            self.logger.warning("Could not copy %s logs to %s: %s", test_id, dest, exc)
+
     def write_case_result(self, result: TestCaseResult) -> None:
         path = self.case_dir(result.test_id) / "report.json"
         with path.open("w", encoding="utf-8") as handle:
@@ -1689,10 +1705,12 @@ class Executor:
                 result.status = "INTERRUPTED"
                 result.notes.append("Run interrupted by user (Ctrl+C) while this test case was in progress")
                 self.write_case_result(result)
+                self.copy_case_logs_to_report_dir(tc["id"])
                 results.append(result)
                 interrupted = True
                 break
             self.write_case_result(result)
+            self.copy_case_logs_to_report_dir(tc["id"])
             results.append(result)
         try:
             self.restore_cloud_ops()
