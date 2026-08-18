@@ -471,14 +471,15 @@ def generate_tier_dataset(
     logger: logging.Logger,
     dataset_id: str,
 ) -> tuple[pathlib.Path, dict]:
-    """Materialize one dataset under output_base/<tier-label>, reusing the
-    single-dataset datagen flow already validated by cloudcpclitesting.py.
+    """Materialize one dataset under output_base, reusing the single-dataset
+    datagen flow already validated by cloudcpclitesting.py.
 
-    `tier` is only used as the folder-name label; `dataset_id` (a DS-P* manifest
-    id, or a CloudCpCliTesting/spec_files/*.yaml name) selects what gets generated.
+    `tier` is only used as the folder-name label for local spec_files/*.yaml
+    datasets; `dataset_id` (a DS-P* manifest id, or a
+    CloudCpCliTesting/spec_files/*.yaml name) selects what gets generated.
     """
     ns = types.SimpleNamespace(
-        output_base=str(pathlib.Path(output_base) / tier),
+        output_base=output_base,
         skip_generate=False,
         datagen_bin=args.datagen_bin,
         dry_run=args.dry_run,
@@ -488,9 +489,10 @@ def generate_tier_dataset(
     if local_spec is not None:
         return generate_named_spec_dataset(local_spec, tier, output_base, ns, logger)
     dataset = base.select_dataset(SPEC_ROOT, dataset_id)
-    # generate_dataset() writes under <output_base>/<dataset_id>; point
-    # output_base one level up so files land at <output_base>/<tier-label>/<dataset_id>.
-    ns.output_base = str(pathlib.Path(output_base) / tier)
+    # generate_dataset() writes under <output_base>/<dataset_id> itself, so
+    # output_base is passed through as-is -- no extra tier-level wrapping
+    # (tier == dataset_id for the DS-P* catalog, so wrapping would double it:
+    # <output_base>/<dataset_id>/<dataset_id>).
     dataset_root, summary = base.generate_dataset(ns, dataset, SPEC_ROOT, logger)
     return dataset_root, summary
 
@@ -1035,11 +1037,17 @@ class Executor:
             return False, bucket
         return True, bucket
 
-    def initiate_transfer(self, result: TestCaseResult, mode: str, tier: str) -> Optional[str]:
+    def initiate_transfer(self, result: TestCaseResult, mode: str, tier: str,
+                          dataset_root: Optional[pathlib.Path] = None) -> Optional[str]:
         """Start a transfer via the bryckcloud CLI directly
         (bryckcloud transfer add aws --src <path> --dst <path>), not the API-based
-        bryck_cloud_transfer_initiate.py wrapper."""
-        local_src = f"{self.cfg['output_base']}/{tier}"
+        bryck_cloud_transfer_initiate.py wrapper.
+
+        `dataset_root` (returned by generate_tier_dataset/generate_dataset) is the
+        actual materialized dataset path and must be used for --src -- it does not
+        necessarily equal <output_base>/<tier> (e.g. edge cases nest one level
+        deeper). Falls back to <output_base>/<tier> only if not given."""
+        local_src = str(dataset_root) if dataset_root is not None else f"{self.cfg['output_base']}/{tier}"
         s3_path = f"{self.cfg['bucket']}/{tier}"
         local_dst = f"{self.cfg['download_base']}/{tier}"
 
@@ -1175,7 +1183,7 @@ class Executor:
 
             perf_collector = self._start_perf(tc["id"])
 
-            transfer_id = self.initiate_transfer(result, mode, tier)
+            transfer_id = self.initiate_transfer(result, mode, tier, dataset_root)
             if not transfer_id:
                 result.status = "BLOCKED"
                 result.notes.append("could not determine transfer_id from initiate output")
@@ -1224,7 +1232,7 @@ class Executor:
                 result.status = "BLOCKED"
                 result.notes.append("Bryck could not be mounted; lifecycle test not attempted")
                 return result
-            generate_tier_dataset(tier, self.cfg["output_base"], self._ns(), self.logger, dataset_id=tc.get("dataset"))
+            dataset_root, _gen_summary = generate_tier_dataset(tier, self.cfg["output_base"], self._ns(), self.logger, dataset_id=tc.get("dataset"))
             configured_ok, _bucket = self.configure_cloud(result, tier)
             if not configured_ok:
                 result.status = "BLOCKED"
@@ -1233,7 +1241,7 @@ class Executor:
 
             perf_collector = self._start_perf(tc["id"])
 
-            transfer_id = self.initiate_transfer(result, "both", tier)
+            transfer_id = self.initiate_transfer(result, "both", tier, dataset_root)
             if not transfer_id:
                 result.status = "BLOCKED"
                 result.notes.append("could not start transfer for lifecycle test")
@@ -1265,7 +1273,7 @@ class Executor:
                     matched, state = self.wait_for_transfer_state(result, transfer_id, ["CANCELLED"], action_timeout) if step_ok else (False, "SKIPPED")
                     sub.update(command_ok=step_ok, expected="CANCELLED", observed=state, status="PASS" if step_ok and matched else "FAIL")
                 elif action == "retransfer":
-                    new_id = self.initiate_transfer(result, "both", tier)
+                    new_id = self.initiate_transfer(result, "both", tier, dataset_root)
                     sub["new_transfer_id"] = new_id
                     sub.update(command_ok=bool(new_id), expected="new transfer_id", observed=new_id, status="PASS" if new_id else "FAIL")
                     if new_id:
@@ -1331,7 +1339,7 @@ class Executor:
                 result.status = "BLOCKED"
                 result.notes.append("Bryck could not be mounted; service-restart test not attempted")
                 return result
-            generate_tier_dataset(tier, self.cfg["output_base"], self._ns(), self.logger, dataset_id=tc.get("dataset"))
+            dataset_root, _gen_summary = generate_tier_dataset(tier, self.cfg["output_base"], self._ns(), self.logger, dataset_id=tc.get("dataset"))
             configured_ok, _bucket = self.configure_cloud(result, tier)
             if not configured_ok:
                 result.status = "BLOCKED"
@@ -1340,7 +1348,7 @@ class Executor:
 
             perf_collector = self._start_perf(tc["id"])
 
-            transfer_id = self.initiate_transfer(result, "both", tier)
+            transfer_id = self.initiate_transfer(result, "both", tier, dataset_root)
             if not transfer_id:
                 result.status = "BLOCKED"
                 result.notes.append("could not start transfer for service-restart test")
@@ -1397,7 +1405,7 @@ class Executor:
 
             perf_collector = self._start_perf(tc["id"])
 
-            transfer_id = self.initiate_transfer(result, "upload", tier)
+            transfer_id = self.initiate_transfer(result, "upload", tier, dataset_root)
             if not transfer_id:
                 result.status = "BLOCKED"
                 result.notes.append("could not determine transfer_id")
@@ -1638,7 +1646,7 @@ class Executor:
             result.notes.append(f"exception: {exc}")
         return result
 
-    def run_all(self) -> List[TestCaseResult]:
+    def run_all(self) -> tuple[List[TestCaseResult], bool]:
         results: List[TestCaseResult] = []
         dispatch = {
             "transfer": self.run_transfer_case,
@@ -1648,13 +1656,27 @@ class Executor:
             "cli_input": self.run_cli_input_case,
             "cloud_negative": self.run_cloud_negative_case,
         }
+        interrupted = False
         for tc in self.plan["test_cases"]:
             self.logger.info("=== running %s (%s) ===", tc["id"], tc["kind"])
-            result = dispatch[tc["kind"]](tc)
+            try:
+                result = dispatch[tc["kind"]](tc)
+            except KeyboardInterrupt:
+                self.logger.warning("Ctrl+C received while running %s -- stopping and generating reports for the %d test case(s) already completed.", tc["id"], len(results))
+                result = TestCaseResult(tc["id"], tc["kind"], tc["description"])
+                result.status = "INTERRUPTED"
+                result.notes.append("Run interrupted by user (Ctrl+C) while this test case was in progress")
+                self.write_case_result(result)
+                results.append(result)
+                interrupted = True
+                break
             self.write_case_result(result)
             results.append(result)
-        self.restore_cloud_ops()
-        return results
+        try:
+            self.restore_cloud_ops()
+        except KeyboardInterrupt:
+            interrupted = True
+        return results, interrupted
 
 
 def write_summary(run_dir: pathlib.Path, plan: dict, results: List[TestCaseResult]) -> None:
@@ -1692,7 +1714,7 @@ def write_summary(run_dir: pathlib.Path, plan: dict, results: List[TestCaseResul
     (run_dir / "summary.md").write_text("\n".join(md_lines), encoding="utf-8")
 
     def status_class(status: str) -> str:
-        return {"PASS": "pass", "FAIL": "fail", "BLOCKED": "blocked"}.get(status, "")
+        return {"PASS": "pass", "FAIL": "fail", "BLOCKED": "blocked", "INTERRUPTED": "interrupted"}.get(status, "")
 
     def _perf_link(r: TestCaseResult) -> str:
         for note in r.notes:
@@ -1729,10 +1751,12 @@ th, td {{ border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; }}
 th {{ background: #f9fafb; }}
 tr.fail td {{ background: #fef2f2; }}
 tr.blocked td {{ background: #fffbeb; }}
+tr.interrupted td {{ background: #ede9fe; }}
 .badge {{ padding: 2px 8px; border-radius: 999px; font-weight: 700; font-size: 12px; }}
 .badge.pass {{ background: #dcfce7; color: #14532d; }}
 .badge.fail {{ background: #fee2e2; color: #7f1d1d; }}
 .badge.blocked {{ background: #fef3c7; color: #78350f; }}
+.badge.interrupted {{ background: #ede9fe; color: #4c1d95; }}
 a {{ color: #2563eb; }}
 </style></head>
 <body>
@@ -1742,6 +1766,7 @@ a {{ color: #2563eb; }}
   <div><div class="value" style="color:#14532d">{counts.get('PASS', 0)}</div>PASS</div>
   <div><div class="value" style="color:#7f1d1d">{counts.get('FAIL', 0)}</div>FAIL</div>
   <div><div class="value" style="color:#78350f">{counts.get('BLOCKED', 0)}</div>BLOCKED</div>
+  <div><div class="value" style="color:#4c1d95">{counts.get('INTERRUPTED', 0)}</div>INTERRUPTED</div>
 </div>
 <table>
 <tr><th>Status</th><th>Test ID</th><th>Kind</th><th>Dataset</th><th>Mode</th><th>Description</th><th>Perf</th><th>Notes (first 3)</th></tr>
@@ -1753,19 +1778,35 @@ a {{ color: #2563eb; }}
 
 def _execute_confirmed_plan(args: argparse.Namespace, plan: dict, logger: logging.Logger) -> int:
     executor = Executor(args, plan, logger)
-    results = executor.run_all()
-    executor.download_final_diagnostic_report()
+    results, interrupted = executor.run_all()
+    if interrupted:
+        logger.warning("Run interrupted (Ctrl+C). Generating reports for the %d test case(s) completed so far...", len(results))
+    try:
+        executor.download_final_diagnostic_report()
+    except KeyboardInterrupt:
+        logger.warning("Ctrl+C received again during final diagnostic report download; skipping it.")
+        interrupted = True
     write_summary(executor.run_dir, plan, results)
     counts: Dict[str, int] = {}
     for r in results:
         counts[r.status] = counts.get(r.status, 0) + 1
     html_report = executor.run_dir / "summary.html"
-    logger.info("Run complete. Results: %s", executor.run_dir)
-    logger.info("PASS=%s FAIL=%s BLOCKED=%s (total %s)", counts.get("PASS", 0), counts.get("FAIL", 0),
-                counts.get("BLOCKED", 0), len(results))
+    json_report = executor.run_dir / "summary.json"
+    md_report = executor.run_dir / "summary.md"
+    if interrupted:
+        logger.warning("RUN INTERRUPTED by user -- %d/%d test case(s) completed.", len(results), len(plan["test_cases"]))
+    else:
+        logger.info("Run complete. Results: %s", executor.run_dir)
+    logger.info("PASS=%s FAIL=%s BLOCKED=%s INTERRUPTED=%s (total %s)", counts.get("PASS", 0), counts.get("FAIL", 0),
+                counts.get("BLOCKED", 0), counts.get("INTERRUPTED", 0), len(results))
     print("")
+    print(f"Results dir: {executor.run_dir.resolve()}")
+    print(f"JSON summary: {json_report.resolve()}")
+    print(f"Markdown summary: {md_report.resolve()}")
     print(f"HTML report: {html_report.resolve().as_uri()}")
     print(f"             ({html_report.resolve()})")
+    if interrupted:
+        return 130
     failed = sum(1 for r in results if r.status not in ("PASS",))
     return 1 if failed else 0
 
@@ -1825,13 +1866,21 @@ def phase_list_cases(args: argparse.Namespace, logger: logging.Logger) -> int:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv)
     logger = setup_logging(args.verbose)
-    if args.list_cases:
-        return phase_list_cases(args, logger)
-    if args.run:
-        return phase_run(args, logger)
-    if args.plan:
-        return phase_plan(args, logger)
-    return phase_execute(args, logger)
+    try:
+        if args.list_cases:
+            return phase_list_cases(args, logger)
+        if args.run:
+            return phase_run(args, logger)
+        if args.plan:
+            return phase_plan(args, logger)
+        return phase_execute(args, logger)
+    except KeyboardInterrupt:
+        # Safety net for Ctrl+C outside the test-case loop (e.g. during plan
+        # building or the confirmation prompt) -- run_all() already handles
+        # the common case of interrupting mid-execution and still writes
+        # reports; this just avoids a raw traceback if no results exist yet.
+        logger.warning("Interrupted (Ctrl+C) before any test case ran. No results directory was created.")
+        return 130
 
 
 if __name__ == "__main__":
