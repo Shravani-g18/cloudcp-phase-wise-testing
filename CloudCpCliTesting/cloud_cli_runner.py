@@ -435,7 +435,11 @@ def get_transfer_status(args: argparse.Namespace, transfer_id: str, logger: logg
     )
     if args.dry_run or result.returncode != 0:
         return "UNKNOWN", result
-    match = re.search(r'"state"\s*:\s*"([A-Z_]+)"', result.stdout)
+    # bryck_cloud_transfer_status.py prints a human-readable "STATE : COMPLETED"
+    # block via logger.info() (stderr by default), not JSON on stdout -- search
+    # both streams with a plain-text pattern.
+    combined = (result.stdout or "") + (result.stderr or "")
+    match = re.search(r"STATE\s*:\s*([A-Z_]+)", combined)
     return (match.group(1) if match else "UNKNOWN"), result
 
 
