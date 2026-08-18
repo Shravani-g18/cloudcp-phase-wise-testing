@@ -117,6 +117,60 @@ for selection.
 | `DS-P9-04` | `CLI-EDGE-03` | Single 64 MB file — first size that must go multipart. |
 | `DS-P4-01` | `CLI-EDGE-04` | Filename/encoding stress (20 filename variants) at tiny tier. |
 
+### 5.2 Full-catalog round (`--dataset-catalog all`)
+
+By default the runner uses one representative dataset per tier (§5) to keep a
+run fast. Pass `--dataset-catalog all` to instead run **every** dataset in
+`dataset_cloudcp/spec_files/manifest.json` (54 datasets, per §9 of
+`dataset_generation_plan.md`) as its own transfer round — one `CLI-<mode>-<dataset-id>`
+test case per dataset x mode, each going through the same mandatory
+mount -> generate -> configure -> upload -> download -> report flow (§6-§7).
+Narrow it to a specific subset with `--datasets DS-P1-01 DS-P2-03 ...`.
+
+```bash
+# every dataset in the manifest, upload + download, as one confirmed plan
+python3 cloud_cli_runner.py --plan --dataset-catalog all --yes
+python3 cloud_cli_runner.py --execute --plan-file results/<RUN_ID>/plan.json
+
+# only a specific subset of datasets
+python3 cloud_cli_runner.py --plan --dataset-catalog all --datasets DS-P2-01 DS-P4-05 DS-P9-07 --yes
+```
+
+### 5.3 Local spec catalog (`--dataset-catalog specfiles`)
+
+`CloudCpCliTesting/spec_files/` holds its own single-spec YAML catalog (the
+same shape as the fallback-suite specs — one `root:` line per file, rewritten
+by the runner at generation time):
+
+| Spec | Focus |
+|---|---|
+| `01_zero_byte.yaml` | 0-byte files. |
+| `02_tiny_files.yaml` | Many small files. |
+| `03_small_files.yaml` | 1–16 MiB, multipart boundary. |
+| `04_medium_files.yaml` | 64–512 MiB. |
+| `05_large_files.yaml` | 1–5 GiB, sparse. |
+| `06_sparse_files.yaml` | Sparse content across tiers. |
+| `07_fill_files.yaml` | Deterministic fill (checksum-stable). |
+| `08_deep_tree.yaml` | Deep nested paths. |
+| `09_unicode_names.yaml` | Unicode/emoji/CJK names. |
+| `10_special_char_names.yaml` | ASCII special chars/spaces. |
+| `11_mixed_realistic.yaml` | Weighted realistic mix. |
+| `12_tiny_2million.yaml` | Scale — ~2M tiny files. |
+
+`--dataset-catalog specfiles` runs one `CLI-<mode>-<spec-name>` transfer round
+per file here (again through the mandatory mount -> generate -> configure ->
+upload -> download -> report flow), instead of the tier or manifest catalogs.
+Narrow it with `--datasets 01_zero_byte 09_unicode_names ...`.
+
+```bash
+# every spec_files/*.yaml dataset, upload + download
+python3 cloud_cli_runner.py --plan --dataset-catalog specfiles --yes
+python3 cloud_cli_runner.py --execute --plan-file results/<RUN_ID>/plan.json
+
+# only a specific subset
+python3 cloud_cli_runner.py --plan --dataset-catalog specfiles --datasets 01_zero_byte 07_fill_files 12_tiny_2million --yes
+```
+
 ## 6. Cloud Configuration
 
 Per test case (per dataset x per mode), from `CloudCpCliTesting/bryckclient-cli/`:
@@ -152,6 +206,15 @@ Per test case (per dataset x per mode), from `CloudCpCliTesting/bryckclient-cli/
 ## 7. Transfer Execution
 
 Per test case, still from `CloudCpCliTesting/bryckclient-cli/`:
+
+0. **Mandatory precondition — Bryck must be mounted.** Before dataset
+   generation or transfer initiation, check `bryck_info.py`; if the state
+   does not contain `Mounted`, run `bryck_mount.py` and poll until it does.
+   The runner performs this automatically before **every** transfer,
+   lifecycle, service, and edge test case (`Executor.ensure_mounted()`), not
+   just once at the start of the whole run — a prior test's eject/format
+   action must never leave a later test generating data against an
+   unmounted device.
 
 1. Initiate the transfer (decision #2 — every dataset gets all three modes,
    run as three separate test cases per tier):
@@ -295,9 +358,43 @@ Expected results per action:
 | `CLI-EDGE-03` | `DS-P9-04` | Single 64 MB file upload (first multipart size). | Uses multipart upload; single object in report. |
 | `CLI-EDGE-04` | `DS-P4-01` | Tiny tier, 20 filename variants upload. | Every filename variant round-trips byte-for-byte. |
 
+### 9.5 CLI / Input-Validation Negative Cases (9 cases, `CLI-01`..`CLI-09`)
+
+Every row expects the operation to be **rejected** (`expect_fail=True`) before
+any real mutation happens — no fixture setup, no transfer, no partial config.
+Runs against `bryck_cloud_transfer_initiate.py`/`bryck_cloud_show.py`/`bryck_cloud_transfer_pause.py`/`datagen`.
+
+| Test ID | Scenario | Expected result |
+|---|---|---|
+| `CLI-01` | Initiate transfer without `--mode`. | argparse rejects; no transfer created. |
+| `CLI-02` | Initiate transfer with `--mode copy` (invalid choice). | argparse rejects; no transfer created. |
+| `CLI-03` | Upload with empty `bryck_src` in `cloud_ops.json`. | Rejected before any API mutation. |
+| `CLI-04` | Upload with empty `cloud_bucket`. | Rejected before any API mutation. |
+| `CLI-05` | Download with empty `bryck_dst`. | Rejected before any API mutation. |
+| `CLI-06` | `bryck_cloud_show.py` with a missing `login.json`. | Readable file error; no API call. |
+| `CLI-07` | `bryck_cloud_show.py` with a malformed `login.json` (`"{"`). | Readable JSON error. |
+| `CLI-08` | Pause with `--transfer-id not-a-transfer-id`. | Controlled rejection; no state change. |
+| `CLI-09` | `datagen --spec <nonexistent.yaml>`. | Fails before any host mutation. |
+
+### 9.6 Cloud / AWS Configuration Negative Cases (8 cases, `AWS-01`..`AWS-08`)
+
+Each mutates a private per-case copy of `cloud_ops.json` (never the shared
+file) and runs `bryck_cloud_configure.py`/`bryck_cloud_deconfigure.py`.
+
+| Test ID | Scenario | Expected result |
+|---|---|---|
+| `AWS-01` | Configure with empty `access_key_id`. | Rejected; no partial provider config. |
+| `AWS-02` | Configure with empty `secret_access_key`. | Rejected; no partial provider config. |
+| `AWS-03` | Configure with `access_key_id=invalid-access-key`. | Provider rejects; no partial config. |
+| `AWS-04` | Configure with `secret_access_key=invalid-secret-key`. | Provider rejects. |
+| `AWS-05` | Configure with `region=invalid-region`. | Controlled provider error. |
+| `AWS-06` | Configure with `cloud_bucket=not-a-valid-bucket`. | Validation failure. |
+| `AWS-07` | Deconfigure when nothing is configured. | Observational — rc recorded, not forced pass/fail (documented idempotence). |
+| `AWS-08` | Deconfigure twice in a row. | Observational — both rcs recorded; must be deterministic. |
+
 **Total: 18 (transfer) + 60 (6 x 10 intervention actions, tracked as sub-rows
-of the 6 `CLI-LC-*` cases) + 2 (service) + 4 (edge) = 24 top-level test cases,
-60 intervention action sub-results.**
+of the 6 `CLI-LC-*` cases) + 2 (service) + 4 (edge) + 9 (CLI-input) + 8
+(AWS-negative) = 41 top-level test cases, 60 intervention action sub-results.**
 
 ## 10. Verification
 

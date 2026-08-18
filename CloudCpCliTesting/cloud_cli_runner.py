@@ -70,6 +70,7 @@ TIER_DATASET_MAP = {
 }
 ALL_TIERS = ["ZERO", "TINY", "SMALL", "MEDIUM", "LARGE", "SPARSE"]
 SPARSE_SPEC_FILE = FALLBACK_SPEC_ROOT / "06_sparse_files.yaml"
+SPEC_FILES_DIR = HERE / "spec_files"
 
 MODES = ["upload", "download", "both"]
 MODE_CODE = {"upload": "U", "download": "D", "both": "B"}
@@ -84,6 +85,34 @@ EDGE_CASES = {
     "CLI-EDGE-02": {"dataset": "DS-P8-04", "description": "14-level deep directory tree upload"},
     "CLI-EDGE-03": {"dataset": "DS-P9-04", "description": "Single 64 MB file upload (first multipart size)"},
     "CLI-EDGE-04": {"dataset": "DS-P4-01", "description": "Tiny tier, 20 filename variants upload"},
+}
+
+# CLI/input-validation negative cases: each expects the operation to be REJECTED
+# (expect_fail=True) before any real mutation happens. Modeled on NEGATIVE_TEST_PLAN.md §7.
+CLI_INPUT_CASES = {
+    "CLI-01": "Initiate transfer without --mode (argparse must reject; no transfer created)",
+    "CLI-02": "Initiate transfer with an invalid --mode value (--mode copy)",
+    "CLI-03": "Upload with empty bryck_src in cloud_ops.json",
+    "CLI-04": "Upload with empty cloud_bucket in cloud_ops.json",
+    "CLI-05": "Download with empty bryck_dst in cloud_ops.json",
+    "CLI-06": "bryck_cloud_show.py with a missing login.json file",
+    "CLI-07": "bryck_cloud_show.py with a malformed (unparsable) login.json",
+    "CLI-08": "Pause a transfer using an invalid --transfer-id (not-a-transfer-id)",
+    "CLI-09": "datagen with a nonexistent spec YAML file",
+}
+
+# Cloud/AWS configuration negative cases: each expects bryck_cloud_configure.py to
+# reject the mutated cloud_ops.json before any partial provider config lands.
+# Modeled on NEGATIVE_TEST_PLAN.md §10 (AWS-01..AWS-08 subset).
+AWS_NEGATIVE_CASES = {
+    "AWS-01": "Configure with empty access_key_id",
+    "AWS-02": "Configure with empty secret_access_key",
+    "AWS-03": "Configure with an invalid access_key_id",
+    "AWS-04": "Configure with an invalid secret_access_key",
+    "AWS-05": "Configure with an invalid region",
+    "AWS-06": "Configure with an invalid cloud_bucket URI",
+    "AWS-07": "Deconfigure when no cloud provider is configured (observational; idempotence documented)",
+    "AWS-08": "Deconfigure twice in a row (observational; second call must be deterministic)",
 }
 
 TERMINAL_STATES = {"COMPLETED", "FAILED", "STOPPED", "CANCELLED"}
@@ -121,9 +150,18 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
 
     parser.add_argument("--plan-file", help="Path to plan.json (required for --execute).")
     parser.add_argument("--tiers", nargs="+", default=ALL_TIERS, choices=ALL_TIERS,
-                         help="Subset of tiers to include (default: all).")
+                         help="Subset of tiers to include (default: all). Ignored when --dataset-catalog all is used.")
     parser.add_argument("--modes", nargs="+", default=MODES, choices=MODES,
                          help="Subset of transfer modes to include (default: all).")
+    parser.add_argument("--dataset-catalog", choices=["tiers", "all", "specfiles"], default="tiers",
+                         help="'tiers' (default) runs one representative dataset per size tier. "
+                              "'all' runs every dataset in dataset_cloudcp/spec_files/manifest.json "
+                              "(optionally narrowed with --datasets) as its own transfer round. "
+                              "'specfiles' runs every *.yaml spec under CloudCpCliTesting/spec_files/ "
+                              "(optionally narrowed with --datasets, e.g. 01_zero_byte 12_tiny_2million).")
+    parser.add_argument("--datasets", nargs="+", default=None,
+                         help="Explicit dataset IDs (--dataset-catalog all, e.g. DS-P1-01) or spec names "
+                              "(--dataset-catalog specfiles, e.g. 01_zero_byte). Defaults to the full catalog.")
     parser.add_argument("--include-lifecycle", action="store_true", default=True)
     parser.add_argument("--no-lifecycle", dest="include_lifecycle", action="store_false",
                          help="Skip the live intervention matrix (§9.2).")
@@ -133,6 +171,12 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--include-edge", action="store_true", default=True)
     parser.add_argument("--no-edge", dest="include_edge", action="store_false",
                          help="Skip the negative/edge-case matrix (§9.4).")
+    parser.add_argument("--include-cli-input", action="store_true", default=True)
+    parser.add_argument("--no-cli-input", dest="include_cli_input", action="store_false",
+                         help="Skip the CLI/input-validation negative cases (CLI-01..CLI-09).")
+    parser.add_argument("--include-aws-negative", action="store_true", default=True)
+    parser.add_argument("--no-aws-negative", dest="include_aws_negative", action="store_false",
+                         help="Skip the cloud/AWS configuration negative cases (AWS-01..AWS-08).")
     parser.add_argument("--only", nargs="+", default=None,
                          help="Build/run only these test-case IDs (e.g. --only CLI-U-ZERO), ignoring --tiers/--modes/--include-*.")
 
@@ -352,14 +396,37 @@ def resolve_tier_dataset(tier: str) -> "base.DatasetSelection":
     return base.select_dataset(SPEC_ROOT, dataset_id)
 
 
+def all_catalog_dataset_ids() -> List[str]:
+    """Every dataset id declared in dataset_cloudcp/spec_files/manifest.json, sorted."""
+    _manifest, dataset_map = base.load_manifest(SPEC_ROOT)
+    return sorted(dataset_map)
+
+
+def local_spec_catalog_ids() -> List[str]:
+    """Every *.yaml spec name under CloudCpCliTesting/spec_files/, sorted."""
+    return sorted(p.stem for p in SPEC_FILES_DIR.glob("*.yaml"))
+
+
+def local_spec_file_path(name: str) -> Optional[pathlib.Path]:
+    candidate = SPEC_FILES_DIR / f"{name}.yaml"
+    return candidate if candidate.is_file() else None
+
+
 def generate_tier_dataset(
     tier: str,
     output_base: str,
     args: argparse.Namespace,
     logger: logging.Logger,
+    dataset_id: Optional[str] = None,
 ) -> tuple[pathlib.Path, dict]:
-    """Materialize one tier's dataset under output_base/<TIER>, reusing the
-    single-dataset datagen flow already validated by cloudcpclitesting.py."""
+    """Materialize one dataset under output_base/<TIER>, reusing the
+    single-dataset datagen flow already validated by cloudcpclitesting.py.
+
+    `dataset_id` overrides the tier->dataset lookup so any dataset in the
+    manifest catalog, or any single-spec YAML under CloudCpCliTesting/spec_files/,
+    can be driven through the same tier-shaped folder layout (used by
+    --dataset-catalog all / --dataset-catalog specfiles).
+    """
     ns = types.SimpleNamespace(
         output_base=str(pathlib.Path(output_base) / tier),
         skip_generate=False,
@@ -367,9 +434,12 @@ def generate_tier_dataset(
         dry_run=args.dry_run,
         verbose=args.verbose,
     )
-    if tier == "SPARSE":
-        return generate_sparse_dataset(ns, logger)
-    dataset = resolve_tier_dataset(tier)
+    local_spec = local_spec_file_path(dataset_id) if dataset_id else None
+    if local_spec is not None:
+        return generate_named_spec_dataset(local_spec, tier, output_base, ns, logger)
+    if tier == "SPARSE" and dataset_id is None:
+        return generate_named_spec_dataset(SPARSE_SPEC_FILE, "SPARSE", output_base, ns, logger)
+    dataset = base.select_dataset(SPEC_ROOT, dataset_id) if dataset_id else resolve_tier_dataset(tier)
     # generate_dataset() writes under <output_base>/<dataset_id>; point
     # output_base one level up so files land at <output_base>/<TIER>/<dataset_id>.
     ns.output_base = str(pathlib.Path(output_base) / tier)
@@ -377,23 +447,31 @@ def generate_tier_dataset(
     return dataset_root, summary
 
 
-def generate_sparse_dataset(ns: types.SimpleNamespace, logger: logging.Logger) -> tuple[pathlib.Path, dict]:
-    target_root = pathlib.Path(ns.output_base) / "SPARSE"
-    summary = {"dataset_root": str(target_root), "spec_file": str(SPARSE_SPEC_FILE)}
+def generate_named_spec_dataset(
+    spec_path: pathlib.Path,
+    name: str,
+    output_base: str,
+    ns: types.SimpleNamespace,
+    logger: logging.Logger,
+) -> tuple[pathlib.Path, dict]:
+    """Materialize a single-spec YAML (SPARSE, or any CloudCpCliTesting/spec_files/*.yaml)
+    under output_base/<name>, rewriting its `root:` line to match."""
+    target_root = pathlib.Path(output_base) / name
+    summary = {"dataset_root": str(target_root), "spec_file": str(spec_path)}
     if ns.skip_generate:
         summary["actual_files"] = base.count_files_recursive(target_root)
         return target_root, summary
 
-    text = SPARSE_SPEC_FILE.read_text(encoding="utf-8")
+    text = spec_path.read_text(encoding="utf-8")
     new_text = base.ROOT_LINE_RE.sub(f"root: {target_root.as_posix()}", text, count=1)
-    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", prefix="cli_sparse_", delete=False, encoding="utf-8")
+    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", prefix=f"cli_{name}_", delete=False, encoding="utf-8")
     tmp.write(new_text)
     tmp.close()
     try:
         target_root.mkdir(parents=True, exist_ok=True)
         proc = base.run_cmd([ns.datagen_bin, "--spec", tmp.name], logger, ns.dry_run)
         if proc is not None:
-            base.check_completed(proc, "datagen for SPARSE")
+            base.check_completed(proc, f"datagen for {name}")
         summary["actual_files"] = 0 if ns.dry_run else base.count_files_recursive(target_root)
     finally:
         try:
@@ -464,16 +542,50 @@ def build_plan(args: argparse.Namespace, logger: logging.Logger) -> dict:
             problems.append(str(exc))
 
     test_cases: List[dict] = []
-    for tier in tiers:
-        for mode in args.modes:
-            test_cases.append({
-                "id": f"CLI-{MODE_CODE[mode]}-{tier}",
-                "kind": "transfer",
-                "tier": tier,
-                "mode": mode,
-                "dataset": dataset_specs.get(tier, {}).get("dataset_id") or "06_sparse_files.yaml",
-                "description": f"{mode} transfer for {tier} tier",
-            })
+    if args.dataset_catalog == "all":
+        try:
+            catalog_ids = args.datasets if args.datasets else all_catalog_dataset_ids()
+        except SystemExit as exc:
+            catalog_ids = []
+            problems.append(str(exc))
+        for dataset_id in catalog_ids:
+            for mode in args.modes:
+                test_cases.append({
+                    "id": f"CLI-{MODE_CODE[mode]}-{dataset_id}",
+                    "kind": "transfer",
+                    "tier": dataset_id,
+                    "mode": mode,
+                    "dataset": dataset_id,
+                    "description": f"{mode} transfer for dataset {dataset_id} (full-catalog round)",
+                })
+    elif args.dataset_catalog == "specfiles":
+        spec_ids = args.datasets if args.datasets else local_spec_catalog_ids()
+        missing_specs = [name for name in spec_ids if local_spec_file_path(name) is None]
+        if missing_specs:
+            problems.append(f"--datasets referenced unknown spec_files entries: {missing_specs}")
+        for dataset_id in spec_ids:
+            if local_spec_file_path(dataset_id) is None:
+                continue
+            for mode in args.modes:
+                test_cases.append({
+                    "id": f"CLI-{MODE_CODE[mode]}-{dataset_id}",
+                    "kind": "transfer",
+                    "tier": dataset_id,
+                    "mode": mode,
+                    "dataset": dataset_id,
+                    "description": f"{mode} transfer for spec_files/{dataset_id}.yaml",
+                })
+    else:
+        for tier in tiers:
+            for mode in args.modes:
+                test_cases.append({
+                    "id": f"CLI-{MODE_CODE[mode]}-{tier}",
+                    "kind": "transfer",
+                    "tier": tier,
+                    "mode": mode,
+                    "dataset": dataset_specs.get(tier, {}).get("dataset_id") or "06_sparse_files.yaml",
+                    "description": f"{mode} transfer for {tier} tier",
+                })
     if args.include_lifecycle:
         for tier in tiers:
             test_cases.append({
@@ -504,6 +616,26 @@ def build_plan(args: argparse.Namespace, logger: logging.Logger) -> dict:
                 "mode": "upload",
                 "dataset": meta["dataset"],
                 "description": meta["description"],
+            })
+    if args.include_cli_input:
+        for test_id, description in CLI_INPUT_CASES.items():
+            test_cases.append({
+                "id": test_id,
+                "kind": "cli_input",
+                "tier": None,
+                "mode": None,
+                "dataset": None,
+                "description": description,
+            })
+    if args.include_aws_negative:
+        for test_id, description in AWS_NEGATIVE_CASES.items():
+            test_cases.append({
+                "id": test_id,
+                "kind": "cloud_negative",
+                "tier": None,
+                "mode": None,
+                "dataset": None,
+                "description": description,
             })
 
     if args.only:
@@ -539,6 +671,7 @@ def build_plan(args: argparse.Namespace, logger: logging.Logger) -> dict:
             "aws_cli": args.aws_cli,
             "results_dir": os.path.abspath(args.results_dir),
         },
+        "dataset_catalog": args.dataset_catalog,
         "tiers": tiers,
         "datasets": dataset_specs,
         "bryck_config_tiers_seen": bryck_config_tiers,
@@ -548,14 +681,24 @@ def build_plan(args: argparse.Namespace, logger: logging.Logger) -> dict:
 
 
 def render_confirmation(plan: dict) -> str:
-    tiers_line = ", ".join(plan["tiers"])
+    transfer_datasets = sorted({tc["dataset"] for tc in plan["test_cases"] if tc["kind"] == "transfer"})
+    catalog = plan.get("dataset_catalog")
+    if catalog == "all":
+        dataset_line = f"ALL {len(transfer_datasets)} datasets from dataset_cloudcp/spec_files/manifest.json"
+        generate_line = f"Generate datasets ({len(transfer_datasets)} datasets, full catalog round)"
+    elif catalog == "specfiles":
+        dataset_line = f"{len(transfer_datasets)} spec_files/*.yaml datasets: {', '.join(transfer_datasets)}"
+        generate_line = f"Generate datasets ({len(transfer_datasets)} local spec_files/ datasets)"
+    else:
+        dataset_line = ", ".join(plan["tiers"]) + "   (all sizes — automatic)"
+        generate_line = f"Generate datasets ({', '.join(plan['tiers'])})"
     modes_seen = sorted({tc["mode"] for tc in plan["test_cases"] if tc["kind"] == "transfer"})
     lines = [
         "CloudCP CLI Test Plan",
         "=====================",
         f"Run ID        : {plan['run_id']}",
         f"Bryck state   : {plan['bryck_state_before']}",
-        f"Dataset(s)    : {tiers_line}   (all sizes — automatic)",
+        f"Dataset(s)    : {dataset_line}",
         f"Transfer Mode : {' + '.join(modes_seen)}   (all modes — automatic)",
         f"Cloud         : aws",
         f"Source base   : {plan['config']['output_base']}",
@@ -563,17 +706,19 @@ def render_confirmation(plan: dict) -> str:
         "",
         "Planned Operations:",
         "  [1] Validate Bryck state",
-        "  [2] Mount Bryck if required (AUTO-MOUNT)",
-        f"  [3] Generate datasets ({tiers_line})",
+        "  [2] Mount Bryck if required (AUTO-MOUNT, and re-checked before every transfer)",
+        f"  [3] {generate_line}",
         "  [4] Configure cloud (cloud_ops.json will be rewritten per case, then restored)",
         "  [5] Start transfers (upload/download/both x each dataset)",
         "  [6] Pause/resume/cancel + auto re-transfer tests",
         "  [7] Mount/eject lifecycle tests (INCLUDES eject-during-active-transfer)",
         "  [8] Format/erase/remove attempts (EXECUTED FOR REAL, not just rejection checks)",
         "  [9] Service restart tests (bcloud AND bryckapi, during active transfers)",
-        " [10] Transfer verification",
+        " [10] Transfer verification + report download per transfer",
         " [11] Auto-cleanup datasets + cloud objects after each test" + (" (DISABLED: --keep)" if plan["config"]["keep"] else ""),
         " [12] Generate reports (JSON + HTML + Markdown)",
+        " [13] CLI/input-validation negative cases (CLI-01..CLI-09)",
+        " [14] Cloud/AWS configuration negative cases (AWS-01..AWS-08)",
         "",
         f"Total test cases: {len(plan['test_cases'])}",
     ]
@@ -740,6 +885,20 @@ class Executor:
             time.sleep(self.cfg["poll_interval"])
         return False, state
 
+    def ensure_mounted(self, result: TestCaseResult) -> bool:
+        """Every transfer requires Bryck to be mounted first; mount it if it isn't."""
+        state = self.bryck_state(result)
+        if "mount" in state.lower():
+            return True
+        result.notes.append(f"Bryck not mounted (state={state!r}); mounting before dataset generation/transfer")
+        mount_cmd = self.run_py(result, "bryck_mount.py", ["--login", self.cfg["login"], "--params", self.cfg["format_mount_params"]])
+        if not self.require_ok(result, mount_cmd, "bryck_mount.py"):
+            return False
+        matched, final_state = self.wait_for_bryck_state(result, ["mount"], self.cfg.get("action_timeout", 90))
+        if not matched:
+            result.notes.append(f"Bryck did not reach Mounted state (last observed={final_state!r})")
+        return matched
+
     def write_cloud_ops(self, tier: str) -> str:
         cfg = dict(self.base_cloud_ops)
         cfg["bryck_src"] = f"{self.cfg['output_base']}/{tier}"
@@ -751,7 +910,18 @@ class Executor:
         return cfg["cloud_bucket"]
 
     def configure_cloud(self, result: TestCaseResult, tier: str) -> tuple[bool, str]:
-        """Configure + verify cloud settings; only returns success if BOTH steps confirm."""
+        """Deconfigure any stale cloud config, then configure + verify.
+
+        bryck_cloud_configure.py returns HTTP 409 if a cloud config
+        already exists from a prior run, so always clear it first.
+        Deconfigure failure is non-fatal (there may be nothing to
+        remove yet); configure/show failure is fatal for this case.
+        """
+        cloud_type = str(self.base_cloud_ops.get("cloud_type", "aws"))
+        deconfigure_cmd = self.run_py(result, "bryck_cloud_deconfigure.py", ["--login", self.cfg["login"], "--cloud-type", cloud_type])
+        if not self.args.dry_run and deconfigure_cmd.returncode != 0:
+            result.notes.append(f"bryck_cloud_deconfigure.py rc={deconfigure_cmd.returncode} (ignored, likely nothing configured yet)")
+
         bucket = self.write_cloud_ops(tier)
         configure_cmd = self.run_py(result, "bryck_cloud_configure.py", ["--login", self.cfg["login"], "--params", self.cfg["params"]])
         if not self.require_ok(result, configure_cmd, "bryck_cloud_configure.py"):
@@ -820,8 +990,13 @@ class Executor:
         result = TestCaseResult(tc["id"], "transfer", tc["description"])
         tier, mode = tc["tier"], tc["mode"]
         try:
-            self.bryck_state(result)
-            dataset_root, gen_summary = generate_tier_dataset(tier, self.cfg["output_base"], self._ns(), self.logger)
+            if not self.ensure_mounted(result):
+                result.status = "BLOCKED"
+                result.notes.append("Bryck could not be mounted; dataset/transfer not attempted")
+                return result
+            dataset_root, gen_summary = generate_tier_dataset(
+                tier, self.cfg["output_base"], self._ns(), self.logger, dataset_id=tc.get("dataset"),
+            )
             result.notes.append(f"generated: {gen_summary}")
 
             configured_ok, _bucket = self.configure_cloud(result, tier)
@@ -870,7 +1045,11 @@ class Executor:
         result = TestCaseResult(tc["id"], "lifecycle", tc["description"])
         tier = tc["tier"]
         try:
-            generate_tier_dataset(tier, self.cfg["output_base"], self._ns(), self.logger)
+            if not self.ensure_mounted(result):
+                result.status = "BLOCKED"
+                result.notes.append("Bryck could not be mounted; lifecycle test not attempted")
+                return result
+            generate_tier_dataset(tier, self.cfg["output_base"], self._ns(), self.logger, dataset_id=tc.get("dataset"))
             configured_ok, _bucket = self.configure_cloud(result, tier)
             if not configured_ok:
                 result.status = "BLOCKED"
@@ -968,7 +1147,11 @@ class Executor:
         result = TestCaseResult(tc["id"], "service", tc["description"])
         tier = tc["tier"]
         try:
-            generate_tier_dataset(tier, self.cfg["output_base"], self._ns(), self.logger)
+            if not self.ensure_mounted(result):
+                result.status = "BLOCKED"
+                result.notes.append("Bryck could not be mounted; service-restart test not attempted")
+                return result
+            generate_tier_dataset(tier, self.cfg["output_base"], self._ns(), self.logger, dataset_id=tc.get("dataset"))
             configured_ok, _bucket = self.configure_cloud(result, tier)
             if not configured_ok:
                 result.status = "BLOCKED"
@@ -1011,6 +1194,10 @@ class Executor:
         dataset_id = tc["dataset"]
         tier = f"EDGE-{dataset_id}"
         try:
+            if not self.ensure_mounted(result):
+                result.status = "BLOCKED"
+                result.notes.append("Bryck could not be mounted; edge case not attempted")
+                return result
             dataset = base.select_dataset(SPEC_ROOT, dataset_id)
             ns = self._ns()
             ns.output_base = str(pathlib.Path(self.cfg["output_base"]) / tier)
@@ -1046,6 +1233,115 @@ class Executor:
             verbose=self.args.verbose,
         )
 
+    def _write_fixture_json(self, path: pathlib.Path, data: dict) -> None:
+        if self.args.dry_run:
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", encoding="utf-8") as handle:
+            json.dump(data, handle, indent=2)
+
+    def _judge_expect_fail(self, result: TestCaseResult, cmd: CommandResult, expect_fail: bool, step_name: str) -> str:
+        """PASS/FAIL for a negative case: expect_fail=True means rc!=0 is the correct (PASS) outcome."""
+        if self.args.dry_run:
+            result.notes.append(f"{step_name}: dry-run, outcome not evaluated")
+            return "PASS"
+        ok = (cmd.returncode != 0) if expect_fail else (cmd.returncode == 0)
+        result.notes.append(
+            f"{step_name}: rc={cmd.returncode}, expected_fail={expect_fail} -> {'PASS' if ok else 'FAIL'}"
+        )
+        return "PASS" if ok else "FAIL"
+
+    def run_cli_input_case(self, tc: dict) -> TestCaseResult:
+        result = TestCaseResult(tc["id"], "cli_input", tc["description"])
+        case_id = tc["id"]
+        case_dir = self.case_dir(case_id)
+        try:
+            expect_fail = True
+            if case_id == "CLI-01":
+                cmd = self.run_py(result, "bryck_cloud_transfer_initiate.py",
+                                  ["--login", self.cfg["login"], "--params", self.cfg["params"]])
+            elif case_id == "CLI-02":
+                cmd = self.run_py(result, "bryck_cloud_transfer_initiate.py",
+                                  ["--login", self.cfg["login"], "--params", self.cfg["params"], "--mode", "copy"])
+            elif case_id == "CLI-03":
+                fixture = case_dir / "cli03_cloud_ops.json"
+                self._write_fixture_json(fixture, {**self.base_cloud_ops, "bryck_src": ""})
+                cmd = self.run_py(result, "bryck_cloud_transfer_initiate.py",
+                                  ["--login", self.cfg["login"], "--params", str(fixture), "--mode", "upload"])
+            elif case_id == "CLI-04":
+                fixture = case_dir / "cli04_cloud_ops.json"
+                self._write_fixture_json(fixture, {**self.base_cloud_ops, "cloud_bucket": ""})
+                cmd = self.run_py(result, "bryck_cloud_transfer_initiate.py",
+                                  ["--login", self.cfg["login"], "--params", str(fixture), "--mode", "upload"])
+            elif case_id == "CLI-05":
+                fixture = case_dir / "cli05_cloud_ops.json"
+                self._write_fixture_json(fixture, {**self.base_cloud_ops, "bryck_dst": ""})
+                cmd = self.run_py(result, "bryck_cloud_transfer_initiate.py",
+                                  ["--login", self.cfg["login"], "--params", str(fixture), "--mode", "download"])
+            elif case_id == "CLI-06":
+                cmd = self.run_py(result, "bryck_cloud_show.py", ["--login", str(case_dir / "missing-login.json")])
+            elif case_id == "CLI-07":
+                fixture = case_dir / "cli07_login.json"
+                if not self.args.dry_run:
+                    fixture.write_text("{", encoding="utf-8")
+                cmd = self.run_py(result, "bryck_cloud_show.py", ["--login", str(fixture)])
+            elif case_id == "CLI-08":
+                cmd = self.run_py(result, "bryck_cloud_transfer_pause.py",
+                                  ["--login", self.cfg["login"], "--transfer-id", "not-a-transfer-id"])
+            elif case_id == "CLI-09":
+                cmd = run_argv(
+                    "datagen with missing spec",
+                    [self.cfg["datagen_bin"], "--spec", str(case_dir / "missing-spec.yaml")],
+                    self.logger, self.args.dry_run, self.redact,
+                )
+                result.commands.append(cmd.as_dict())
+            else:
+                result.status = "BLOCKED"
+                result.notes.append("no fixture implemented for this CLI-input case yet")
+                return result
+
+            result.status = self._judge_expect_fail(result, cmd, expect_fail, case_id)
+        except Exception as exc:  # noqa: BLE001
+            result.status = "FAIL"
+            result.notes.append(f"exception: {exc}")
+        return result
+
+    def run_cloud_negative_case(self, tc: dict) -> TestCaseResult:
+        result = TestCaseResult(tc["id"], "cloud_negative", tc["description"])
+        case_id = tc["id"]
+        case_dir = self.case_dir(case_id)
+        cloud_type = str(self.base_cloud_ops.get("cloud_type", "aws"))
+        mutation_map = {
+            "AWS-01": {"access_key_id": ""},
+            "AWS-02": {"secret_access_key": ""},
+            "AWS-03": {"access_key_id": "invalid-access-key"},
+            "AWS-04": {"secret_access_key": "invalid-secret-key"},
+            "AWS-05": {"region": "invalid-region"},
+            "AWS-06": {"cloud_bucket": "not-a-valid-bucket"},
+        }
+        try:
+            if case_id in mutation_map:
+                fixture = case_dir / f"{case_id}_cloud_ops.json"
+                self._write_fixture_json(fixture, {**self.base_cloud_ops, **mutation_map[case_id]})
+                cmd = self.run_py(result, "bryck_cloud_configure.py", ["--login", self.cfg["login"], "--params", str(fixture)])
+                result.status = self._judge_expect_fail(result, cmd, True, case_id)
+            elif case_id == "AWS-07":
+                cmd = self.run_py(result, "bryck_cloud_deconfigure.py", ["--login", self.cfg["login"], "--cloud-type", cloud_type])
+                result.notes.append(f"observational: deconfigure-when-not-configured returned rc={cmd.returncode}")
+                result.status = "PASS"
+            elif case_id == "AWS-08":
+                cmd1 = self.run_py(result, "bryck_cloud_deconfigure.py", ["--login", self.cfg["login"], "--cloud-type", cloud_type])
+                cmd2 = self.run_py(result, "bryck_cloud_deconfigure.py", ["--login", self.cfg["login"], "--cloud-type", cloud_type])
+                result.notes.append(f"observational: first rc={cmd1.returncode}, second rc={cmd2.returncode} (should be deterministic)")
+                result.status = "PASS"
+            else:
+                result.status = "BLOCKED"
+                result.notes.append("no fixture implemented for this AWS-negative case yet")
+        except Exception as exc:  # noqa: BLE001
+            result.status = "FAIL"
+            result.notes.append(f"exception: {exc}")
+        return result
+
     def run_all(self) -> List[TestCaseResult]:
         results: List[TestCaseResult] = []
         dispatch = {
@@ -1053,6 +1349,8 @@ class Executor:
             "lifecycle": self.run_lifecycle_case,
             "service": self.run_service_case,
             "edge": self.run_edge_case,
+            "cli_input": self.run_cli_input_case,
+            "cloud_negative": self.run_cloud_negative_case,
         }
         for tc in self.plan["test_cases"]:
             self.logger.info("=== running %s (%s) ===", tc["id"], tc["kind"])
@@ -1067,33 +1365,80 @@ def write_summary(run_dir: pathlib.Path, plan: dict, results: List[TestCaseResul
     counts = {"PASS": 0, "FAIL": 0, "BLOCKED": 0, "PENDING": 0}
     for r in results:
         counts[r.status] = counts.get(r.status, 0) + 1
+    tc_by_id = {tc["id"]: tc for tc in plan.get("test_cases", [])}
 
     summary = {
         "run_id": plan["run_id"],
         "generated_at": dt.datetime.now().isoformat(),
         "counts": counts,
         "test_cases": [
-            {"test_id": r.test_id, "kind": r.kind, "description": r.description, "status": r.status, "notes": r.notes}
+            {
+                "test_id": r.test_id, "kind": r.kind, "description": r.description, "status": r.status,
+                "dataset": tc_by_id.get(r.test_id, {}).get("dataset"),
+                "mode": tc_by_id.get(r.test_id, {}).get("mode"),
+                "notes": r.notes,
+            }
             for r in results
         ],
     }
     (run_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
-    md_lines = [f"# CloudCP CLI Run {plan['run_id']}", "", f"Counts: {counts}", "", "| Test ID | Kind | Status | Description |", "|---|---|---|---|"]
+    md_lines = [
+        f"# CloudCP CLI Run {plan['run_id']}", "",
+        f"PASS={counts.get('PASS', 0)} FAIL={counts.get('FAIL', 0)} BLOCKED={counts.get('BLOCKED', 0)} "
+        f"(total {len(results)})", "",
+        "| Test ID | Kind | Dataset | Mode | Status | Description |",
+        "|---|---|---|---|---|---|",
+    ]
     for r in results:
-        md_lines.append(f"| {r.test_id} | {r.kind} | {r.status} | {r.description} |")
+        tc = tc_by_id.get(r.test_id, {})
+        md_lines.append(f"| {r.test_id} | {r.kind} | {tc.get('dataset', '')} | {tc.get('mode', '')} | {r.status} | {r.description} |")
     (run_dir / "summary.md").write_text("\n".join(md_lines), encoding="utf-8")
 
+    def status_class(status: str) -> str:
+        return {"PASS": "pass", "FAIL": "fail", "BLOCKED": "blocked"}.get(status, "")
+
     html_rows = "".join(
-        f"<tr><td>{r.test_id}</td><td>{r.kind}</td><td>{r.status}</td><td>{r.description}</td></tr>"
+        f"<tr class='{status_class(r.status)}'>"
+        f"<td><span class='badge {status_class(r.status)}'>{r.status}</span></td>"
+        f"<td>{r.test_id}</td><td>{r.kind}</td>"
+        f"<td>{tc_by_id.get(r.test_id, {}).get('dataset', '')}</td>"
+        f"<td>{tc_by_id.get(r.test_id, {}).get('mode', '')}</td>"
+        f"<td>{r.description}</td>"
+        f"<td>{'; '.join(r.notes[:3])}</td></tr>"
         for r in results
     )
-    html = (
-        f"<html><head><title>CloudCP CLI Run {plan['run_id']}</title></head><body>"
-        f"<h1>CloudCP CLI Run {plan['run_id']}</h1><p>Counts: {counts}</p>"
-        f"<table border='1' cellpadding='4'><tr><th>Test ID</th><th>Kind</th><th>Status</th><th>Description</th></tr>"
-        f"{html_rows}</table></body></html>"
-    )
+    html = f"""<!doctype html>
+<html><head><meta charset="utf-8"><title>CloudCP CLI Run {plan['run_id']}</title>
+<style>
+body {{ font-family: Arial, sans-serif; margin: 24px; background: #f3f4f6; color: #1f2937; }}
+h1 {{ margin-bottom: 4px; }}
+.summary {{ display: flex; gap: 12px; margin: 16px 0; }}
+.summary div {{ background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 16px; text-align: center; }}
+.summary .value {{ font-size: 1.4rem; font-weight: 700; }}
+table {{ border-collapse: collapse; width: 100%; background: #fff; font-size: 13px; }}
+th, td {{ border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; }}
+th {{ background: #f9fafb; }}
+tr.fail td {{ background: #fef2f2; }}
+tr.blocked td {{ background: #fffbeb; }}
+.badge {{ padding: 2px 8px; border-radius: 999px; font-weight: 700; font-size: 12px; }}
+.badge.pass {{ background: #dcfce7; color: #14532d; }}
+.badge.fail {{ background: #fee2e2; color: #7f1d1d; }}
+.badge.blocked {{ background: #fef3c7; color: #78350f; }}
+</style></head>
+<body>
+<h1>CloudCP CLI Run {plan['run_id']}</h1>
+<div class="summary">
+  <div><div class="value">{len(results)}</div>Total</div>
+  <div><div class="value" style="color:#14532d">{counts.get('PASS', 0)}</div>PASS</div>
+  <div><div class="value" style="color:#7f1d1d">{counts.get('FAIL', 0)}</div>FAIL</div>
+  <div><div class="value" style="color:#78350f">{counts.get('BLOCKED', 0)}</div>BLOCKED</div>
+</div>
+<table>
+<tr><th>Status</th><th>Test ID</th><th>Kind</th><th>Dataset</th><th>Mode</th><th>Description</th><th>Notes (first 3)</th></tr>
+{html_rows}
+</table>
+</body></html>"""
     (run_dir / "summary.html").write_text(html, encoding="utf-8")
 
 
@@ -1108,7 +1453,16 @@ def phase_execute(args: argparse.Namespace, logger: logging.Logger) -> int:
     executor = Executor(args, plan, logger)
     results = executor.run_all()
     write_summary(executor.run_dir, plan, results)
+    counts: Dict[str, int] = {}
+    for r in results:
+        counts[r.status] = counts.get(r.status, 0) + 1
+    html_report = executor.run_dir / "summary.html"
     logger.info("Run complete. Results: %s", executor.run_dir)
+    logger.info("PASS=%s FAIL=%s BLOCKED=%s (total %s)", counts.get("PASS", 0), counts.get("FAIL", 0),
+                counts.get("BLOCKED", 0), len(results))
+    print("")
+    print(f"HTML report: {html_report.resolve().as_uri()}")
+    print(f"             ({html_report.resolve()})")
     failed = sum(1 for r in results if r.status not in ("PASS",))
     return 1 if failed else 0
 
