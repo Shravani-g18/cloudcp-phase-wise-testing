@@ -47,7 +47,6 @@ HERE = pathlib.Path(__file__).resolve().parent
 REPO_ROOT = HERE.parent
 BRYCK_CLI_DIR = HERE / "bryckclient-cli"
 SPEC_ROOT = REPO_ROOT / "dataset_cloudcp" / "spec_files"
-FALLBACK_SPEC_ROOT = REPO_ROOT / "CloudCpFallbackTesting" / "spec_files"
 RESULTS_ROOT = HERE / "results"
 
 sys.path.insert(0, str(HERE))
@@ -62,15 +61,7 @@ DEFAULT_BATCHMETA = "/opt/bryck/bryckapi/downloads/bcloud_batchmeta"
 DEFAULT_TRANSFER_LOGS = "/opt/bryck/bryckapi/downloads/cloud_transfer_logs"
 DEFAULT_BRYCK_CONFIG_JSON = "/etc/bryck/bryckcloud/config.json"
 
-TIER_DATASET_MAP = {
-    "ZERO": "DS-P1-01",
-    "TINY": "DS-P1-02",
-    "SMALL": "DS-P1-03",
-    "MEDIUM": "DS-P1-04",
-    "LARGE": "DS-P1-05",
-}
-ALL_TIERS = ["ZERO", "TINY", "SMALL", "MEDIUM", "LARGE", "SPARSE"]
-SPARSE_SPEC_FILE = FALLBACK_SPEC_ROOT / "06_sparse_files.yaml"
+LIFECYCLE_DATASET = "DS-P1-04"  # single representative dataset for lifecycle/service tests
 SPEC_FILES_DIR = HERE / "spec_files"
 
 MODES = ["upload", "download", "both"]
@@ -155,26 +146,23 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
                            "Does NOT run any test case yet -- follow up with --execute --plan-file <path>.")
     mode.add_argument("--execute", action="store_true", help="Phase 2: run a plan.json written by --plan.")
     mode.add_argument("--list-cases", action="store_true",
-                      help="Print every test-case ID that the current --tiers/--modes/--dataset-catalog/"
+                      help="Print every test-case ID that the current --modes/--dataset-catalog/"
                            "--include-*/--suite/--only selection would build, then exit. No side effects.")
     parser.add_argument("--all", dest="dataset_catalog", action="store_const", const="all",
+                         default=argparse.SUPPRESS,
                          help="Alias for --dataset-catalog all (the default): every DS-P1-01..DS-P12-02 dataset.")
-    parser.add_argument("--test-name", dest="suite", nargs="+",
+    parser.add_argument("--test-name", dest="suite", nargs="+", default=argparse.SUPPRESS,
                          choices=["transfer", "lifecycle", "service", "edge", "cli-input", "aws-negative", "all"],
                          help="Alias for --suite: run one named test group by name, e.g. --test-name transfer.")
 
     parser.add_argument("--plan-file", help="Path to plan.json (required for --execute).")
-    parser.add_argument("--tiers", nargs="+", default=ALL_TIERS, choices=ALL_TIERS,
-                         help="Subset of tiers to include (default: all). Ignored when --dataset-catalog all is used.")
     parser.add_argument("--modes", nargs="+", default=MODES, choices=MODES,
                          help="Subset of transfer modes to include (default: all).")
-    parser.add_argument("--dataset-catalog", choices=["tiers", "all", "specfiles"], default="all",
+    parser.add_argument("--dataset-catalog", choices=["all", "specfiles"], default="all",
                          help="'all' (default) runs every dataset in dataset_cloudcp/spec_files/manifest.json "
                               "(DS-P1-01..DS-P12-02; optionally narrowed with --datasets) as its own transfer "
-                              "round. 'tiers' runs one representative size-tier dataset "
-                              "(ZERO/TINY/SMALL/MEDIUM/LARGE/SPARSE) instead. "
-                              "'specfiles' runs every *.yaml spec under CloudCpCliTesting/spec_files/ "
-                              "(optionally narrowed with --datasets, e.g. 01_zero_byte 12_tiny_2million).")
+                              "round. 'specfiles' runs every *.yaml spec under CloudCpCliTesting/spec_files/ "
+                              "(optionally narrowed with --datasets, e.g. 09_unicode_names).")
     parser.add_argument("--datasets", nargs="+", default=None,
                          help="Explicit dataset IDs (--dataset-catalog all, e.g. DS-P1-01) or spec names "
                               "(--dataset-catalog specfiles, e.g. 01_zero_byte). Defaults to the full catalog.")
@@ -194,7 +182,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--no-aws-negative", dest="include_aws_negative", action="store_false",
                          help="Skip the cloud/AWS configuration negative cases (AWS-01..AWS-08).")
     parser.add_argument("--only", nargs="+", default=None,
-                         help="Build/run only these test-case IDs (e.g. --only CLI-U-ZERO), ignoring --tiers/--modes/--include-*.")
+                         help="Build/run only these test-case IDs (e.g. --only CLI-U-DS-P1-01), ignoring --modes/--include-*.")
     parser.add_argument("--suite", nargs="+", default=None,
                          choices=["transfer", "lifecycle", "service", "edge", "cli-input", "aws-negative", "all"],
                          help="Run by suite NAME instead of test-case IDs, e.g. --suite cli-input, "
@@ -456,11 +444,6 @@ def parse_transfer_id(text: str) -> Optional[str]:
 # Dataset resolution (reuses cloudcpclitesting.py helpers where possible)
 # =============================================================================
 
-def resolve_tier_dataset(tier: str) -> "base.DatasetSelection":
-    dataset_id = TIER_DATASET_MAP[tier]
-    return base.select_dataset(SPEC_ROOT, dataset_id)
-
-
 def all_catalog_dataset_ids() -> List[str]:
     """Every dataset id declared in dataset_cloudcp/spec_files/manifest.json, sorted."""
     _manifest, dataset_map = base.load_manifest(SPEC_ROOT)
@@ -482,15 +465,13 @@ def generate_tier_dataset(
     output_base: str,
     args: argparse.Namespace,
     logger: logging.Logger,
-    dataset_id: Optional[str] = None,
+    dataset_id: str,
 ) -> tuple[pathlib.Path, dict]:
-    """Materialize one dataset under output_base/<TIER>, reusing the
+    """Materialize one dataset under output_base/<tier-label>, reusing the
     single-dataset datagen flow already validated by cloudcpclitesting.py.
 
-    `dataset_id` overrides the tier->dataset lookup so any dataset in the
-    manifest catalog, or any single-spec YAML under CloudCpCliTesting/spec_files/,
-    can be driven through the same tier-shaped folder layout (used by
-    --dataset-catalog all / --dataset-catalog specfiles).
+    `tier` is only used as the folder-name label; `dataset_id` (a DS-P* manifest
+    id, or a CloudCpCliTesting/spec_files/*.yaml name) selects what gets generated.
     """
     ns = types.SimpleNamespace(
         output_base=str(pathlib.Path(output_base) / tier),
@@ -499,14 +480,12 @@ def generate_tier_dataset(
         dry_run=args.dry_run,
         verbose=args.verbose,
     )
-    local_spec = local_spec_file_path(dataset_id) if dataset_id else None
+    local_spec = local_spec_file_path(dataset_id)
     if local_spec is not None:
         return generate_named_spec_dataset(local_spec, tier, output_base, ns, logger)
-    if tier == "SPARSE" and dataset_id is None:
-        return generate_named_spec_dataset(SPARSE_SPEC_FILE, "SPARSE", output_base, ns, logger)
-    dataset = base.select_dataset(SPEC_ROOT, dataset_id) if dataset_id else resolve_tier_dataset(tier)
+    dataset = base.select_dataset(SPEC_ROOT, dataset_id)
     # generate_dataset() writes under <output_base>/<dataset_id>; point
-    # output_base one level up so files land at <output_base>/<TIER>/<dataset_id>.
+    # output_base one level up so files land at <output_base>/<tier-label>/<dataset_id>.
     ns.output_base = str(pathlib.Path(output_base) / tier)
     dataset_root, summary = base.generate_dataset(ns, dataset, SPEC_ROOT, logger)
     return dataset_root, summary
@@ -519,7 +498,7 @@ def generate_named_spec_dataset(
     ns: types.SimpleNamespace,
     logger: logging.Logger,
 ) -> tuple[pathlib.Path, dict]:
-    """Materialize a single-spec YAML (SPARSE, or any CloudCpCliTesting/spec_files/*.yaml)
+    """Materialize a single-spec YAML (any CloudCpCliTesting/spec_files/*.yaml)
     under output_base/<name>, rewriting its `root:` line to match."""
     target_root = pathlib.Path(output_base) / name
     summary = {"dataset_root": str(target_root), "spec_file": str(spec_path)}
@@ -613,23 +592,6 @@ def build_plan(args: argparse.Namespace, logger: logging.Logger) -> dict:
     redact = build_redactor(login_cfg or {}, cloud_ops_cfg or {})
     state, info_cmd = get_bryck_state(args, logger, redact)
 
-    tiers = [t for t in ALL_TIERS if t in args.tiers]
-    dataset_specs: Dict[str, dict] = {}
-    for tier in tiers:
-        if tier == "SPARSE":
-            dataset_specs[tier] = {"dataset_id": None, "spec": str(SPARSE_SPEC_FILE)}
-            continue
-        try:
-            dataset = resolve_tier_dataset(tier)
-            dataset_specs[tier] = {
-                "dataset_id": dataset.dataset_id,
-                "name": dataset.name,
-                "expected_files": dataset.expected_files,
-                "spec_dir": str(SPEC_ROOT / dataset.dataset_id),
-            }
-        except SystemExit as exc:
-            problems.append(str(exc))
-
     test_cases: List[dict] = []
     if args.dataset_catalog == "all":
         try:
@@ -664,37 +626,25 @@ def build_plan(args: argparse.Namespace, logger: logging.Logger) -> dict:
                     "dataset": dataset_id,
                     "description": f"{mode} transfer for spec_files/{dataset_id}.yaml",
                 })
-    else:
-        for tier in tiers:
-            for mode in args.modes:
-                test_cases.append({
-                    "id": f"CLI-{MODE_CODE[mode]}-{tier}",
-                    "kind": "transfer",
-                    "tier": tier,
-                    "mode": mode,
-                    "dataset": dataset_specs.get(tier, {}).get("dataset_id") or "06_sparse_files.yaml",
-                    "description": f"{mode} transfer for {tier} tier",
-                })
     if args.include_lifecycle:
-        for tier in tiers:
-            test_cases.append({
-                "id": f"CLI-LC-{tier}",
-                "kind": "lifecycle",
-                "tier": tier,
-                "mode": "both",
-                "dataset": dataset_specs.get(tier, {}).get("dataset_id") or "06_sparse_files.yaml",
-                "description": f"Live intervention matrix on {tier} ({', '.join(LIFECYCLE_ACTIONS)})",
-            })
+        test_cases.append({
+            "id": f"CLI-LC-{LIFECYCLE_DATASET}",
+            "kind": "lifecycle",
+            "tier": LIFECYCLE_DATASET,
+            "mode": "both",
+            "dataset": LIFECYCLE_DATASET,
+            "description": f"Live intervention matrix on {LIFECYCLE_DATASET} ({', '.join(LIFECYCLE_ACTIONS)})",
+        })
     if args.include_service:
         for target in ("bcloud", "bryckapi"):
             test_cases.append({
                 "id": f"CLI-SVC-{target.upper()}",
                 "kind": "service",
-                "tier": "MEDIUM",
+                "tier": LIFECYCLE_DATASET,
                 "mode": "both",
-                "dataset": dataset_specs.get("MEDIUM", {}).get("dataset_id", "DS-P1-04"),
+                "dataset": LIFECYCLE_DATASET,
                 "target_service": f"{target}.service",
-                "description": f"Restart {target}.service mid-transfer on MEDIUM",
+                "description": f"Restart {target}.service mid-transfer on {LIFECYCLE_DATASET}",
             })
     if args.include_edge:
         for test_id, meta in EDGE_CASES.items():
@@ -774,8 +724,6 @@ def build_plan(args: argparse.Namespace, logger: logging.Logger) -> dict:
             "perf_capture": args.perf_capture,
         },
         "dataset_catalog": args.dataset_catalog,
-        "tiers": tiers,
-        "datasets": dataset_specs,
         "bryck_config_tiers_seen": bryck_config_tiers,
         "bryck_config_valid": config_ok,
         "bryck_config_message": config_msg,
@@ -791,12 +739,9 @@ def render_confirmation(plan: dict) -> str:
     if catalog == "all":
         dataset_line = f"ALL {len(transfer_datasets)} datasets from dataset_cloudcp/spec_files/manifest.json"
         generate_line = f"Generate datasets ({len(transfer_datasets)} datasets, full catalog round)"
-    elif catalog == "specfiles":
+    else:
         dataset_line = f"{len(transfer_datasets)} spec_files/*.yaml datasets: {', '.join(transfer_datasets)}"
         generate_line = f"Generate datasets ({len(transfer_datasets)} local spec_files/ datasets)"
-    else:
-        dataset_line = ", ".join(plan["tiers"]) + "   (all sizes — automatic)"
-        generate_line = f"Generate datasets ({', '.join(plan['tiers'])})"
     modes_seen = sorted({tc["mode"] for tc in plan["test_cases"] if tc["kind"] == "transfer"})
     modes_line = (" + ".join(modes_seen) + "   (all modes — automatic)") if modes_seen else "n/a (no transfer-type cases selected)"
     lines = [
