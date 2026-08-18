@@ -448,6 +448,28 @@ def parse_transfer_id(text: str) -> Optional[str]:
     return match.group(1) if match else None
 
 
+def read_local_transfer_status(transfer_logs_dir: pathlib.Path, transfer_id: str) -> str:
+    """Fallback for get_transfer_status(): the Bryck's REST /status_transfer
+    endpoint can return 409 "Failed to find the transfer/s" within seconds of
+    a fast transfer completing (it's purged from the *active* transfer
+    registry quickly), even though transfer_summary.txt on disk already
+    proves it finished. Read that file directly as the authoritative source
+    when the API says UNKNOWN."""
+    try:
+        tid = int(transfer_id)
+    except (TypeError, ValueError):
+        return "UNKNOWN"
+    summary_path = base.transfer_log_dir(transfer_logs_dir, tid) / "transfer_summary.txt"
+    if not summary_path.is_file():
+        return "UNKNOWN"
+    try:
+        text = summary_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return "UNKNOWN"
+    match = re.search(r"Transfer status\s*:\s*(\w+)", text)
+    return match.group(1).strip().upper() if match else "UNKNOWN"
+
+
 # =============================================================================
 # Dataset resolution (reuses cloudcpclitesting.py helpers where possible)
 # =============================================================================
@@ -987,6 +1009,14 @@ class Executor:
         ns = argparse.Namespace(login=self.cfg["login"], dry_run=self.args.dry_run, python_bin=self.cfg["python_bin"])
         state, cmd = get_transfer_status(ns, transfer_id, self.logger, self.redact)
         result.commands.append(cmd.as_dict())
+        if state == "UNKNOWN" and not self.args.dry_run:
+            local_state = read_local_transfer_status(pathlib.Path(self.cfg["transfer_logs_dir"]), transfer_id)
+            if local_state != "UNKNOWN":
+                result.notes.append(
+                    f"transfer {transfer_id}: API status unavailable (likely already purged from the "
+                    f"active-transfer registry); using transfer_summary.txt on disk instead: {local_state}"
+                )
+                return local_state
         return state
 
     def require_ok(self, result: TestCaseResult, cmd: CommandResult, step_name: str) -> bool:
