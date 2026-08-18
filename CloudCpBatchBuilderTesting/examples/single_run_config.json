@@ -1,0 +1,15 @@
+{
+  "source_host": "192.168.0.71",
+  "dest_host": "192.168.6.35",
+  "username": "bryck",
+  "password": ""   // use BRYCK_SSH_PASSWORD env var — never commit real passwords,
+  "source_dir": "~/dataset-spec-files",
+  "dataset": "spec_1g_4096files_4tb.yaml",
+  "dest_dir": "/opt/bryck/.venv/bryck/lib/python3.10/site-packages/bryckcloud/lib/cloud",
+  "dest_csv": "bryck_file_list.csv",
+  "output_dir": "output",
+  "cleanup_output": true,
+  "cleanup_remote": true,
+  "batchbuilder_python": "/opt/bryck/.venv/bryck/bin/python3",
+  "temp_sample_interval": 0.5
+}

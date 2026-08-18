@@ -1,0 +1,14 @@
+# BatchBuilder Validation Framework — Python dependencies
+#
+# Setup (run once from the CloudCpBatchBuilderTesting directory):
+#   python -m venv .venv
+#   .\.venv\Scripts\pip install -r requirements.txt
+
+# SSH and SFTP
+paramiko==3.4.0
+
+# Test runner
+pytest==8.3.3
+
+# YAML parsing (used by dataset discovery)
+PyYAML==6.0.1
