@@ -970,6 +970,10 @@ class Runner:
                         self._verify_download_landing(rec, dl_dst, expected_files, report)
                     verdict, reasons = evaluate(
                         case, state, capture, report, expected_files)
+        except KeyboardInterrupt:
+            verdict, reasons = "INTERRUPTED", ["interrupted by user (Ctrl+C)"]
+            rec.add("interrupted", "local", "", ok=False,
+                    detail="Ctrl+C received — saving partial steps")
         except Exception as exc:  # noqa: BLE001
             verdict, reasons = "ERROR", [f"{type(exc).__name__}: {exc}"]
             rec.add("exception", "local", "", ok=False, detail=str(exc))
@@ -1008,6 +1012,8 @@ class Runner:
         _write_json(run_dir / "report.json", result)
         LOG.info("=== %s -> %s (%s)", case.cid, verdict,
                  "; ".join(reasons) or "ok")
+        if verdict == "INTERRUPTED":
+            raise KeyboardInterrupt
         return result
 
     def _verify_download_landing(self, rec: Recorder, dl_dst: str,
@@ -1067,7 +1073,7 @@ def _write_json(path: Path, payload: Any) -> None:
 
 VERDICT_COLORS = {
     "PASS": "#1a7f37", "FAIL": "#cf222e", "WARN": "#9a6700",
-    "ERROR": "#82071e", "PLANNED": "#0969da",
+    "ERROR": "#82071e", "PLANNED": "#0969da", "INTERRUPTED": "#8250df",
 }
 
 
@@ -1371,11 +1377,21 @@ def main(argv: list[str] | None = None) -> int:
     interrupted = False
     try:
         for case in selected:
-            results.append(runner.run_case(case))
+            result = runner.run_case(case)
+            results.append(result)
     except KeyboardInterrupt:
+        # run_case catches the interrupt, saves partial steps, appends nothing
+        # yet — but re-raises. The last result (INTERRUPTED) was written to
+        # its per-case report.json but not yet in results, so grab it.
+        last_json = out_dir / case.cid / "report.json"
+        if last_json.is_file():
+            try:
+                results.append(json.loads(last_json.read_text(encoding="utf-8")))
+            except Exception:  # noqa: BLE001
+                pass
         interrupted = True
-        LOG.warning("Interrupted (Ctrl+C) — writing report for %d completed case(s).",
-                    len(results))
+        LOG.warning("Interrupted (Ctrl+C) — writing report for %d case(s) "
+                    "(including partial).", len(results))
     finally:
         fin_rec = Recorder("finalize")
         try:
