@@ -41,8 +41,9 @@ import subprocess
 import sys
 import tempfile
 import time
+import types
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -316,7 +317,7 @@ def count_files_recursive(root: pathlib.Path) -> int:
 
 
 def generate_dataset(
-    args: argparse.Namespace,
+    args: Union[argparse.Namespace, types.SimpleNamespace],
     dataset: DatasetSelection,
     spec_root: pathlib.Path,
     logger: logging.Logger,

@@ -500,9 +500,9 @@ def local_spec_file_path(name: str) -> Optional[pathlib.Path]:
 def generate_tier_dataset(
     tier: str,
     output_base: str,
-    args: argparse.Namespace,
+    args: argparse.Namespace | types.SimpleNamespace,
     logger: logging.Logger,
-    dataset_id: str,
+    dataset_id: Optional[str],
 ) -> tuple[pathlib.Path, dict]:
     """Materialize one dataset under output_base, reusing the single-dataset
     datagen flow already validated by cloudcpclitesting.py.
@@ -511,6 +511,8 @@ def generate_tier_dataset(
     datasets; `dataset_id` (a DS-P* manifest id, or a
     CloudCpCliTesting/spec_files/*.yaml name) selects what gets generated.
     """
+    if not dataset_id:
+        raise ValueError(f"generate_tier_dataset({tier!r}): dataset_id is required")
     ns = types.SimpleNamespace(
         output_base=output_base,
         skip_generate=False,
@@ -540,7 +542,7 @@ def generate_named_spec_dataset(
     """Materialize a single-spec YAML (any CloudCpCliTesting/spec_files/*.yaml)
     under output_base/<name>, rewriting its `root:` line to match."""
     target_root = pathlib.Path(output_base) / name
-    summary = {"dataset_root": str(target_root), "spec_file": str(spec_path)}
+    summary: Dict[str, Any] = {"dataset_root": str(target_root), "spec_file": str(spec_path)}
     if ns.skip_generate:
         summary["actual_files"] = base.count_files_recursive(target_root)
         return target_root, summary
