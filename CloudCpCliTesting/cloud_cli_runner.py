@@ -148,6 +148,9 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--plan", action="store_true", help="Phase 1: build + confirm the plan. No side effects.")
     mode.add_argument("--execute", action="store_true", help="Phase 2: run the confirmed plan.")
+    mode.add_argument("--list-cases", action="store_true",
+                      help="Print every test-case ID that the current --tiers/--modes/--dataset-catalog/"
+                           "--include-*/--suite/--only selection would build, then exit. No side effects.")
 
     parser.add_argument("--plan-file", help="Path to plan.json (required for --execute).")
     parser.add_argument("--tiers", nargs="+", default=ALL_TIERS, choices=ALL_TIERS,
@@ -1785,9 +1788,24 @@ def phase_execute(args: argparse.Namespace, logger: logging.Logger) -> int:
 # Entry point
 # =============================================================================
 
+def phase_list_cases(args: argparse.Namespace, logger: logging.Logger) -> int:
+    args.dry_run = True  # never touch the real host just to list case IDs
+    plan = build_plan(args, logger)
+    test_cases = plan["test_cases"]
+    print(f"{len(test_cases)} test case(s) with the current selection:\n")
+    for tc in test_cases:
+        print(f"  {tc['id']:<20} kind={tc['kind']:<10} {tc['description']}")
+    print("\nRun one at a time with, e.g.:")
+    print(f"  python cloud_cli_runner.py --plan --only {test_cases[0]['id'] if test_cases else '<ID>'} --yes")
+    print("  python cloud_cli_runner.py --execute --plan-file results/<RUN_ID>/plan.json")
+    return 0
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv)
     logger = setup_logging(args.verbose)
+    if args.list_cases:
+        return phase_list_cases(args, logger)
     if args.plan:
         return phase_plan(args, logger)
     return phase_execute(args, logger)
