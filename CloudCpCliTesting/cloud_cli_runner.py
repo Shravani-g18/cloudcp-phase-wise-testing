@@ -251,12 +251,6 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--keep", "--no-cleanup", dest="keep", action="store_true",
                          help="Skip auto-cleanup of datasets/cloud objects (debugging).")
     parser.add_argument("--aws-cli", default="aws", help="aws CLI binary used for S3 cleanup.")
-    parser.add_argument("--aws-endpoint-url", default=None,
-                         help="S3-compatible endpoint URL for cleanup (e.g. MinIO: "
-                              "https://10.10.10.103:9000). Passed as 'aws s3 --endpoint-url <url> rm ...'. "
-                              "Omit for real AWS S3.")
-    parser.add_argument("--aws-no-verify-ssl", action="store_true",
-                         help="Pass --no-verify-ssl to the aws CLI (for self-signed MinIO certs).")
 
     parser.add_argument("--journal-tag", nargs="+", default=["bcloud", "bryckcloud"],
                          help="journalctl syslog tag(s) for broker log capture (default: bcloud bryckcloud -- "
@@ -817,8 +811,6 @@ def build_plan(args: argparse.Namespace, logger: logging.Logger) -> dict:
             "action_timeout": args.action_timeout,
             "keep": args.keep,
             "aws_cli": args.aws_cli,
-            "aws_endpoint_url": args.aws_endpoint_url,
-            "aws_no_verify_ssl": args.aws_no_verify_ssl,
             "results_dir": os.path.abspath(args.results_dir),
             "report_save_dir": args.report_save_dir,
             "diagnostic_report": args.diagnostic_report,
@@ -1322,13 +1314,8 @@ class Executor:
                 except OSError as exc:
                     result.notes.append(f"cleanup: could not remove {target}: {exc}")
         bucket_prefix = f"{self.cfg['bucket']}/{tier}"
-        aws_cmd = [self.cfg.get("aws_cli", "aws"), "s3", "rm", bucket_prefix, "--recursive"]
-        if self.cfg.get("aws_endpoint_url"):
-            aws_cmd += ["--endpoint-url", self.cfg["aws_endpoint_url"]]
-        if self.cfg.get("aws_no_verify_ssl"):
-            aws_cmd += ["--no-verify-ssl"]
         cmd = run_argv(
-            "aws s3 cleanup", aws_cmd,
+            "aws s3 cleanup", [self.cfg.get("aws_cli", "aws"), "s3", "rm", bucket_prefix, "--recursive"],
             self.logger, self.args.dry_run, self.redact,
         )
         result.commands.append(cmd.as_dict())
