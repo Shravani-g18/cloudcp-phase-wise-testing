@@ -251,6 +251,15 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--keep", "--no-cleanup", dest="keep", action="store_true",
                          help="Skip auto-cleanup of datasets/cloud objects (debugging).")
     parser.add_argument("--aws-cli", default="aws", help="aws CLI binary used for S3 cleanup.")
+    parser.add_argument("--aws-endpoint-url", default="https://10.10.10.103:9000",
+                         help="S3 endpoint used for cleanup (aws s3 rm). Defaults to this test lab's MinIO "
+                              "endpoint -- without it, the aws CLI targets real AWS and cleanup fails with "
+                              "InvalidAccessKeyId. Pass an empty string to omit --endpoint-url entirely.")
+    parser.add_argument("--aws-no-verify-ssl", dest="aws_verify_ssl", action="store_false", default=False,
+                         help="Verify TLS certs for the S3 endpoint (default: skip verification, since the "
+                              "lab MinIO endpoint uses a self-signed cert).")
+    parser.add_argument("--aws-verify-ssl", dest="aws_verify_ssl", action="store_true",
+                         help="Force TLS cert verification for the S3 endpoint (use against real AWS).")
 
     parser.add_argument("--journal-tag", nargs="+", default=["bcloud", "bryckcloud"],
                          help="journalctl syslog tag(s) for broker log capture (default: bcloud bryckcloud -- "
@@ -828,6 +837,8 @@ def build_plan(args: argparse.Namespace, logger: logging.Logger) -> dict:
             "action_timeout": args.action_timeout,
             "keep": args.keep,
             "aws_cli": args.aws_cli,
+            "aws_endpoint_url": args.aws_endpoint_url,
+            "aws_verify_ssl": args.aws_verify_ssl,
             "results_dir": os.path.abspath(args.results_dir),
             "report_save_dir": args.report_save_dir,
             "diagnostic_report": args.diagnostic_report,
@@ -1342,10 +1353,13 @@ class Executor:
                 except OSError as exc:
                     result.notes.append(f"cleanup: could not remove {target}: {exc}")
         bucket_prefix = f"{self.cfg['bucket']}/{tier}"
-        cmd = run_argv(
-            "aws s3 cleanup", [self.cfg.get("aws_cli", "aws"), "s3", "rm", bucket_prefix, "--recursive"],
-            self.logger, self.args.dry_run, self.redact,
-        )
+        argv = [self.cfg.get("aws_cli", "aws"), "s3", "rm", bucket_prefix, "--recursive"]
+        endpoint_url = self.cfg.get("aws_endpoint_url")
+        if endpoint_url:
+            argv += ["--endpoint-url", endpoint_url]
+        if not self.cfg.get("aws_verify_ssl", False):
+            argv += ["--no-verify-ssl"]
+        cmd = run_argv("aws s3 cleanup", argv, self.logger, self.args.dry_run, self.redact)
         result.commands.append(cmd.as_dict())
 
     def restore_cloud_ops(self) -> None:
