@@ -41,7 +41,7 @@ import tempfile
 import time
 import types
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Union
 
 HERE = pathlib.Path(__file__).resolve().parent
 REPO_ROOT = HERE.parent
@@ -252,8 +252,9 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
                          help="Skip auto-cleanup of datasets/cloud objects (debugging).")
     parser.add_argument("--aws-cli", default="aws", help="aws CLI binary used for S3 cleanup.")
 
-    parser.add_argument("--journal-tag", default="bryckcloud",
-                         help="journalctl syslog tag for broker log capture (default: bryckcloud).")
+    parser.add_argument("--journal-tag", nargs="+", default=["bcloud", "bryckcloud"],
+                         help="journalctl syslog tag(s) for broker log capture (default: bcloud bryckcloud -- "
+                              "both the transfer service and the CLI/broker wrapper).")
     parser.add_argument("--cloudcp-log",
                          default="/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloudcp.log",
                          help="Path to cloudcp.log for per-batch throughput capture.")
@@ -494,16 +495,22 @@ def read_local_transfer_status(transfer_logs_dir: pathlib.Path, transfer_id: str
     return match.group(1).strip().upper() if match else "UNKNOWN"
 
 
-def read_journalctl_transfer_status(transfer_id: str, journal_tag: str = "bryckcloud", lines: int = 1000) -> str:
+def read_journalctl_transfer_status(transfer_id: str, journal_tags: Optional[Union[str, List[str]]] = None,
+                                     lines: int = 1000) -> str:
     """Second fallback for get_transfer_status(): grep recent `journalctl -t
-    <tag>` history for this transfer's own completion line, e.g.
+    <tag>` history (across all configured tags, e.g. bcloud + bryckcloud) for
+    this transfer's own completion line, e.g.
     "aws transfer id:384 src:... dst:... - COMPLETED". This is the same log
     source cli_perf_capture.py already tails for performance data, and is
     authoritative straight from the broker regardless of REST API/registry
     state. Uses `sudo journalctl ... --no-pager` (non-following, bounded)."""
+    if journal_tags is None:
+        journal_tags = ["bcloud", "bryckcloud"]
+    tags = [journal_tags] if isinstance(journal_tags, str) else list(journal_tags)
+    tag_flags = [flag for tag in tags for flag in ("-t", tag)]
     try:
         proc = subprocess.run(
-            ["sudo", "journalctl", "-t", journal_tag, "-n", str(lines), "--no-pager"],
+            ["sudo", "journalctl", *tag_flags, "-n", str(lines), "--no-pager"],
             capture_output=True, text=True, timeout=30,
         )
     except (OSError, subprocess.TimeoutExpired):
@@ -1076,18 +1083,19 @@ class Executor:
         # registry, or the API itself being unreliable) -- fall back to
         # authoritative sources straight from the broker, in order:
         # 1) transfer_summary.txt (written once the transfer fully finishes)
-        # 2) journalctl -t bryckcloud (the same log cli_perf_capture.py tails)
+        # 2) journalctl -t bcloud -t bryckcloud (the same logs cli_perf_capture.py tails)
         local_state = read_local_transfer_status(pathlib.Path(self.cfg["transfer_logs_dir"]), transfer_id)
         if local_state != "UNKNOWN":
             result.notes.append(
                 f"transfer {transfer_id}: API status unavailable; using transfer_summary.txt on disk instead: {local_state}"
             )
             return local_state
-        journal_state = read_journalctl_transfer_status(transfer_id, self.cfg.get("journal_tag", "bryckcloud"))
+        tags = self.cfg.get("journal_tag") or ["bcloud", "bryckcloud"]
+        journal_state = read_journalctl_transfer_status(transfer_id, tags)
         if journal_state != "UNKNOWN":
             result.notes.append(
                 f"transfer {transfer_id}: API status unavailable and no transfer_summary.txt yet; "
-                f"using journalctl -t {self.cfg.get('journal_tag', 'bryckcloud')} instead: {journal_state}"
+                f"using journalctl -t {' -t '.join(tags)} instead: {journal_state}"
             )
             return journal_state
         return state

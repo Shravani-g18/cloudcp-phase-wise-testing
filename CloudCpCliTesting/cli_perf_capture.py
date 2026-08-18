@@ -87,7 +87,7 @@ TIER_FILE_SIZES: list[tuple[str, int]] = [
     ("large", 1073741824),
 ]
 
-DEF_JOURNAL_TAG = "bryckcloud"
+DEF_JOURNAL_TAGS = ["bcloud", "bryckcloud"]
 DEF_CLOUDCP_LOG = "/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloudcp.log"
 DEF_CAPTURE_LEAD = 3
 DEF_CAPTURE_DRAIN = 6
@@ -127,9 +127,9 @@ class JournalCapture:
     during parsing (since CLI runner learns the id only after initiate).
     """
 
-    def __init__(self, tag: str, log_dir: Path, since: _dt.datetime, dry_run: bool,
+    def __init__(self, tags: str | list[str], log_dir: Path, since: _dt.datetime, dry_run: bool,
                  lead_sec: float = DEF_CAPTURE_LEAD, drain_sec: float = DEF_CAPTURE_DRAIN):
-        self.tag = tag
+        self.tags = [tags] if isinstance(tags, str) else list(tags)
         self.dry_run = dry_run
         self.lead_sec = lead_sec
         self.drain_sec = drain_sec
@@ -142,11 +142,12 @@ class JournalCapture:
     def start(self) -> None:
         self.raw_path.write_text("", encoding="utf-8")
         if self.dry_run:
-            LOG.info("[dry-run] would start journalctl follower for tag %s", self.tag)
+            LOG.info("[dry-run] would start journalctl follower for tags %s", self.tags)
             return
         since_dt = self._since - _dt.timedelta(seconds=max(self.lead_sec, 1))
         since = since_dt.strftime("%Y-%m-%d %H:%M:%S")
-        cmd = ["sudo", "journalctl", "-f", "-t", self.tag, "--since", since, "-o", "short"]
+        tag_flags = [flag for tag in self.tags for flag in ("-t", tag)]
+        cmd = ["sudo", "journalctl", "-f", *tag_flags, "--since", since, "-o", "short"]
         LOG.info("$ %s", " ".join(cmd))
         self._proc = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
@@ -651,7 +652,7 @@ class TransferPerfCollector:
     def start(self) -> None:
         """Start journal + cloudcp.log capture. Call BEFORE initiating transfer."""
         self._start_dt = _dt.datetime.now()
-        tag = self.cfg.get("journal_tag", DEF_JOURNAL_TAG)
+        tags = self.cfg.get("journal_tag") or DEF_JOURNAL_TAGS
         lead = self.cfg.get("capture_lead", DEF_CAPTURE_LEAD)
         drain = self.cfg.get("capture_drain", DEF_CAPTURE_DRAIN)
         cloudcp_log = self.cfg.get("cloudcp_log", DEF_CLOUDCP_LOG)
@@ -661,7 +662,7 @@ class TransferPerfCollector:
         self._cloudcp.start()
 
         self._journal = JournalCapture(
-            tag, self.perf_dir, self._start_dt, self.dry_run,
+            tags, self.perf_dir, self._start_dt, self.dry_run,
             lead_sec=lead, drain_sec=drain)
         self._journal.start()
 
