@@ -636,10 +636,47 @@ def poll_transfer(api, host: RemoteHost, rec: Recorder, transfer_id: str,
              f"ls -1 {remote_snap} 2>/dev/null | wc -l",
              check=False)
 
+    # Post-completion: .lst files get renamed to .txt.lst.done and batches
+    # move to completed/; these persist after the transfer finishes.
+    host.run(rec, "capture .lst.done files",
+             f"cp -a {remote_log_dir}/*.txt.lst.done {remote_snap}/ 2>/dev/null; "
+             f"ls -1 {remote_log_dir}/*.txt.lst.done 2>/dev/null | wc -l",
+             check=False)
+    host.run(rec, "capture completed batches",
+             f"mkdir -p {remote_snap}/completed 2>/dev/null; "
+             f"cp -a {remote_log_dir}/completed/* {remote_snap}/completed/ 2>/dev/null; "
+             f"ls -1 {remote_log_dir}/completed/ 2>/dev/null | wc -l",
+             check=False)
+
     # Pull the accumulated snapshot down.
     lst_count = _collect_snapshot(host, rec, transfer_id, remote_snap, capture_dir)
-    return last_state, {"polls": polls, "captured_lst": lst_count,
-                        "remote_snapshot": remote_snap}
+
+    # Count post-completion evidence separately.
+    done_count = _count_remote_files(host, rec, f"{remote_log_dir}/*.txt.lst.done")
+    completed_count = _count_remote_files(host, rec, f"{remote_log_dir}/completed/*")
+    retry_count = _count_remote_files(
+        host, rec, f"{remote_log_dir}/cloudcp_retry_{transfer_id}_*.lst*")
+
+    return last_state, {
+        "polls": polls,
+        "captured_lst": lst_count,
+        "done_lst": done_count,
+        "completed_batches": completed_count,
+        "retry_lst": retry_count,
+        "remote_snapshot": remote_snap,
+    }
+
+
+def _count_remote_files(host: RemoteHost, rec: Recorder, glob: str) -> int:
+    """Count files matching a remote glob (0 on dry-run or error)."""
+    if host.dry_run:
+        return 0
+    rc, out, _ = host.run(rec, "count remote files",
+                          f"ls -1 {glob} 2>/dev/null | wc -l", check=False)
+    try:
+        return int(out.strip().splitlines()[-1]) if out.strip() else 0
+    except (ValueError, IndexError):
+        return 0
 
 
 def _collect_snapshot(host: RemoteHost, rec: Recorder, transfer_id: str,
@@ -775,14 +812,20 @@ def evaluate(case: Case, state: str, capture: dict, report: dict,
     if case.expect == "fallback_ok":
         if not completed:
             return "FAIL", [f"expected COMPLETED, got {state or 'no-terminal-state'}"]
-        if retry_lists <= 0:
-            reasons.append("no live retry/list files captured — fallback engagement unverified")
+        done_lst = capture.get("done_lst", 0)
+        completed_batches = capture.get("completed_batches", 0)
+        retry_files = capture.get("retry_lst", 0)
+        has_fallback_evidence = (
+            retry_lists > 0 or done_lst > 0 or completed_batches > 0
+            or retry_files > 0
+        )
+        if not has_fallback_evidence:
+            reasons.append("no fallback artifacts found (.lst / .lst.done / completed/ / retry lists)")
         if report.get("available") and fb_ok <= 0:
             reasons.append("report has no FALLBACK_OK rows despite injected faults")
         if expected_files and report.get("available") and success_rows < expected_files:
             reasons.append(f"transferred {success_rows} < expected {expected_files} files")
-        # PASS if completed and fallback evidence present; else WARN.
-        strong = retry_lists > 0 and (fb_ok > 0 or not report.get("available"))
+        strong = has_fallback_evidence and (fb_ok > 0 or not report.get("available"))
         return ("PASS" if strong and not reasons else ("PASS" if not reasons else "WARN")), reasons
 
     if case.expect == "control":
@@ -1150,6 +1193,9 @@ def render_html(results: list[dict], meta: dict) -> str:
             f'transfer_id={esc(r.get("transfer_id"))} · state={esc(r.get("final_state") or "-")} · '
             f'expected_files={esc(r.get("expected_files"))} · '
             f'captured_lst={esc(cap.get("captured_lst"))} · '
+            f'done_lst={esc(cap.get("done_lst"))} · '
+            f'completed_batches={esc(cap.get("completed_batches"))} · '
+            f'retry_lst={esc(cap.get("retry_lst"))} · '
             f'success_rows={esc(rep.get("success_rows"))} · '
             f'fallback_ok={esc(rep.get("fallback_ok"))} · '
             f'failed_rows={esc(rep.get("failed_rows"))}'
