@@ -582,19 +582,26 @@ def poll_transfer(api, host: RemoteHost, rec: Recorder, transfer_id: str,
     remote_snap = f"{DEF_REMOTE_CAPTURE_DIR}/{transfer_id}"
     host.run(rec, "prep capture dir", f"mkdir -p {remote_snap}", check=False)
 
+    # Start a background watcher that copies .lst files every second.
+    # This avoids missing short-lived files between poll intervals.
+    watcher_pid_file = f"/tmp/fb_watcher_{transfer_id}.pid"
+    watcher_cmd = (
+        f"nohup bash -c '"
+        f"while true; do "
+        f"  cp -a {remote_log_dir}/*.txt.lst {remote_snap}/ 2>/dev/null; "
+        f"  cp -a {remote_log_dir}/cloudcp_retry_{transfer_id}_*.lst {remote_snap}/ 2>/dev/null; "
+        f"  sleep 1; "
+        f"done"
+        f"' >/dev/null 2>&1 & echo $! > {watcher_pid_file}"
+    )
+    host.run(rec, "start .lst watcher", watcher_cmd, check=False)
+
     deadline = time.time() + timeout
     last_state = ""
     polls = 0
     paused_since: float | None = None
     while time.time() < deadline:
         polls += 1
-        # Snapshot live internal files server-side (cloudcp deletes them at end).
-        snap_cmd = (
-            f"cp -an {remote_log_dir}/*.txt.lst {remote_snap}/ 2>/dev/null; "
-            f"cp -an {remote_log_dir}/cloudcp_retry_{transfer_id}_*.lst {remote_snap}/ 2>/dev/null; "
-            f"ls -1 {remote_snap} 2>/dev/null | wc -l"
-        )
-        host.run(rec, f"snapshot .lst (poll {polls})", snap_cmd, check=False)
 
         entry = _status_entry(api, transfer_id)
         state = str((entry or {}).get("state") or "").upper()
@@ -620,6 +627,14 @@ def poll_transfer(api, host: RemoteHost, rec: Recorder, transfer_id: str,
             paused_since = None
 
         time.sleep(interval)
+
+    # Stop the watcher and do one final capture pass.
+    host.run(rec, "stop .lst watcher",
+             f"kill $(cat {watcher_pid_file} 2>/dev/null) 2>/dev/null; rm -f {watcher_pid_file}; "
+             f"cp -a {remote_log_dir}/*.txt.lst {remote_snap}/ 2>/dev/null; "
+             f"cp -a {remote_log_dir}/cloudcp_retry_{transfer_id}_*.lst {remote_snap}/ 2>/dev/null; "
+             f"ls -1 {remote_snap} 2>/dev/null | wc -l",
+             check=False)
 
     # Pull the accumulated snapshot down.
     lst_count = _collect_snapshot(host, rec, transfer_id, remote_snap, capture_dir)
