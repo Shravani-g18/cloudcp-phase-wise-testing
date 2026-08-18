@@ -64,6 +64,7 @@ DEFAULT_BRYCK_CONFIG_JSON = "/etc/bryck/bryckcloud/config.json"
 
 LIFECYCLE_DATASET = "DS-P1-04"  # single representative dataset for lifecycle/service tests
 SPEC_FILES_DIR = HERE / "spec_files"
+FALLBACK_SPEC_FILES_DIR = REPO_ROOT / "CloudCpFallbackTesting" / "spec_files"
 
 MODES = ["upload", "download", "both"]
 MODE_CODE = {"upload": "U", "download": "D", "both": "B"}
@@ -481,13 +482,19 @@ def all_catalog_dataset_ids() -> List[str]:
 
 
 def local_spec_catalog_ids() -> List[str]:
-    """Every *.yaml spec name under CloudCpCliTesting/spec_files/, sorted."""
-    return sorted(p.stem for p in SPEC_FILES_DIR.glob("*.yaml"))
+    """Every *.yaml spec name under CloudCpCliTesting/spec_files/, plus any
+    CloudCpFallbackTesting/spec_files/*.yaml not already present there, sorted."""
+    names = {p.stem for p in SPEC_FILES_DIR.glob("*.yaml")}
+    names |= {p.stem for p in FALLBACK_SPEC_FILES_DIR.glob("*.yaml")}
+    return sorted(names)
 
 
 def local_spec_file_path(name: str) -> Optional[pathlib.Path]:
     candidate = SPEC_FILES_DIR / f"{name}.yaml"
-    return candidate if candidate.is_file() else None
+    if candidate.is_file():
+        return candidate
+    fallback = FALLBACK_SPEC_FILES_DIR / f"{name}.yaml"
+    return fallback if fallback.is_file() else None
 
 
 def generate_tier_dataset(
