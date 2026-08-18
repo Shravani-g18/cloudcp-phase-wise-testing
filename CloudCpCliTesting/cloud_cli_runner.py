@@ -1872,6 +1872,28 @@ class Executor:
         return results, interrupted
 
 
+def write_combined_commands_log(run_dir: pathlib.Path, results: List[TestCaseResult]) -> pathlib.Path:
+    """Aggregate every command from every test case (in execution order) into
+    one run-level commands.log, in addition to the existing per-case logs --
+    a single file with everything actually executed during the run."""
+    lines: List[str] = []
+    for r in results:
+        lines.append("=" * 80)
+        lines.append(f"{r.test_id} ({r.kind}) -- {r.status}")
+        lines.append("=" * 80)
+        for cmd in r.commands:
+            lines.append(f"[{cmd['started_at']} -> {cmd['ended_at']}] rc={cmd['returncode']}")
+            lines.append(f"$ {' '.join(cmd['argv'])}")
+            if cmd["stdout"]:
+                lines.append(f"stdout:\n{cmd['stdout']}")
+            if cmd["stderr"]:
+                lines.append(f"stderr:\n{cmd['stderr']}")
+            lines.append("")
+    path = run_dir / "commands.log"
+    path.write_text("\n".join(lines), encoding="utf-8")
+    return path
+
+
 def write_summary(run_dir: pathlib.Path, plan: dict, results: List[TestCaseResult]) -> None:
     counts = {"PASS": 0, "FAIL": 0, "BLOCKED": 0, "PENDING": 0}
     for r in results:
@@ -2043,6 +2065,7 @@ def _execute_confirmed_plan(args: argparse.Namespace, plan: dict, logger: loggin
         logger.warning("Ctrl+C received again during final diagnostic report download; skipping it.")
         interrupted = True
     write_summary(executor.run_dir, plan, results)
+    combined_commands_log = write_combined_commands_log(executor.run_dir, results)
     try:
         executor.copy_logs_to_report_dir()
     except KeyboardInterrupt:
@@ -2062,6 +2085,7 @@ def _execute_confirmed_plan(args: argparse.Namespace, plan: dict, logger: loggin
                 counts.get("BLOCKED", 0), counts.get("INTERRUPTED", 0), len(results))
     print("")
     print(f"Results dir: {executor.run_dir.resolve()}")
+    print(f"All commands (every test case, in order): {combined_commands_log.resolve()}")
     print(f"JSON summary: {json_report.resolve()}")
     print(f"Markdown summary: {md_report.resolve()}")
     print(f"HTML report: {html_report.resolve().as_uri()}")
