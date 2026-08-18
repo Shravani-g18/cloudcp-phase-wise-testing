@@ -200,8 +200,8 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
                          help="Bryck-side root for materialized upload datasets (e.g. /bryck/<dataset-id>).")
     parser.add_argument("--download-base", default="/bryck/cloudcp_cli_dl",
                          help="Bryck-side root for download-mode destinations.")
-    parser.add_argument("--bucket", default="s3://aditya/cloudcp-cli",
-                         help="S3 bucket+prefix root; each tier gets its own sub-prefix.")
+    parser.add_argument("--bucket", default="s3://shravani/cloudcp-cli",
+                         help="S3 bucket+prefix root; each dataset gets its own sub-prefix.")
 
     parser.add_argument("--datagen-bin", default=DEFAULT_DATAGEN)
     parser.add_argument("--bryckcloud-bin", default=DEFAULT_BRYCKCLOUD,

@@ -196,7 +196,7 @@ Per test case (per dataset x per mode), from `CloudCpCliTesting/bryckclient-cli/
    {
      "cloud_type": "aws",
      "bryck_src": "/bryck/cloudcp_cli/SMALL",
-     "cloud_bucket": "s3://aditya/cloudcp-cli/SMALL",
+     "cloud_bucket": "s3://shravani/cloudcp-cli/SMALL",
      "bryck_dst": "/bryck/cloudcp_cli_dl/SMALL"
    }
    ```
@@ -634,7 +634,7 @@ python3 bryck_info.py --login login.json   # confirm "Mounted"
 
 # --- 3. Configure cloud_ops.json for this tier (dynamically rewritten) -----
 #   bryck_src    = /bryck/cloudcp_cli/SMALL
-#   cloud_bucket = s3://aditya/cloudcp-cli/SMALL
+#   cloud_bucket = s3://shravani/cloudcp-cli/SMALL
 #   bryck_dst    = /bryck/cloudcp_cli_dl/SMALL
 python3 bryck_cloud_configure.py --login login.json --params cloud_ops.json
 python3 bryck_cloud_show.py --login login.json
@@ -675,7 +675,7 @@ python3 bryck_cloud_transfer_report.py --login login.json \
 
 # --- 10. Cleanup (auto, decision #12) --------------------------------------
 #   - remove /bryck/cloudcp_cli/SMALL and /bryck/cloudcp_cli_dl/SMALL
-#   - delete s3://aditya/cloudcp-cli/SMALL objects
+#   - delete s3://shravani/cloudcp-cli/SMALL objects
 #   - restore cloud_ops.json from results/<RUN_ID>/cloud_ops.json.bak (at run end)
 ```
 
