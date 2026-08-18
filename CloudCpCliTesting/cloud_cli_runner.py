@@ -179,6 +179,10 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
                          help="Skip the cloud/AWS configuration negative cases (AWS-01..AWS-08).")
     parser.add_argument("--only", nargs="+", default=None,
                          help="Build/run only these test-case IDs (e.g. --only CLI-U-ZERO), ignoring --tiers/--modes/--include-*.")
+    parser.add_argument("--suite", nargs="+", default=None,
+                         choices=["transfer", "lifecycle", "service", "edge", "cli-input", "aws-negative", "all"],
+                         help="Run by suite NAME instead of test-case IDs, e.g. --suite cli-input, "
+                              "--suite transfer lifecycle, or --suite all. Ignored if --only is also given.")
 
     parser.add_argument("--login", default=str(BRYCK_CLI_DIR / "login.json"))
     parser.add_argument("--params", default=str(BRYCK_CLI_DIR / "cloud_ops.json"),
@@ -390,10 +394,17 @@ def get_bryck_state(args: argparse.Namespace, logger: logging.Logger, redact) ->
         return "UNKNOWN", result
     try:
         payload = json.loads(result.stdout)
-        state = str(payload.get("bryck_info", {}).get("State", "UNKNOWN")).strip()
-        return state or "UNKNOWN", result
     except (json.JSONDecodeError, AttributeError):
+        logger.warning("bryck_info.py returned non-JSON stdout (first 200 chars): %r", result.stdout[:200])
         return "UNKNOWN", result
+    # bryck_info.py prints the *unwrapped* bryck_info dict ("State" at the top
+    # level); a "bryck_info"-wrapped shape is tolerated too in case that ever
+    # changes back.
+    state = payload.get("State")
+    if state is None and isinstance(payload.get("bryck_info"), dict):
+        state = payload["bryck_info"].get("State")
+    state = str(state if state is not None else "UNKNOWN").strip()
+    return state or "UNKNOWN", result
 
 
 def get_transfer_status(args: argparse.Namespace, transfer_id: str, logger: logging.Logger, redact) -> tuple[str, CommandResult]:
@@ -694,6 +705,13 @@ def build_plan(args: argparse.Namespace, logger: logging.Logger) -> dict:
         missing = wanted - {tc["id"] for tc in test_cases}
         if missing:
             problems.append(f"--only referenced unknown test case id(s): {sorted(missing)}")
+    elif args.suite and "all" not in args.suite:
+        suite_to_kind = {
+            "transfer": "transfer", "lifecycle": "lifecycle", "service": "service",
+            "edge": "edge", "cli-input": "cli_input", "aws-negative": "cloud_negative",
+        }
+        wanted_kinds = {suite_to_kind[s] for s in args.suite}
+        test_cases = [tc for tc in test_cases if tc["kind"] in wanted_kinds]
 
     plan = {
         "run_id": run_id,
