@@ -146,11 +146,22 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--plan", action="store_true", help="Phase 1: build + confirm the plan. No side effects.")
-    mode.add_argument("--execute", action="store_true", help="Phase 2: run the confirmed plan.")
+    mode.add_argument("--run", action="store_true",
+                      help="ONE-SHOT: plan + confirm + execute immediately in a single command "
+                           "(recommended). Actually performs dataset generation, transfers, etc. "
+                           "Use --plan/--execute separately only if you want to inspect plan.json first.")
+    mode.add_argument("--plan", action="store_true",
+                      help="Phase 1 ONLY: build + confirm the plan and write plan.json. "
+                           "Does NOT run any test case yet -- follow up with --execute --plan-file <path>.")
+    mode.add_argument("--execute", action="store_true", help="Phase 2: run a plan.json written by --plan.")
     mode.add_argument("--list-cases", action="store_true",
                       help="Print every test-case ID that the current --tiers/--modes/--dataset-catalog/"
                            "--include-*/--suite/--only selection would build, then exit. No side effects.")
+    parser.add_argument("--all", dest="dataset_catalog", action="store_const", const="all",
+                         help="Alias for --dataset-catalog all (the default): every DS-P1-01..DS-P12-02 dataset.")
+    parser.add_argument("--test-name", dest="suite", nargs="+",
+                         choices=["transfer", "lifecycle", "service", "edge", "cli-input", "aws-negative", "all"],
+                         help="Alias for --suite: run one named test group by name, e.g. --test-name transfer.")
 
     parser.add_argument("--plan-file", help="Path to plan.json (required for --execute).")
     parser.add_argument("--tiers", nargs="+", default=ALL_TIERS, choices=ALL_TIERS,
@@ -1758,14 +1769,7 @@ a {{ color: #2563eb; }}
     (run_dir / "summary.html").write_text(html, encoding="utf-8")
 
 
-def phase_execute(args: argparse.Namespace, logger: logging.Logger) -> int:
-    if not args.plan_file:
-        raise SystemExit("--plan-file is required with --execute")
-    with open(args.plan_file, "r", encoding="utf-8") as handle:
-        plan = json.load(handle)
-    if not plan.get("confirmed"):
-        raise SystemExit(f"plan {args.plan_file} was not confirmed (run --plan and answer 'yes' first)")
-
+def _execute_confirmed_plan(args: argparse.Namespace, plan: dict, logger: logging.Logger) -> int:
     executor = Executor(args, plan, logger)
     results = executor.run_all()
     executor.download_final_diagnostic_report()
@@ -1784,6 +1788,42 @@ def phase_execute(args: argparse.Namespace, logger: logging.Logger) -> int:
     return 1 if failed else 0
 
 
+def phase_execute(args: argparse.Namespace, logger: logging.Logger) -> int:
+    if not args.plan_file:
+        raise SystemExit("--plan-file is required with --execute")
+    with open(args.plan_file, "r", encoding="utf-8") as handle:
+        plan = json.load(handle)
+    if not plan.get("confirmed"):
+        raise SystemExit(f"plan {args.plan_file} was not confirmed (run --plan and answer 'yes' first)")
+    return _execute_confirmed_plan(args, plan, logger)
+
+
+def phase_run(args: argparse.Namespace, logger: logging.Logger) -> int:
+    """One-shot: build the plan, show the confirmation gate, and (on yes) execute
+    it immediately in this same process -- no separate --execute/--plan-file step."""
+    plan = build_plan(args, logger)
+    print(render_confirmation(plan))
+
+    answer = "yes" if args.yes else input("Proceed with execution? [yes/no]: ").strip().lower()
+    run_dir = pathlib.Path(args.results_dir) / plan["run_id"]
+    run_dir.mkdir(parents=True, exist_ok=True)
+    plan_path = run_dir / "plan.json"
+
+    if answer not in {"y", "yes"}:
+        plan["confirmed"] = False
+        with plan_path.open("w", encoding="utf-8") as handle:
+            json.dump(plan, handle, indent=2)
+        logger.info("Not confirmed. Wrote unconfirmed plan to %s. Nothing was executed.", plan_path)
+        return 1
+
+    plan["confirmed"] = True
+    plan["confirmed_at"] = dt.datetime.now().isoformat()
+    with plan_path.open("w", encoding="utf-8") as handle:
+        json.dump(plan, handle, indent=2)
+    logger.info("Plan confirmed (%s). Executing %s test case(s) now...", plan_path, len(plan["test_cases"]))
+    return _execute_confirmed_plan(args, plan, logger)
+
+
 # =============================================================================
 # Entry point
 # =============================================================================
@@ -1796,8 +1836,7 @@ def phase_list_cases(args: argparse.Namespace, logger: logging.Logger) -> int:
     for tc in test_cases:
         print(f"  {tc['id']:<20} kind={tc['kind']:<10} {tc['description']}")
     print("\nRun one at a time with, e.g.:")
-    print(f"  python cloud_cli_runner.py --plan --only {test_cases[0]['id'] if test_cases else '<ID>'} --yes")
-    print("  python cloud_cli_runner.py --execute --plan-file results/<RUN_ID>/plan.json")
+    print(f"  python cloud_cli_runner.py --run --only {test_cases[0]['id'] if test_cases else '<ID>'} --yes")
     return 0
 
 
@@ -1806,6 +1845,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     logger = setup_logging(args.verbose)
     if args.list_cases:
         return phase_list_cases(args, logger)
+    if args.run:
+        return phase_run(args, logger)
     if args.plan:
         return phase_plan(args, logger)
     return phase_execute(args, logger)
