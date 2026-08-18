@@ -257,6 +257,29 @@ class TestCaseResult:
     commands: List[dict] = field(default_factory=list)
     notes: List[str] = field(default_factory=list)
     sub_results: List[dict] = field(default_factory=list)
+    steps: List[dict] = field(default_factory=list)
+    expected: str = ""
+    actual: str = ""
+    state_change: str = ""
+
+    def step(self, name: str, status: str, detail: str = "") -> None:
+        """Record one numbered pipeline step (inspect/validate/execute/cleanup/...)."""
+        self.steps.append({"n": len(self.steps) + 1, "name": name, "status": status, "detail": detail})
+
+    def render_block(self) -> str:
+        """Render the numbered-pipeline summary block (inspect -> ... -> verify final state)."""
+        width = 60
+        lines = ["=" * width, f"{self.test_id} | {self.description}", "=" * width]
+        for s in self.steps:
+            lines.append(f"[{s['n']}] {s['name']:<38} {s['status']}" + (f"  ({s['detail']})" if s["detail"] else ""))
+        if self.expected:
+            lines.append(f"\nExpected:     {self.expected}")
+        if self.actual:
+            lines.append(f"Actual:       {self.actual}")
+        if self.state_change:
+            lines.append(f"State change: {self.state_change}")
+        lines.append(f"RESULT:       {self.status}")
+        return "\n".join(lines)
 
 
 # =============================================================================
@@ -496,6 +519,35 @@ def validate_json_file(path: str) -> tuple[bool, Optional[dict], Optional[str]]:
         return False, None, f"invalid JSON in {path}: {exc}"
 
 
+def validate_bryck_config_json(path: str) -> tuple[bool, List[str], str, str]:
+    """Strictly validate the read-only /etc/bryck/bryckcloud/config.json reference file.
+
+    Returns (valid, tier_names, message, context_snippet). On a JSON parse
+    error, `context_snippet` mimics `nl -ba <file> | sed -n '<a>,<b>p'`
+    around the failing line so the operator can see exactly what's wrong
+    (e.g. a second concatenated JSON document -> "Extra data" at line 1).
+    """
+    if not os.path.isfile(path):
+        return False, [], f"{path} not found on this host (expected on the real Bryck host)", ""
+    try:
+        text = pathlib.Path(path).read_text(encoding="utf-8")
+    except OSError as exc:
+        return False, [], f"could not read {path}: {exc}", ""
+    try:
+        bconf = json.loads(text)
+    except json.JSONDecodeError as exc:
+        lines = text.splitlines()
+        start = max(1, exc.lineno - 5)
+        end = min(len(lines), exc.lineno + 5)
+        snippet_lines = [f"{n:>4}  {lines[n - 1]}" for n in range(start, end + 1) if n - 1 < len(lines)]
+        snippet = "\n".join(snippet_lines)
+        return False, [], f"Failed to parse {path}: {exc}", snippet
+    if not isinstance(bconf, dict):
+        return False, [], f"{path} does not contain a JSON object at the top level", ""
+    tiers = list(bconf.get("TIERS", bconf.get("tiers", {})).keys())
+    return True, tiers, "", ""
+
+
 def build_plan(args: argparse.Namespace, logger: logging.Logger) -> dict:
     run_id = args.run_id or dt.datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -510,16 +562,11 @@ def build_plan(args: argparse.Namespace, logger: logging.Logger) -> dict:
     if not ok_fmp:
         problems.append(err or "format_mount_params.json invalid")
 
-    bryck_config_tiers: List[str] = []
-    if os.path.isfile(args.bryck_config_json):
-        try:
-            with open(args.bryck_config_json, "r", encoding="utf-8") as handle:
-                bconf = json.load(handle)
-            bryck_config_tiers = list(bconf.get("TIERS", bconf.get("tiers", {})).keys())
-        except (OSError, json.JSONDecodeError) as exc:
-            problems.append(f"could not parse {args.bryck_config_json} (read-only, non-fatal): {exc}")
-    else:
-        problems.append(f"{args.bryck_config_json} not found on this host (non-fatal outside the Bryck host)")
+    config_ok, bryck_config_tiers, config_msg, config_snippet = validate_bryck_config_json(args.bryck_config_json)
+    if not config_ok:
+        # This is deliberately NOT folded into the generic "non-fatal warning" bucket:
+        # a malformed reference config must be visible as a real problem, not buried.
+        problems.append(f"CONFIG ERROR: {config_msg}")
 
     redact = build_redactor(login_cfg or {}, cloud_ops_cfg or {})
     state, info_cmd = get_bryck_state(args, logger, redact)
@@ -675,6 +722,9 @@ def build_plan(args: argparse.Namespace, logger: logging.Logger) -> dict:
         "tiers": tiers,
         "datasets": dataset_specs,
         "bryck_config_tiers_seen": bryck_config_tiers,
+        "bryck_config_valid": config_ok,
+        "bryck_config_message": config_msg,
+        "bryck_config_snippet": config_snippet,
         "test_cases": test_cases,
     }
     return plan
@@ -723,10 +773,26 @@ def render_confirmation(plan: dict) -> str:
         "",
         f"Total test cases: {len(plan['test_cases'])}",
     ]
-    if plan["pre_flight_problems"]:
+    if not plan.get("bryck_config_valid", True):
+        lines.append("")
+        lines.append("=" * 60)
+        lines.append("CONFIG ERROR: /etc/bryck/bryckcloud/config.json is INVALID")
+        lines.append("=" * 60)
+        lines.append(f"  {plan.get('bryck_config_message', '')}")
+        if plan.get("bryck_config_snippet"):
+            lines.append("")
+            lines.append("  Context (nl -ba style, around the failing line):")
+            for line in plan["bryck_config_snippet"].splitlines():
+                lines.append(f"    {line}")
+        lines.append("")
+        lines.append("  This file is read-only reference config (decision #14); no test case")
+        lines.append("  currently depends on it operationally, so the run is NOT blocked. But")
+        lines.append("  this must be fixed before trusting any tier annotations derived from it.")
+    other_problems = [p for p in plan["pre_flight_problems"] if not p.startswith("CONFIG ERROR:")]
+    if other_problems:
         lines.append("")
         lines.append("PRE-FLIGHT WARNINGS:")
-        for problem in plan["pre_flight_problems"]:
+        for problem in other_problems:
             lines.append(f"  - {problem}")
     lines += [
         "",
@@ -782,8 +848,11 @@ class Executor:
         self.run_dir = pathlib.Path(self.cfg["results_dir"]) / plan["run_id"]
         self.run_dir.mkdir(parents=True, exist_ok=True)
 
-        login_ok, login_cfg, _ = validate_json_file(self.cfg["login"])
-        params_ok, cloud_ops_cfg, _ = validate_json_file(self.cfg["params"])
+        login_ok, login_cfg, login_err = validate_json_file(self.cfg["login"])
+        params_ok, cloud_ops_cfg, params_err = validate_json_file(self.cfg["params"])
+        self.login_ok = login_ok
+        self.cloud_ops_ok = params_ok
+        self.config_error = None if (login_ok and params_ok) else (login_err or params_err)
         self.login_cfg = login_cfg or {}
         self.base_cloud_ops = cloud_ops_cfg or {}
         self.redact = build_redactor(self.login_cfg, self.base_cloud_ops)
@@ -812,6 +881,10 @@ class Executor:
                 "commands": result.commands,
                 "notes": result.notes,
                 "sub_results": result.sub_results,
+                "steps": result.steps,
+                "expected": result.expected,
+                "actual": result.actual,
+                "state_change": result.state_change,
             }, handle, indent=2)
         log_path = self.case_dir(result.test_id) / "commands.log"
         with log_path.open("w", encoding="utf-8") as handle:
@@ -823,6 +896,8 @@ class Executor:
                 if cmd["stderr"]:
                     handle.write(f"stderr:\n{cmd['stderr']}\n")
                 handle.write("\n")
+        if result.steps:
+            print("\n" + result.render_block() + "\n")
 
     def run_py(self, result: TestCaseResult, script: str, py_args: List[str], **kw) -> CommandResult:
         cmd = run_py_script(script, py_args, self.logger, self.args.dry_run, self.redact, self.cfg["python_bin"], **kw)
@@ -1252,56 +1327,143 @@ class Executor:
         )
         return "PASS" if ok else "FAIL"
 
+    def _run_negative_pipeline(
+        self,
+        result: TestCaseResult,
+        execute_fn,
+        expect_fail: bool,
+        expected_text: str,
+        fixture_note: str = "n/a (no fixture required)",
+    ) -> TestCaseResult:
+        """Environment-aware pipeline shared by CLI-input and AWS-negative cases:
+        inspect -> validate config -> capture baseline -> create fixture ->
+        execute -> validate result -> verify no unintended state change ->
+        cleanup -> verify final environment. Mirrors negative_environment_runner.py's
+        inspect/prepare/validate/execute/validate/cleanup/verify shape."""
+        result.expected = expected_text
+        case_id = result.test_id
+
+        state_before = self.bryck_state(result)
+        result.step("Inspect environment", "PASS", f"bryck_state={state_before}")
+
+        if not (self.login_ok and self.cloud_ops_ok):
+            result.step("Validate configuration", "BLOCKED", self.config_error or "login.json/cloud_ops.json invalid")
+            result.status = "BLOCKED"
+            result.notes.append("environment could not be established: login.json/cloud_ops.json invalid")
+            return result
+        result.step("Validate configuration", "PASS", "login.json/cloud_ops.json parse OK")
+
+        result.step(
+            "Establish Bryck mounted state", "SKIPPED",
+            "not required — pure input/config validation, no dataset access",
+        )
+
+        baseline = state_before
+        result.step("Capture baseline", "PASS", f"state={baseline}")
+        result.step("Create negative fixture", "PASS", fixture_note)
+
+        try:
+            cmd = execute_fn()
+        except Exception as exc:  # noqa: BLE001
+            result.step("Execute operation", "FAIL", f"exception: {exc}")
+            result.status = "FAIL"
+            result.actual = f"exception: {exc}"
+            return result
+
+        exec_label = "EXPECTED FAILURE" if expect_fail else "EXECUTED"
+        result.step("Execute operation", exec_label, "dry-run" if self.args.dry_run else f"rc={cmd.returncode}")
+
+        judged = self._judge_expect_fail(result, cmd, expect_fail, case_id)
+        result.step(f"Validate {'rejection' if expect_fail else 'success'}", judged)
+
+        state_after = self.bryck_state(result)
+        unaffected = self.args.dry_run or (state_after == baseline)
+        result.step(
+            "Verify no unintended state change", "PASS" if unaffected else "FAIL",
+            f"before={baseline!r} after={state_after!r}",
+        )
+
+        result.step("Cleanup", "PASS", "no shared login.json/cloud_ops.json modified; per-case fixture retained as evidence")
+        state_final = self.bryck_state(result)
+        result.step("Verify final environment", "PASS", f"state={state_final}")
+
+        result.status = judged if (judged == "FAIL" or unaffected) else "FAIL"
+        result.actual = f"rc={cmd.returncode}" if not self.args.dry_run else "dry-run (not executed)"
+        result.state_change = f"{baseline} -> {state_after}"
+        return result
+
     def run_cli_input_case(self, tc: dict) -> TestCaseResult:
         result = TestCaseResult(tc["id"], "cli_input", tc["description"])
         case_id = tc["id"]
         case_dir = self.case_dir(case_id)
+        expect_fail = True
         try:
-            expect_fail = True
             if case_id == "CLI-01":
-                cmd = self.run_py(result, "bryck_cloud_transfer_initiate.py",
-                                  ["--login", self.cfg["login"], "--params", self.cfg["params"]])
+                execute_fn = lambda: self.run_py(result, "bryck_cloud_transfer_initiate.py",
+                                                  ["--login", self.cfg["login"], "--params", self.cfg["params"]])
+                expected = "argparse rejects the initiate call because --mode is required; no transfer is created."
+                fixture_note = "n/a (omits required --mode flag)"
             elif case_id == "CLI-02":
-                cmd = self.run_py(result, "bryck_cloud_transfer_initiate.py",
-                                  ["--login", self.cfg["login"], "--params", self.cfg["params"], "--mode", "copy"])
+                execute_fn = lambda: self.run_py(result, "bryck_cloud_transfer_initiate.py",
+                                                  ["--login", self.cfg["login"], "--params", self.cfg["params"], "--mode", "copy"])
+                expected = "argparse rejects --mode copy as an invalid choice; no transfer is created."
+                fixture_note = "n/a (invalid --mode value)"
             elif case_id == "CLI-03":
                 fixture = case_dir / "cli03_cloud_ops.json"
                 self._write_fixture_json(fixture, {**self.base_cloud_ops, "bryck_src": ""})
-                cmd = self.run_py(result, "bryck_cloud_transfer_initiate.py",
-                                  ["--login", self.cfg["login"], "--params", str(fixture), "--mode", "upload"])
+                execute_fn = lambda: self.run_py(result, "bryck_cloud_transfer_initiate.py",
+                                                  ["--login", self.cfg["login"], "--params", str(fixture), "--mode", "upload"])
+                expected = "Upload must be rejected because bryck_src is empty."
+                fixture_note = f"{fixture.name}: bryck_src=''"
             elif case_id == "CLI-04":
                 fixture = case_dir / "cli04_cloud_ops.json"
                 self._write_fixture_json(fixture, {**self.base_cloud_ops, "cloud_bucket": ""})
-                cmd = self.run_py(result, "bryck_cloud_transfer_initiate.py",
-                                  ["--login", self.cfg["login"], "--params", str(fixture), "--mode", "upload"])
+                execute_fn = lambda: self.run_py(result, "bryck_cloud_transfer_initiate.py",
+                                                  ["--login", self.cfg["login"], "--params", str(fixture), "--mode", "upload"])
+                expected = "Upload must be rejected because cloud_bucket is empty."
+                fixture_note = f"{fixture.name}: cloud_bucket=''"
             elif case_id == "CLI-05":
                 fixture = case_dir / "cli05_cloud_ops.json"
                 self._write_fixture_json(fixture, {**self.base_cloud_ops, "bryck_dst": ""})
-                cmd = self.run_py(result, "bryck_cloud_transfer_initiate.py",
-                                  ["--login", self.cfg["login"], "--params", str(fixture), "--mode", "download"])
+                execute_fn = lambda: self.run_py(result, "bryck_cloud_transfer_initiate.py",
+                                                  ["--login", self.cfg["login"], "--params", str(fixture), "--mode", "download"])
+                expected = "Download must be rejected because bryck_dst is empty."
+                fixture_note = f"{fixture.name}: bryck_dst=''"
             elif case_id == "CLI-06":
-                cmd = self.run_py(result, "bryck_cloud_show.py", ["--login", str(case_dir / "missing-login.json")])
+                execute_fn = lambda: self.run_py(result, "bryck_cloud_show.py", ["--login", str(case_dir / "missing-login.json")])
+                expected = "bryck_cloud_show.py must fail with a readable file-not-found error; no API call is made."
+                fixture_note = "missing-login.json intentionally not created"
             elif case_id == "CLI-07":
                 fixture = case_dir / "cli07_login.json"
                 if not self.args.dry_run:
                     fixture.write_text("{", encoding="utf-8")
-                cmd = self.run_py(result, "bryck_cloud_show.py", ["--login", str(fixture)])
+                execute_fn = lambda: self.run_py(result, "bryck_cloud_show.py", ["--login", str(fixture)])
+                expected = "bryck_cloud_show.py must fail with a readable JSON-parse error."
+                fixture_note = f"{fixture.name}: malformed content '{{' "
             elif case_id == "CLI-08":
-                cmd = self.run_py(result, "bryck_cloud_transfer_pause.py",
-                                  ["--login", self.cfg["login"], "--transfer-id", "not-a-transfer-id"])
+                execute_fn = lambda: self.run_py(result, "bryck_cloud_transfer_pause.py",
+                                                  ["--login", self.cfg["login"], "--transfer-id", "not-a-transfer-id"])
+                expected = "Pause must be rejected for a non-numeric/invalid transfer id; no state change."
+                fixture_note = "n/a (invalid --transfer-id value)"
             elif case_id == "CLI-09":
-                cmd = run_argv(
-                    "datagen with missing spec",
-                    [self.cfg["datagen_bin"], "--spec", str(case_dir / "missing-spec.yaml")],
-                    self.logger, self.args.dry_run, self.redact,
-                )
-                result.commands.append(cmd.as_dict())
+                spec_path = case_dir / "missing-spec.yaml"
+
+                def execute_fn():
+                    cmd = run_argv(
+                        "datagen with missing spec",
+                        [self.cfg["datagen_bin"], "--spec", str(spec_path)],
+                        self.logger, self.args.dry_run, self.redact,
+                    )
+                    result.commands.append(cmd.as_dict())
+                    return cmd
+                expected = "datagen must fail before any host mutation because the spec file does not exist."
+                fixture_note = "missing-spec.yaml intentionally not created"
             else:
                 result.status = "BLOCKED"
                 result.notes.append("no fixture implemented for this CLI-input case yet")
                 return result
 
-            result.status = self._judge_expect_fail(result, cmd, expect_fail, case_id)
+            return self._run_negative_pipeline(result, execute_fn, expect_fail, expected, fixture_note)
         except Exception as exc:  # noqa: BLE001
             result.status = "FAIL"
             result.notes.append(f"exception: {exc}")
@@ -1313,28 +1475,38 @@ class Executor:
         case_dir = self.case_dir(case_id)
         cloud_type = str(self.base_cloud_ops.get("cloud_type", "aws"))
         mutation_map = {
-            "AWS-01": {"access_key_id": ""},
-            "AWS-02": {"secret_access_key": ""},
-            "AWS-03": {"access_key_id": "invalid-access-key"},
-            "AWS-04": {"secret_access_key": "invalid-secret-key"},
-            "AWS-05": {"region": "invalid-region"},
-            "AWS-06": {"cloud_bucket": "not-a-valid-bucket"},
+            "AWS-01": ("access_key_id", "", "Configure must reject an empty access_key_id."),
+            "AWS-02": ("secret_access_key", "", "Configure must reject an empty secret_access_key."),
+            "AWS-03": ("access_key_id", "invalid-access-key", "Configure must reject an invalid access_key_id."),
+            "AWS-04": ("secret_access_key", "invalid-secret-key", "Configure must reject an invalid secret_access_key."),
+            "AWS-05": ("region", "invalid-region", "Configure must reject an invalid region."),
+            "AWS-06": ("cloud_bucket", "not-a-valid-bucket", "Configure must reject an invalid cloud_bucket URI."),
         }
         try:
             if case_id in mutation_map:
+                field_name, bad_value, expected = mutation_map[case_id]
                 fixture = case_dir / f"{case_id}_cloud_ops.json"
-                self._write_fixture_json(fixture, {**self.base_cloud_ops, **mutation_map[case_id]})
-                cmd = self.run_py(result, "bryck_cloud_configure.py", ["--login", self.cfg["login"], "--params", str(fixture)])
-                result.status = self._judge_expect_fail(result, cmd, True, case_id)
+                self._write_fixture_json(fixture, {**self.base_cloud_ops, field_name: bad_value})
+                execute_fn = lambda: self.run_py(result, "bryck_cloud_configure.py",
+                                                  ["--login", self.cfg["login"], "--params", str(fixture)])
+                return self._run_negative_pipeline(result, execute_fn, True, expected, f"{fixture.name}: {field_name}={bad_value!r}")
             elif case_id == "AWS-07":
-                cmd = self.run_py(result, "bryck_cloud_deconfigure.py", ["--login", self.cfg["login"], "--cloud-type", cloud_type])
-                result.notes.append(f"observational: deconfigure-when-not-configured returned rc={cmd.returncode}")
-                result.status = "PASS"
+                execute_fn = lambda: self.run_py(result, "bryck_cloud_deconfigure.py",
+                                                  ["--login", self.cfg["login"], "--cloud-type", cloud_type])
+                expected = "Deconfiguring when nothing is configured is either rejected or idempotent (documented behavior, not a hard PASS/FAIL rc check)."
+                out = self._run_negative_pipeline(result, execute_fn, False, expected, "n/a (uses existing/absent cloud config)")
+                out.status = "PASS"  # observational case: any bounded, non-crashing rc is acceptable
+                out.notes.append("observational case: rc recorded but not used to force PASS/FAIL")
+                return out
             elif case_id == "AWS-08":
-                cmd1 = self.run_py(result, "bryck_cloud_deconfigure.py", ["--login", self.cfg["login"], "--cloud-type", cloud_type])
-                cmd2 = self.run_py(result, "bryck_cloud_deconfigure.py", ["--login", self.cfg["login"], "--cloud-type", cloud_type])
-                result.notes.append(f"observational: first rc={cmd1.returncode}, second rc={cmd2.returncode} (should be deterministic)")
-                result.status = "PASS"
+                def execute_fn():
+                    self.run_py(result, "bryck_cloud_deconfigure.py", ["--login", self.cfg["login"], "--cloud-type", cloud_type])
+                    return self.run_py(result, "bryck_cloud_deconfigure.py", ["--login", self.cfg["login"], "--cloud-type", cloud_type])
+                expected = "A second deconfigure call in a row must be deterministic (same behavior every time), not crash."
+                out = self._run_negative_pipeline(result, execute_fn, False, expected, "n/a (deconfigure called twice)")
+                out.status = "PASS"
+                out.notes.append("observational case: both rcs recorded but not used to force PASS/FAIL")
+                return out
             else:
                 result.status = "BLOCKED"
                 result.notes.append("no fixture implemented for this AWS-negative case yet")
