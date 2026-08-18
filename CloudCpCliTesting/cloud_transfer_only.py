@@ -358,8 +358,20 @@ def main(argv: Optional[list] = None) -> int:
 
     perf_data = None
     if collector is not None:
+        # The broker writes this CSV itself alongside the transfer's own logs
+        # (no download needed) -- feeds the completion-histogram/per-status
+        # sections of the perf report, same lookup cloud_cli_runner.py uses.
+        csv_path = None
+        if not args.dry_run and transfer_id and transfer_id != "DRYRUN-ID":
+            candidate = (pathlib.Path(args.transfer_logs_dir)
+                         / f"cloud_transfer_{transfer_id}" / f"transfer_report_{transfer_id}.csv")
+            if candidate.is_file():
+                csv_path = candidate
+            else:
+                tcr.notes.append(f"no transfer_report_{transfer_id}.csv found at {candidate} "
+                                  f"-- completion histogram/per-status breakdown will be empty")
         perf_data = collector.finish(
-            transfer_id or "unknown", test_id=run_id, tier=tier, mode=args.mode,
+            transfer_id or "unknown", csv_path=csv_path, test_id=run_id, tier=tier, mode=args.mode,
             description=f"transfer-only {args.mode} of {args.dataset}", gen_summary=gen_summary,
         )
         LOG.info("Perf report: %s", perf_data.get("html_report"))
