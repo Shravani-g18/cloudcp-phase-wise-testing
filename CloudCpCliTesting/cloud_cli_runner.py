@@ -693,13 +693,14 @@ def render_confirmation(plan: dict) -> str:
         dataset_line = ", ".join(plan["tiers"]) + "   (all sizes — automatic)"
         generate_line = f"Generate datasets ({', '.join(plan['tiers'])})"
     modes_seen = sorted({tc["mode"] for tc in plan["test_cases"] if tc["kind"] == "transfer"})
+    modes_line = (" + ".join(modes_seen) + "   (all modes — automatic)") if modes_seen else "n/a (no transfer-type cases selected)"
     lines = [
         "CloudCP CLI Test Plan",
         "=====================",
         f"Run ID        : {plan['run_id']}",
         f"Bryck state   : {plan['bryck_state_before']}",
         f"Dataset(s)    : {dataset_line}",
-        f"Transfer Mode : {' + '.join(modes_seen)}   (all modes — automatic)",
+        f"Transfer Mode : {modes_line}",
         f"Cloud         : aws",
         f"Source base   : {plan['config']['output_base']}",
         f"Destination   : {plan['config']['bucket']}",
