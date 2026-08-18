@@ -349,7 +349,17 @@ def main(argv: Optional[list] = None) -> int:
         "started": run_id, "finished": dt.datetime.now().isoformat(timespec="seconds"),
     }
     (run_dir / "report.json").write_text(json.dumps(result, indent=2, default=str), encoding="utf-8")
-    LOG.info("Report: %s", run_dir / "report.json")
+
+    print("\n" + "=" * 60)
+    print(f"Transfer {args.mode} of {args.dataset} -> {final_state}"
+          + (f" (transfer_id={transfer_id})" if transfer_id else ""))
+    print(f"Results directory : {run_dir}")
+    print(f"  report.json      : {run_dir / 'report.json'}")
+    if perf_data is not None:
+        print(f"  perf HTML report : {perf_data.get('html_report')}")
+        print(f"  perf JSON data   : {perf_data.get('json_data')}")
+        print(f"  perf zip         : {perf_data.get('zip')}")
+    print("=" * 60 + "\n")
 
     return 0 if (args.dry_run or (error is None and final_state == TERMINAL_SUCCESS)) else 1
 
