@@ -495,6 +495,23 @@ def read_local_transfer_status(transfer_logs_dir: pathlib.Path, transfer_id: str
     return match.group(1).strip().upper() if match else "UNKNOWN"
 
 
+def read_live_journal_transfer_status(raw_path: pathlib.Path, transfer_id: str) -> str:
+    """Fastest/most direct fallback for get_transfer_status(): tail the
+    journal_raw.log that cli_perf_capture.py's JournalCapture is already
+    writing live (sudo journalctl -f -t bcloud -t bryckcloud, started before
+    this transfer began). Avoids spawning a separate journalctl query per poll."""
+    if not raw_path.is_file():
+        return "UNKNOWN"
+    try:
+        text = raw_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return "UNKNOWN"
+    matches = re.findall(
+        rf"transfer id:\s*{re.escape(str(transfer_id))}\b.*?-\s*([A-Z_]+)\s*$", text, re.IGNORECASE | re.MULTILINE,
+    )
+    return matches[-1].upper() if matches else "UNKNOWN"
+
+
 def read_journalctl_transfer_status(transfer_id: str, journal_tags: Optional[Union[str, List[str]]] = None,
                                      lines: int = 1000) -> str:
     """Second fallback for get_transfer_status(): grep recent `journalctl -t
@@ -960,6 +977,7 @@ class Executor:
             with backup_path.open("w", encoding="utf-8") as handle:
                 json.dump(self.base_cloud_ops, handle, indent=2)
         self._cloud_ops_backup_path = backup_path
+        self._active_journal_raw: Optional[pathlib.Path] = None
 
     # -- helpers -------------------------------------------------------
 
@@ -1082,8 +1100,18 @@ class Executor:
         # REST API status unavailable (transfer purged from the active
         # registry, or the API itself being unreliable) -- fall back to
         # authoritative sources straight from the broker, in order:
-        # 1) transfer_summary.txt (written once the transfer fully finishes)
-        # 2) journalctl -t bcloud -t bryckcloud (the same logs cli_perf_capture.py tails)
+        # 1) journal_raw.log -- already live-tailing (sudo journalctl -f) for
+        #    this test case since before the transfer started; no extra subprocess.
+        # 2) transfer_summary.txt (written once the transfer fully finishes)
+        # 3) a fresh bounded `journalctl -n 1000` query, in case perf capture
+        #    wasn't running (e.g. --no-perf, or non-POSIX host)
+        if self._active_journal_raw is not None:
+            live_state = read_live_journal_transfer_status(self._active_journal_raw, transfer_id)
+            if live_state != "UNKNOWN":
+                result.notes.append(
+                    f"transfer {transfer_id}: API status unavailable; using the live journalctl -f capture instead: {live_state}"
+                )
+                return live_state
         local_state = read_local_transfer_status(pathlib.Path(self.cfg["transfer_logs_dir"]), transfer_id)
         if local_state != "UNKNOWN":
             result.notes.append(
@@ -1337,6 +1365,10 @@ class Executor:
         collector = perf_mod.TransferPerfCollector(
             self.case_dir(test_id), self.cfg, self.args.dry_run)
         collector.start()
+        # journal_raw.log is being written to live (sudo journalctl -f ...,
+        # started above) for this test case's whole duration -- transfer_status()
+        # tails it directly instead of spawning a separate bounded journalctl query.
+        self._active_journal_raw = collector.perf_dir / "journal_raw.log"
         return collector
 
     def _finish_perf(self, collector: Optional[perf_mod.TransferPerfCollector],
@@ -1345,6 +1377,7 @@ class Executor:
                      gen_summary: Optional[dict] = None) -> Optional[dict]:
         if collector is None:
             return None
+        self._active_journal_raw = None
         csv_path = None
         if not self.args.dry_run and transfer_id and transfer_id != "DRYRUN-ID":
             candidate = (pathlib.Path(self.cfg["transfer_logs_dir"])
