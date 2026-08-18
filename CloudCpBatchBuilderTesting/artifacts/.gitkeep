@@ -1,0 +1,5 @@
+# This file ensures the artifacts/ directory is tracked by git.
+
+# All run output (suite\_\*/, unattended/) is excluded via .gitignore.
+
+# Only performance_baselines.json is committed alongside this file.

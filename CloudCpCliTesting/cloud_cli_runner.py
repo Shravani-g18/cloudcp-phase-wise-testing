@@ -64,6 +64,7 @@ DEFAULT_BRYCK_CONFIG_JSON = "/etc/bryck/bryckcloud/config.json"
 
 LIFECYCLE_DATASET = "DS-P1-04"  # single representative dataset for lifecycle/service tests
 SPEC_FILES_DIR = HERE / "spec_files"
+FALLBACK_SPEC_FILES_DIR = REPO_ROOT / "CloudCpFallbackTesting" / "spec_files"
 
 MODES = ["upload", "download", "both"]
 MODE_CODE = {"upload": "U", "download": "D", "both": "B"}
@@ -167,6 +168,16 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--datasets", nargs="+", default=None,
                          help="Explicit dataset IDs (--dataset-catalog all, e.g. DS-P1-01) or spec names "
                               "(--dataset-catalog specfiles, e.g. 01_zero_byte). Defaults to the full catalog.")
+    parser.add_argument("--dataset", default=None,
+                         help="Single dataset name, auto-detected: a DS-P* manifest id (e.g. DS-P1-03) "
+                              "switches to --dataset-catalog all; a local spec_files/*.yaml name (e.g. "
+                              "01_zero_byte, 03_small_files -- searches both CloudCpCliTesting/spec_files/ "
+                              "and CloudCpFallbackTesting/spec_files/) switches to --dataset-catalog specfiles. "
+                              "Shorthand for --dataset-catalog <auto> --datasets <name> (also becomes the "
+                              "lifecycle/service dataset unless --lifecycle-dataset is set).")
+    parser.add_argument("--lifecycle-dataset", default=None,
+                         help=f"Dataset used by the lifecycle/service-restart test cases (CLI-LC-*/CLI-SVC-*). "
+                              f"Defaults to the first dataset in --datasets when given, else {LIFECYCLE_DATASET}.")
     parser.add_argument("--include-lifecycle", action="store_true", default=True)
     parser.add_argument("--no-lifecycle", dest="include_lifecycle", action="store_false",
                          help="Skip the live intervention matrix (§9.2).")
@@ -223,6 +234,10 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--report-save-dir", default="/home/bryck/shravani",
                          help="Bryck-host directory where downloaded transfer/diagnostic reports are saved "
                               "(one subfolder per test case). Created if missing.")
+    parser.add_argument("--diagnostic-report", action="store_true", default=True)
+    parser.add_argument("--no-diagnostic-report", dest="diagnostic_report", action="store_false",
+                         help="Skip the final bryck_report.py diagnostic dump at the end of the run "
+                              "(useful while it's flaky/slow on the real host).")
     parser.add_argument("--run-id", default=None, help="Override the generated RUN_ID.")
     parser.add_argument("--keep", "--no-cleanup", dest="keep", action="store_true",
                          help="Skip auto-cleanup of datasets/cloud objects (debugging).")
@@ -448,6 +463,50 @@ def parse_transfer_id(text: str) -> Optional[str]:
     return match.group(1) if match else None
 
 
+def read_local_transfer_status(transfer_logs_dir: pathlib.Path, transfer_id: str) -> str:
+    """Fallback for get_transfer_status(): the Bryck's REST /status_transfer
+    endpoint can return 409 "Failed to find the transfer/s" within seconds of
+    a fast transfer completing (it's purged from the *active* transfer
+    registry quickly), even though transfer_summary.txt on disk already
+    proves it finished. Read that file directly as the authoritative source
+    when the API says UNKNOWN."""
+    try:
+        tid = int(transfer_id)
+    except (TypeError, ValueError):
+        return "UNKNOWN"
+    summary_path = base.transfer_log_dir(transfer_logs_dir, tid) / "transfer_summary.txt"
+    if not summary_path.is_file():
+        return "UNKNOWN"
+    try:
+        text = summary_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return "UNKNOWN"
+    match = re.search(r"Transfer status\s*:\s*(\w+)", text)
+    return match.group(1).strip().upper() if match else "UNKNOWN"
+
+
+def read_journalctl_transfer_status(transfer_id: str, journal_tag: str = "bryckcloud", lines: int = 1000) -> str:
+    """Second fallback for get_transfer_status(): grep recent `journalctl -t
+    <tag>` history for this transfer's own completion line, e.g.
+    "aws transfer id:384 src:... dst:... - COMPLETED". This is the same log
+    source cli_perf_capture.py already tails for performance data, and is
+    authoritative straight from the broker regardless of REST API/registry
+    state. Uses `sudo journalctl ... --no-pager` (non-following, bounded)."""
+    try:
+        proc = subprocess.run(
+            ["sudo", "journalctl", "-t", journal_tag, "-n", str(lines), "--no-pager"],
+            capture_output=True, text=True, timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return "UNKNOWN"
+    text = (proc.stdout or "") + (proc.stderr or "")
+    pattern = re.compile(
+        rf"transfer id:\s*{re.escape(str(transfer_id))}\b.*?-\s*([A-Z_]+)\s*$", re.IGNORECASE | re.MULTILINE,
+    )
+    matches = pattern.findall(text)
+    return matches[-1].upper() if matches else "UNKNOWN"
+
+
 # =============================================================================
 # Dataset resolution (reuses cloudcpclitesting.py helpers where possible)
 # =============================================================================
@@ -459,21 +518,27 @@ def all_catalog_dataset_ids() -> List[str]:
 
 
 def local_spec_catalog_ids() -> List[str]:
-    """Every *.yaml spec name under CloudCpCliTesting/spec_files/, sorted."""
-    return sorted(p.stem for p in SPEC_FILES_DIR.glob("*.yaml"))
+    """Every *.yaml spec name under CloudCpCliTesting/spec_files/, plus any
+    CloudCpFallbackTesting/spec_files/*.yaml not already present there, sorted."""
+    names = {p.stem for p in SPEC_FILES_DIR.glob("*.yaml")}
+    names |= {p.stem for p in FALLBACK_SPEC_FILES_DIR.glob("*.yaml")}
+    return sorted(names)
 
 
 def local_spec_file_path(name: str) -> Optional[pathlib.Path]:
     candidate = SPEC_FILES_DIR / f"{name}.yaml"
-    return candidate if candidate.is_file() else None
+    if candidate.is_file():
+        return candidate
+    fallback = FALLBACK_SPEC_FILES_DIR / f"{name}.yaml"
+    return fallback if fallback.is_file() else None
 
 
 def generate_tier_dataset(
     tier: str,
     output_base: str,
-    args: argparse.Namespace,
+    args: argparse.Namespace | types.SimpleNamespace,
     logger: logging.Logger,
-    dataset_id: str,
+    dataset_id: Optional[str],
 ) -> tuple[pathlib.Path, dict]:
     """Materialize one dataset under output_base, reusing the single-dataset
     datagen flow already validated by cloudcpclitesting.py.
@@ -482,6 +547,8 @@ def generate_tier_dataset(
     datasets; `dataset_id` (a DS-P* manifest id, or a
     CloudCpCliTesting/spec_files/*.yaml name) selects what gets generated.
     """
+    if not dataset_id:
+        raise ValueError(f"generate_tier_dataset({tier!r}): dataset_id is required")
     ns = types.SimpleNamespace(
         output_base=output_base,
         skip_generate=False,
@@ -511,7 +578,7 @@ def generate_named_spec_dataset(
     """Materialize a single-spec YAML (any CloudCpCliTesting/spec_files/*.yaml)
     under output_base/<name>, rewriting its `root:` line to match."""
     target_root = pathlib.Path(output_base) / name
-    summary = {"dataset_root": str(target_root), "spec_file": str(spec_path)}
+    summary: Dict[str, Any] = {"dataset_root": str(target_root), "spec_file": str(spec_path)}
     if ns.skip_generate:
         summary["actual_files"] = base.count_files_recursive(target_root)
         return target_root, summary
@@ -636,25 +703,26 @@ def build_plan(args: argparse.Namespace, logger: logging.Logger) -> dict:
                     "dataset": dataset_id,
                     "description": f"{mode} transfer for spec_files/{dataset_id}.yaml",
                 })
+    lifecycle_dataset = args.lifecycle_dataset or (args.datasets[0] if args.datasets else LIFECYCLE_DATASET)
     if args.include_lifecycle:
         test_cases.append({
-            "id": f"CLI-LC-{LIFECYCLE_DATASET}",
+            "id": f"CLI-LC-{lifecycle_dataset}",
             "kind": "lifecycle",
-            "tier": LIFECYCLE_DATASET,
+            "tier": lifecycle_dataset,
             "mode": "both",
-            "dataset": LIFECYCLE_DATASET,
-            "description": f"Live intervention matrix on {LIFECYCLE_DATASET} ({', '.join(LIFECYCLE_ACTIONS)})",
+            "dataset": lifecycle_dataset,
+            "description": f"Live intervention matrix on {lifecycle_dataset} ({', '.join(LIFECYCLE_ACTIONS)})",
         })
     if args.include_service:
         for target in ("bcloud", "bryckapi"):
             test_cases.append({
                 "id": f"CLI-SVC-{target.upper()}",
                 "kind": "service",
-                "tier": LIFECYCLE_DATASET,
+                "tier": lifecycle_dataset,
                 "mode": "both",
-                "dataset": LIFECYCLE_DATASET,
+                "dataset": lifecycle_dataset,
                 "target_service": f"{target}.service",
-                "description": f"Restart {target}.service mid-transfer on {LIFECYCLE_DATASET}",
+                "description": f"Restart {target}.service mid-transfer on {lifecycle_dataset}",
             })
     if args.include_edge:
         for test_id, meta in EDGE_CASES.items():
@@ -728,6 +796,7 @@ def build_plan(args: argparse.Namespace, logger: logging.Logger) -> dict:
             "aws_cli": args.aws_cli,
             "results_dir": os.path.abspath(args.results_dir),
             "report_save_dir": args.report_save_dir,
+            "diagnostic_report": args.diagnostic_report,
             "journal_tag": args.journal_tag,
             "cloudcp_log": args.cloudcp_log,
             "capture_lead": args.capture_lead,
@@ -892,6 +961,9 @@ class Executor:
     def download_final_diagnostic_report(self) -> None:
         """Best-effort bryck_report.py diagnostic dump for the whole run, saved under
         --report-save-dir alongside the per-case transfer reports."""
+        if not self.cfg.get("diagnostic_report", True):
+            self.logger.info("Skipping final diagnostic report (--no-diagnostic-report).")
+            return
         out_dir = pathlib.Path(self.cfg["report_save_dir"]) / self.plan["run_id"] / "_final_diagnostic_report"
         if not self.args.dry_run:
             out_dir.mkdir(parents=True, exist_ok=True)
@@ -987,6 +1059,26 @@ class Executor:
         ns = argparse.Namespace(login=self.cfg["login"], dry_run=self.args.dry_run, python_bin=self.cfg["python_bin"])
         state, cmd = get_transfer_status(ns, transfer_id, self.logger, self.redact)
         result.commands.append(cmd.as_dict())
+        if state != "UNKNOWN" or self.args.dry_run:
+            return state
+        # REST API status unavailable (transfer purged from the active
+        # registry, or the API itself being unreliable) -- fall back to
+        # authoritative sources straight from the broker, in order:
+        # 1) transfer_summary.txt (written once the transfer fully finishes)
+        # 2) journalctl -t bryckcloud (the same log cli_perf_capture.py tails)
+        local_state = read_local_transfer_status(pathlib.Path(self.cfg["transfer_logs_dir"]), transfer_id)
+        if local_state != "UNKNOWN":
+            result.notes.append(
+                f"transfer {transfer_id}: API status unavailable; using transfer_summary.txt on disk instead: {local_state}"
+            )
+            return local_state
+        journal_state = read_journalctl_transfer_status(transfer_id, self.cfg.get("journal_tag", "bryckcloud"))
+        if journal_state != "UNKNOWN":
+            result.notes.append(
+                f"transfer {transfer_id}: API status unavailable and no transfer_summary.txt yet; "
+                f"using journalctl -t {self.cfg.get('journal_tag', 'bryckcloud')} instead: {journal_state}"
+            )
+            return journal_state
         return state
 
     def require_ok(self, result: TestCaseResult, cmd: CommandResult, step_name: str) -> bool:
@@ -1910,9 +2002,30 @@ def phase_list_cases(args: argparse.Namespace, logger: logging.Logger) -> int:
     return 0
 
 
+def resolve_dataset_shorthand(args: argparse.Namespace, logger: logging.Logger) -> None:
+    """Resolve --dataset <name> into --dataset-catalog/--datasets, auto-detecting
+    whether <name> is a DS-P* manifest id or a local spec_files/*.yaml name."""
+    if not args.dataset:
+        return
+    name = args.dataset
+    if local_spec_file_path(name) is not None:
+        args.dataset_catalog = "specfiles"
+    else:
+        try:
+            catalog_ids = all_catalog_dataset_ids()
+        except SystemExit:
+            catalog_ids = []
+        if name not in catalog_ids:
+            logger.warning("--dataset %r not found in the DS-P* manifest or any spec_files/*.yaml; "
+                            "proceeding with --dataset-catalog all anyway (will likely fail to resolve).", name)
+        args.dataset_catalog = "all"
+    args.datasets = [name]
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv)
     logger = setup_logging(args.verbose)
+    resolve_dataset_shorthand(args, logger)
     try:
         if args.list_cases:
             return phase_list_cases(args, logger)
