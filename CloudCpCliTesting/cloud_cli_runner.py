@@ -168,6 +168,16 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--datasets", nargs="+", default=None,
                          help="Explicit dataset IDs (--dataset-catalog all, e.g. DS-P1-01) or spec names "
                               "(--dataset-catalog specfiles, e.g. 01_zero_byte). Defaults to the full catalog.")
+    parser.add_argument("--dataset", default=None,
+                         help="Single dataset name, auto-detected: a DS-P* manifest id (e.g. DS-P1-03) "
+                              "switches to --dataset-catalog all; a local spec_files/*.yaml name (e.g. "
+                              "01_zero_byte, 03_small_files -- searches both CloudCpCliTesting/spec_files/ "
+                              "and CloudCpFallbackTesting/spec_files/) switches to --dataset-catalog specfiles. "
+                              "Shorthand for --dataset-catalog <auto> --datasets <name> (also becomes the "
+                              "lifecycle/service dataset unless --lifecycle-dataset is set).")
+    parser.add_argument("--lifecycle-dataset", default=None,
+                         help=f"Dataset used by the lifecycle/service-restart test cases (CLI-LC-*/CLI-SVC-*). "
+                              f"Defaults to the first dataset in --datasets when given, else {LIFECYCLE_DATASET}.")
     parser.add_argument("--include-lifecycle", action="store_true", default=True)
     parser.add_argument("--no-lifecycle", dest="include_lifecycle", action="store_false",
                          help="Skip the live intervention matrix (§9.2).")
@@ -689,25 +699,26 @@ def build_plan(args: argparse.Namespace, logger: logging.Logger) -> dict:
                     "dataset": dataset_id,
                     "description": f"{mode} transfer for spec_files/{dataset_id}.yaml",
                 })
+    lifecycle_dataset = args.lifecycle_dataset or (args.datasets[0] if args.datasets else LIFECYCLE_DATASET)
     if args.include_lifecycle:
         test_cases.append({
-            "id": f"CLI-LC-{LIFECYCLE_DATASET}",
+            "id": f"CLI-LC-{lifecycle_dataset}",
             "kind": "lifecycle",
-            "tier": LIFECYCLE_DATASET,
+            "tier": lifecycle_dataset,
             "mode": "both",
-            "dataset": LIFECYCLE_DATASET,
-            "description": f"Live intervention matrix on {LIFECYCLE_DATASET} ({', '.join(LIFECYCLE_ACTIONS)})",
+            "dataset": lifecycle_dataset,
+            "description": f"Live intervention matrix on {lifecycle_dataset} ({', '.join(LIFECYCLE_ACTIONS)})",
         })
     if args.include_service:
         for target in ("bcloud", "bryckapi"):
             test_cases.append({
                 "id": f"CLI-SVC-{target.upper()}",
                 "kind": "service",
-                "tier": LIFECYCLE_DATASET,
+                "tier": lifecycle_dataset,
                 "mode": "both",
-                "dataset": LIFECYCLE_DATASET,
+                "dataset": lifecycle_dataset,
                 "target_service": f"{target}.service",
-                "description": f"Restart {target}.service mid-transfer on {LIFECYCLE_DATASET}",
+                "description": f"Restart {target}.service mid-transfer on {lifecycle_dataset}",
             })
     if args.include_edge:
         for test_id, meta in EDGE_CASES.items():
@@ -1983,9 +1994,30 @@ def phase_list_cases(args: argparse.Namespace, logger: logging.Logger) -> int:
     return 0
 
 
+def resolve_dataset_shorthand(args: argparse.Namespace, logger: logging.Logger) -> None:
+    """Resolve --dataset <name> into --dataset-catalog/--datasets, auto-detecting
+    whether <name> is a DS-P* manifest id or a local spec_files/*.yaml name."""
+    if not args.dataset:
+        return
+    name = args.dataset
+    if local_spec_file_path(name) is not None:
+        args.dataset_catalog = "specfiles"
+    else:
+        try:
+            catalog_ids = all_catalog_dataset_ids()
+        except SystemExit:
+            catalog_ids = []
+        if name not in catalog_ids:
+            logger.warning("--dataset %r not found in the DS-P* manifest or any spec_files/*.yaml; "
+                            "proceeding with --dataset-catalog all anyway (will likely fail to resolve).", name)
+        args.dataset_catalog = "all"
+    args.datasets = [name]
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv)
     logger = setup_logging(args.verbose)
+    resolve_dataset_shorthand(args, logger)
     try:
         if args.list_cases:
             return phase_list_cases(args, logger)
