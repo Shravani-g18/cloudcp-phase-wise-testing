@@ -154,10 +154,11 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
                          help="Subset of tiers to include (default: all). Ignored when --dataset-catalog all is used.")
     parser.add_argument("--modes", nargs="+", default=MODES, choices=MODES,
                          help="Subset of transfer modes to include (default: all).")
-    parser.add_argument("--dataset-catalog", choices=["tiers", "all", "specfiles"], default="tiers",
-                         help="'tiers' (default) runs one representative dataset per size tier. "
-                              "'all' runs every dataset in dataset_cloudcp/spec_files/manifest.json "
-                              "(optionally narrowed with --datasets) as its own transfer round. "
+    parser.add_argument("--dataset-catalog", choices=["tiers", "all", "specfiles"], default="all",
+                         help="'all' (default) runs every dataset in dataset_cloudcp/spec_files/manifest.json "
+                              "(DS-P1-01..DS-P12-02; optionally narrowed with --datasets) as its own transfer "
+                              "round. 'tiers' runs one representative size-tier dataset "
+                              "(ZERO/TINY/SMALL/MEDIUM/LARGE/SPARSE) instead. "
                               "'specfiles' runs every *.yaml spec under CloudCpCliTesting/spec_files/ "
                               "(optionally narrowed with --datasets, e.g. 01_zero_byte 12_tiny_2million).")
     parser.add_argument("--datasets", nargs="+", default=None,

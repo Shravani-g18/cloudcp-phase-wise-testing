@@ -10,7 +10,7 @@ plan update.
 |---|---|---|
 | 1 | Execution target | One Bryck system at a time. |
 | 2 | Transfer modes | Every dataset is run for upload, download, **and** both — not user-selected per run. |
-| 3 | Dataset selection | The script automatically runs all dataset sizes (ZERO/TINY/SMALL/MEDIUM/LARGE/SPARSE); no per-run manual pick. |
+| 3 | Dataset selection | Default (`--dataset-catalog all`) runs every dataset in `dataset_cloudcp/spec_files/manifest.json` (`DS-P1-01`..`DS-P12-02`, 54 datasets) as its own transfer round; no per-run manual pick, and no size-tier (ZERO/TINY/SMALL/MEDIUM/LARGE/SPARSE) datasets are used unless `--dataset-catalog tiers` is explicitly requested. |
 | 4 | Mount behavior | If Bryck is ejected, the script mounts it automatically (no extra prompt beyond the single top-level confirmation gate). |
 | 5 | Eject during transfer | Included as an intentional negative test. |
 | 6 | Format/erase/remove during transfer | Actually executed (not just checked for rejection) — these are real destructive lifecycle tests. |
@@ -93,11 +93,14 @@ Any failure in steps 1-5 aborts `--plan` before any confirmation prompt is shown
 
 ## 5. Dataset Selection
 
-All sizes are run automatically (decision #3) — no manual per-run picking.
-Each tier maps to one **primary** dataset id from the authoritative catalog
-(`dataset_cloudcp/spec_files/manifest.json` + `dataset_map.json`, 54 datasets
-total) so runs stay fast; a **stress** alternate is available via `--full-scale`
-for perf/regression passes.
+By default (`--dataset-catalog all`, decision #3) the runner uses **every**
+dataset in the authoritative catalog (`dataset_cloudcp/spec_files/manifest.json`
++ `dataset_map.json`, `DS-P1-01`..`DS-P12-02`, 54 datasets total) — one
+transfer round per dataset x mode, no size-tier names (ZERO/TINY/SMALL/MEDIUM/
+LARGE/SPARSE) involved. The size-tier catalog described below is only used
+when `--dataset-catalog tiers` is explicitly passed (e.g. for a faster smoke
+run); it maps to the same underlying `DS-P1-0x` datasets plus a separate
+SPARSE spec.
 
 | Tier | Primary dataset (default run) | Stress alternate (`--full-scale`) | Spec location | Notes |
 |---|---|---|---|---|
@@ -125,23 +128,26 @@ for selection.
 | `DS-P9-04` | `CLI-EDGE-03` | Single 64 MB file — first size that must go multipart. |
 | `DS-P4-01` | `CLI-EDGE-04` | Filename/encoding stress (20 filename variants) at tiny tier. |
 
-### 5.2 Full-catalog round (`--dataset-catalog all`)
+### 5.2 Full-catalog round (`--dataset-catalog all`, default)
 
-By default the runner uses one representative dataset per tier (§5) to keep a
-run fast. Pass `--dataset-catalog all` to instead run **every** dataset in
-`dataset_cloudcp/spec_files/manifest.json` (54 datasets, per §9 of
-`dataset_generation_plan.md`) as its own transfer round — one `CLI-<mode>-<dataset-id>`
-test case per dataset x mode, each going through the same mandatory
-mount -> generate -> configure -> upload -> download -> report flow (§6-§7).
-Narrow it to a specific subset with `--datasets DS-P1-01 DS-P2-03 ...`.
+This is the default mode: the runner runs **every** dataset in
+`dataset_cloudcp/spec_files/manifest.json` (54 datasets, `DS-P1-01`..`DS-P12-02`,
+per §9 of `dataset_generation_plan.md`) as its own transfer round — one
+`CLI-<mode>-<dataset-id>` test case per dataset x mode, each going through the
+same mandatory mount -> generate -> configure -> upload -> download -> report
+flow (§6-§7). Narrow it to a specific subset with `--datasets DS-P1-01 DS-P2-03 ...`,
+or fall back to the old size-tier behavior with `--dataset-catalog tiers`.
 
 ```bash
-# every dataset in the manifest, upload + download, as one confirmed plan
-python3 cloud_cli_runner.py --plan --dataset-catalog all --yes
+# default: every dataset in the manifest, upload + download + both, as one confirmed plan
+python3 cloud_cli_runner.py --plan --yes
 python3 cloud_cli_runner.py --execute --plan-file results/<RUN_ID>/plan.json
 
 # only a specific subset of datasets
-python3 cloud_cli_runner.py --plan --dataset-catalog all --datasets DS-P2-01 DS-P4-05 DS-P9-07 --yes
+python3 cloud_cli_runner.py --plan --datasets DS-P2-01 DS-P4-05 DS-P9-07 --yes
+
+# old size-tier behavior (ZERO/TINY/SMALL/MEDIUM/LARGE/SPARSE), if ever needed
+python3 cloud_cli_runner.py --plan --dataset-catalog tiers --yes
 ```
 
 ### 5.3 Local spec catalog (`--dataset-catalog specfiles`)
