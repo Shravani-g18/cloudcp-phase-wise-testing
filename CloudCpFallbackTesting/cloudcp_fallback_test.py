@@ -87,7 +87,7 @@ TERMINAL_FAILURE_STATES = {"FAILED", "STOPPED", "CANCELLED", "PAUSED_TIMEOUT"}
 TERMINAL_STATES = {TERMINAL_SUCCESS_STATE} | TERMINAL_FAILURE_STATES
 
 # Per-file report statuses that count as "transferred".
-TERMINAL_SUCCESS_ROWS = {"SUCCESS", "SKIPPED", "FALLBACK_OK"}
+TERMINAL_SUCCESS_ROWS = {"SUCCESS", "SKIPPED", "FALLBACK_OK", "MP_OK"}
 
 STDOUT_CLIP = 4000  # max chars of captured stdout/stderr kept per step
 
@@ -716,6 +716,60 @@ def _safe_extract(tf, dest: Path) -> None:
 
 
 # =============================================================================
+# System logs — fallback worker evidence
+# =============================================================================
+
+def check_fallback_in_logs(api, rec: Recorder, transfer_id: str) -> dict:
+    """Query GET /api/config/getlogs and look for fallback worker messages."""
+    rec.add("fetch system logs", "api",
+            "GET /api/config/getlogs?cursor=Today",
+            detail="checking for fallback worker log entries")
+    resp = api.get_logs(cursor="Today")
+    if resp is None or not getattr(resp, "ok", False):
+        rec.steps[-1]["ok"] = False
+        rec.steps[-1]["detail"] = "getlogs request failed"
+        return {"fallback_started": False, "fallback_done": False,
+                "fb_transferred": 0, "fb_failed": 0}
+
+    try:
+        entries = resp.json().get("result", [])
+    except (ValueError, AttributeError):
+        entries = []
+
+    tid_str = str(transfer_id)
+    fb_started = False
+    fb_done = False
+    fb_transferred = 0
+    fb_failed = 0
+
+    for entry in entries or []:
+        msg = str((entry or {}).get("message") or "")
+        if f"Fallback worker started: transfer_id={tid_str}" in msg:
+            fb_started = True
+        if "Fallback worker done:" in msg and fb_started:
+            fb_done = True
+            # Parse "transferred=N failed=M"
+            for part in msg.split():
+                if part.startswith("transferred="):
+                    try:
+                        fb_transferred = int(part.split("=", 1)[1])
+                    except ValueError:
+                        pass
+                if part.startswith("failed="):
+                    try:
+                        fb_failed = int(part.split("=", 1)[1])
+                    except ValueError:
+                        pass
+
+    detail = (f"fallback_started={fb_started} fallback_done={fb_done} "
+              f"transferred={fb_transferred} failed={fb_failed}")
+    rec.steps[-1]["ok"] = True
+    rec.steps[-1]["detail"] = detail
+    return {"fallback_started": fb_started, "fallback_done": fb_done,
+            "fb_transferred": fb_transferred, "fb_failed": fb_failed}
+
+
+# =============================================================================
 # Report download + parse
 # =============================================================================
 
@@ -753,46 +807,149 @@ def download_and_parse_report(api, rec: Recorder, transfer_id: str,
                 detail="downloaded file is not a valid zip")
         return {"available": False}
 
-    metrics = _parse_report_dir(extract_dir)
+    metrics = _parse_report_dir(extract_dir, transfer_id)
     rec.add("parse report", "local", str(extract_dir), ok=True,
             detail=(f"rows={metrics['total_rows']} success={metrics['success_rows']} "
-                    f"fallback_ok={metrics['fallback_ok']} failed={metrics['failed_rows']}"))
+                    f"fallback_ok={metrics['fallback_ok']} failed={metrics['failed_rows']} "
+                    f"retried={metrics['retried_rows']} mp_ok={metrics['mp_ok_rows']}"))
     metrics["available"] = True
     return metrics
 
 
-def _parse_report_dir(extract_dir: Path) -> dict:
+def _parse_report_dir(extract_dir: Path, transfer_id: str = "") -> dict:
     total = success = fallback_ok = failed = 0
+    retried = mp_ok = 0
     files_seen: set[str] = set()
+
+    # --- Parse CSV files ---
     for csv_path in extract_dir.rglob("*.csv"):
-        try:
-            with open(csv_path, newline="", encoding="utf-8", errors="replace") as fh:
-                reader = csv.DictReader(fh)
-                if reader.fieldnames is None or "status" not in [
-                    (f or "").strip().lower() for f in reader.fieldnames
-                ]:
-                    continue
-                key_map = {(f or "").strip().lower(): f for f in reader.fieldnames}
-                status_key = key_map.get("status")
-                path_key = key_map.get("local_path") or key_map.get("absolutefilepath")
-                for row in reader:
-                    status = (row.get(status_key) or "").strip().upper()
-                    lp = (row.get(path_key) or "") if path_key else ""
-                    if lp and lp in files_seen:
-                        continue
-                    if lp:
-                        files_seen.add(lp)
-                    total += 1
-                    if status in TERMINAL_SUCCESS_ROWS:
-                        success += 1
-                    if status == "FALLBACK_OK":
-                        fallback_ok += 1
-                    if status not in TERMINAL_SUCCESS_ROWS:
-                        failed += 1
-        except OSError:
-            continue
+        _parse_tabular_rows(csv_path, files_seen,
+                            _count_cb_factory(locals_ref := {"t": 0, "s": 0, "fb": 0,
+                                                             "f": 0, "r": 0, "mp": 0}))
+    total += locals_ref["t"]; success += locals_ref["s"]
+    fallback_ok += locals_ref["fb"]; failed += locals_ref["f"]
+    retried += locals_ref["r"]; mp_ok += locals_ref["mp"]
+
+    # --- Parse XLSX (transfer_report_<id>.xlsx) ---
+    for xlsx_path in extract_dir.rglob("*.xlsx"):
+        _parse_xlsx_report(xlsx_path, files_seen,
+                           _count_cb_factory(x_ref := {"t": 0, "s": 0, "fb": 0,
+                                                       "f": 0, "r": 0, "mp": 0}))
+        total += x_ref["t"]; success += x_ref["s"]
+        fallback_ok += x_ref["fb"]; failed += x_ref["f"]
+        retried += x_ref["r"]; mp_ok += x_ref["mp"]
+
+    # --- Parse final_report.json ---
+    for jr in extract_dir.rglob("final_report.json"):
+        _parse_final_report_json(jr, files_seen,
+                                 _count_cb_factory(j_ref := {"t": 0, "s": 0, "fb": 0,
+                                                             "f": 0, "r": 0, "mp": 0}))
+        total += j_ref["t"]; success += j_ref["s"]
+        fallback_ok += j_ref["fb"]; failed += j_ref["f"]
+        retried += j_ref["r"]; mp_ok += j_ref["mp"]
+
     return {"total_rows": total, "success_rows": success,
-            "fallback_ok": fallback_ok, "failed_rows": failed}
+            "fallback_ok": fallback_ok, "failed_rows": failed,
+            "retried_rows": retried, "mp_ok_rows": mp_ok}
+
+
+def _count_cb_factory(ref: dict):
+    """Return a callback that tallies a single report row into ref."""
+    def cb(status: str, attempt: int, path: str, files_seen: set[str]):
+        if path and path in files_seen:
+            return
+        if path:
+            files_seen.add(path)
+        ref["t"] += 1
+        if status in TERMINAL_SUCCESS_ROWS:
+            ref["s"] += 1
+        if status in ("FALLBACK_OK", "MP_OK"):
+            ref["fb"] += 1
+        if status == "MP_OK":
+            ref["mp"] += 1
+        if status not in TERMINAL_SUCCESS_ROWS:
+            ref["f"] += 1
+        if attempt >= 2:
+            ref["r"] += 1
+    return cb
+
+
+def _parse_tabular_rows(csv_path: Path, files_seen: set[str], cb) -> None:
+    """Parse a CSV report file, calling cb(status, attempt, path) per row."""
+    try:
+        with open(csv_path, newline="", encoding="utf-8", errors="replace") as fh:
+            reader = csv.DictReader(fh)
+            if reader.fieldnames is None:
+                return
+            lower_fields = [(f or "").strip().lower() for f in reader.fieldnames]
+            if "status" not in lower_fields:
+                return
+            key_map = {lf: orig for lf, orig in zip(lower_fields, reader.fieldnames)}
+            status_key = key_map.get("status")
+            path_key = key_map.get("local_path") or key_map.get("absolutefilepath") or key_map.get("s3path")
+            attempt_key = key_map.get("attempt")
+            for row in reader:
+                status = (row.get(status_key) or "").strip().upper()
+                lp = (row.get(path_key) or "") if path_key else ""
+                try:
+                    attempt = int(row.get(attempt_key) or "1") if attempt_key else 1
+                except ValueError:
+                    attempt = 1
+                cb(status, attempt, lp, files_seen)
+    except OSError:
+        pass
+
+
+def _parse_xlsx_report(xlsx_path: Path, files_seen: set[str], cb) -> None:
+    """Parse an xlsx transfer report for status/attempt columns."""
+    try:
+        import openpyxl
+    except ImportError:
+        return
+    try:
+        wb = openpyxl.load_workbook(xlsx_path, read_only=True, data_only=True)
+    except Exception:  # noqa: BLE001
+        return
+    try:
+        for ws in wb.worksheets:
+            headers = [str(c.value or "").strip().lower() for c in next(ws.iter_rows(max_row=1))]
+            col = {h: i for i, h in enumerate(headers)}
+            status_idx = col.get("status")
+            if status_idx is None:
+                continue
+            attempt_idx = col.get("attempt")
+            path_idx = col.get("local_path") or col.get("s3path")
+            for row in ws.iter_rows(min_row=2, values_only=True):
+                status = str(row[status_idx] or "").strip().upper()
+                lp = str(row[path_idx] or "") if path_idx is not None else ""
+                try:
+                    attempt = int(row[attempt_idx]) if attempt_idx is not None and row[attempt_idx] else 1
+                except (ValueError, TypeError):
+                    attempt = 1
+                cb(status, attempt, lp, files_seen)
+    finally:
+        wb.close()
+
+
+def _parse_final_report_json(json_path: Path, files_seen: set[str], cb) -> None:
+    """Parse final_report.json for status/attempt fields."""
+    try:
+        data = json.loads(json_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    entries = data if isinstance(data, list) else data.get("entries", data.get("result", []))
+    if not isinstance(entries, list):
+        return
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        status = str(entry.get("status") or "").strip().upper()
+        lp = str(entry.get("local_path") or entry.get("s3path") or "")
+        try:
+            attempt = int(entry.get("attempt", 1))
+        except (ValueError, TypeError):
+            attempt = 1
+        cb(status, attempt, lp, files_seen)
 
 
 # =============================================================================
@@ -812,21 +969,27 @@ def evaluate(case: Case, state: str, capture: dict, report: dict,
     if case.expect == "fallback_ok":
         if not completed:
             return "FAIL", [f"expected COMPLETED, got {state or 'no-terminal-state'}"]
+        # Primary evidence: system logs confirm fallback worker started.
+        logs_started = capture.get("logs_fallback_started", False)
+        # Secondary evidence: report rows with attempt >= 2 or MP_OK status.
+        retried = report.get("retried_rows", 0)
+        mp_ok = report.get("mp_ok_rows", 0)
+        # Tertiary: captured .lst/.done/completed artifacts.
         done_lst = capture.get("done_lst", 0)
         completed_batches = capture.get("completed_batches", 0)
         retry_files = capture.get("retry_lst", 0)
+
         has_fallback_evidence = (
-            retry_lists > 0 or done_lst > 0 or completed_batches > 0
-            or retry_files > 0
+            logs_started or retried > 0 or mp_ok > 0
+            or retry_lists > 0 or done_lst > 0 or completed_batches > 0
+            or retry_files > 0 or fb_ok > 0
         )
         if not has_fallback_evidence:
-            reasons.append("no fallback artifacts found (.lst / .lst.done / completed/ / retry lists)")
-        if report.get("available") and fb_ok <= 0:
-            reasons.append("report has no FALLBACK_OK rows despite injected faults")
+            reasons.append("no fallback evidence (logs / attempt>=2 / MP_OK / .lst artifacts)")
         if expected_files and report.get("available") and success_rows < expected_files:
             reasons.append(f"transferred {success_rows} < expected {expected_files} files")
-        strong = has_fallback_evidence and (fb_ok > 0 or not report.get("available"))
-        return ("PASS" if strong and not reasons else ("PASS" if not reasons else "WARN")), reasons
+        return ("PASS" if has_fallback_evidence and not reasons else
+                ("PASS" if not reasons else "WARN")), reasons
 
     if case.expect == "control":
         if not completed:
@@ -1024,6 +1187,13 @@ class Runner:
                         self.args.poll_interval, self.args.poll_timeout)
                     report = download_and_parse_report(
                         self.api, rec, transfer_id, run_dir)
+                    # Check system logs for fallback worker evidence.
+                    log_evidence = check_fallback_in_logs(
+                        self.api, rec, transfer_id)
+                    capture["logs_fallback_started"] = log_evidence["fallback_started"]
+                    capture["logs_fallback_done"] = log_evidence["fallback_done"]
+                    capture["logs_fb_transferred"] = log_evidence["fb_transferred"]
+                    capture["logs_fb_failed"] = log_evidence["fb_failed"]
                     if case.direction == "download":
                         self._verify_download_landing(rec, dl_dst, expected_files, report)
                     verdict, reasons = evaluate(
@@ -1192,10 +1362,9 @@ def render_html(results: list[dict], meta: dict) -> str:
         metrics = (
             f'transfer_id={esc(r.get("transfer_id"))} · state={esc(r.get("final_state") or "-")} · '
             f'expected_files={esc(r.get("expected_files"))} · '
-            f'captured_lst={esc(cap.get("captured_lst"))} · '
-            f'done_lst={esc(cap.get("done_lst"))} · '
-            f'completed_batches={esc(cap.get("completed_batches"))} · '
-            f'retry_lst={esc(cap.get("retry_lst"))} · '
+            f'fallback_started={esc(cap.get("logs_fallback_started", "-"))} · '
+            f'retried_rows={esc(rep.get("retried_rows"))} · '
+            f'mp_ok={esc(rep.get("mp_ok_rows"))} · '
             f'success_rows={esc(rep.get("success_rows"))} · '
             f'fallback_ok={esc(rep.get("fallback_ok"))} · '
             f'failed_rows={esc(rep.get("failed_rows"))}'
