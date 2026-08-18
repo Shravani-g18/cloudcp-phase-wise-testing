@@ -57,6 +57,7 @@ import cli_perf_capture as perf_mod  # noqa: E402
 
 DEFAULT_DATAGEN = "/home/bryck/rperiyas/datagen"
 DEFAULT_PYTHON_BIN = "python3"
+DEFAULT_BRYCKCLOUD = "/opt/bryck/.venv/bryck/bin/bryckcloud"
 DEFAULT_BATCHMETA = "/opt/bryck/bryckapi/downloads/bcloud_batchmeta"
 DEFAULT_TRANSFER_LOGS = "/opt/bryck/bryckapi/downloads/cloud_transfer_logs"
 DEFAULT_BRYCK_CONFIG_JSON = "/etc/bryck/bryckcloud/config.json"
@@ -203,6 +204,9 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
                          help="S3 bucket+prefix root; each tier gets its own sub-prefix.")
 
     parser.add_argument("--datagen-bin", default=DEFAULT_DATAGEN)
+    parser.add_argument("--bryckcloud-bin", default=DEFAULT_BRYCKCLOUD,
+                         help="Path to the bryckcloud CLI, used to start transfers directly "
+                              "(bryckcloud transfer add aws --src <path> --dst <path>).")
     parser.add_argument("--python-bin", default=DEFAULT_PYTHON_BIN)
     parser.add_argument("--batchmeta-dir", default=DEFAULT_BATCHMETA)
     parser.add_argument("--transfer-logs-dir", default=DEFAULT_TRANSFER_LOGS)
@@ -706,6 +710,7 @@ def build_plan(args: argparse.Namespace, logger: logging.Logger) -> dict:
             "download_base": args.download_base,
             "bucket": args.bucket,
             "datagen_bin": args.datagen_bin,
+            "bryckcloud_bin": args.bryckcloud_bin,
             "python_bin": args.python_bin,
             "batchmeta_dir": args.batchmeta_dir,
             "transfer_logs_dir": args.transfer_logs_dir,
@@ -1030,20 +1035,52 @@ class Executor:
             return False, bucket
         return True, bucket
 
-    def initiate_transfer(self, result: TestCaseResult, mode: str) -> Optional[str]:
-        cmd = self.run_py(
-            result, "bryck_cloud_transfer_initiate.py",
-            ["--login", self.cfg["login"], "--params", self.cfg["params"], "--mode", mode],
-            timeout=self.cfg["wait_timeout"],
-        )
-        if self.args.dry_run:
-            return "DRYRUN-ID"
-        if not self.require_ok(result, cmd, "bryck_cloud_transfer_initiate.py"):
-            return None
-        transfer_id = parse_transfer_id(cmd.stdout + cmd.stderr)
-        if not transfer_id:
-            result.notes.append("initiate succeeded (rc=0) but no transfer_id could be parsed from its output")
-        return transfer_id
+    def initiate_transfer(self, result: TestCaseResult, mode: str, tier: str) -> Optional[str]:
+        """Start a transfer via the bryckcloud CLI directly
+        (bryckcloud transfer add aws --src <path> --dst <path>), not the API-based
+        bryck_cloud_transfer_initiate.py wrapper."""
+        local_src = f"{self.cfg['output_base']}/{tier}"
+        s3_path = f"{self.cfg['bucket']}/{tier}"
+        local_dst = f"{self.cfg['download_base']}/{tier}"
+
+        def run_one(src: str, dst: str) -> Optional[str]:
+            batchmeta_dir = pathlib.Path(self.cfg["batchmeta_dir"])
+            transfer_logs_dir = pathlib.Path(self.cfg["transfer_logs_dir"])
+            before_ids = set() if self.args.dry_run else base.collect_transfer_ids(batchmeta_dir, transfer_logs_dir)
+            cmd = run_argv(
+                "bryckcloud transfer add aws",
+                [self.cfg["bryckcloud_bin"], "transfer", "add", "aws", "--src", src, "--dst", dst],
+                self.logger, self.args.dry_run, self.redact, timeout=self.cfg["wait_timeout"],
+            )
+            result.commands.append(cmd.as_dict())
+            if self.args.dry_run:
+                return "DRYRUN-ID"
+            if not self.require_ok(result, cmd, "bryckcloud transfer add aws"):
+                return None
+            transfer_id = base.parse_transfer_id_from_output((cmd.stdout or "") + (cmd.stderr or ""))
+            if transfer_id is None:
+                try:
+                    transfer_id = base.detect_transfer_id(
+                        argparse.Namespace(transfer_id=None, poll_interval=self.cfg["poll_interval"]),
+                        before_ids, "", batchmeta_dir, transfer_logs_dir,
+                    )
+                except RuntimeError as exc:
+                    result.notes.append(f"could not detect transfer id: {exc}")
+                    return None
+            return str(transfer_id)
+
+        if mode == "upload":
+            return run_one(local_src, s3_path)
+        if mode == "download":
+            return run_one(s3_path, local_dst)
+        # mode == "both": start the upload then the download; the upload's id
+        # is treated as primary for polling/pause/resume/cancel, the download's
+        # id is recorded in notes for traceability.
+        upload_id = run_one(local_src, s3_path)
+        download_id = run_one(s3_path, local_dst)
+        if download_id:
+            result.notes.append(f"download_transfer_id={download_id}")
+        return upload_id or download_id
 
     def poll_until_terminal(self, result: TestCaseResult, transfer_id: str) -> str:
         if self.args.dry_run:
@@ -1138,7 +1175,7 @@ class Executor:
 
             perf_collector = self._start_perf(tc["id"])
 
-            transfer_id = self.initiate_transfer(result, mode)
+            transfer_id = self.initiate_transfer(result, mode, tier)
             if not transfer_id:
                 result.status = "BLOCKED"
                 result.notes.append("could not determine transfer_id from initiate output")
@@ -1196,7 +1233,7 @@ class Executor:
 
             perf_collector = self._start_perf(tc["id"])
 
-            transfer_id = self.initiate_transfer(result, "both")
+            transfer_id = self.initiate_transfer(result, "both", tier)
             if not transfer_id:
                 result.status = "BLOCKED"
                 result.notes.append("could not start transfer for lifecycle test")
@@ -1228,7 +1265,7 @@ class Executor:
                     matched, state = self.wait_for_transfer_state(result, transfer_id, ["CANCELLED"], action_timeout) if step_ok else (False, "SKIPPED")
                     sub.update(command_ok=step_ok, expected="CANCELLED", observed=state, status="PASS" if step_ok and matched else "FAIL")
                 elif action == "retransfer":
-                    new_id = self.initiate_transfer(result, "both")
+                    new_id = self.initiate_transfer(result, "both", tier)
                     sub["new_transfer_id"] = new_id
                     sub.update(command_ok=bool(new_id), expected="new transfer_id", observed=new_id, status="PASS" if new_id else "FAIL")
                     if new_id:
@@ -1303,7 +1340,7 @@ class Executor:
 
             perf_collector = self._start_perf(tc["id"])
 
-            transfer_id = self.initiate_transfer(result, "both")
+            transfer_id = self.initiate_transfer(result, "both", tier)
             if not transfer_id:
                 result.status = "BLOCKED"
                 result.notes.append("could not start transfer for service-restart test")
@@ -1360,7 +1397,7 @@ class Executor:
 
             perf_collector = self._start_perf(tc["id"])
 
-            transfer_id = self.initiate_transfer(result, "upload")
+            transfer_id = self.initiate_transfer(result, "upload", tier)
             if not transfer_id:
                 result.status = "BLOCKED"
                 result.notes.append("could not determine transfer_id")

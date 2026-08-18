@@ -1,0 +1,32 @@
+version: 1
+mode: flat
+root: /bryck/cloudcp_fallback/special_char_names
+threads: 4
+seed: 42
+
+# ASCII special characters in names: spaces, parentheses, ampersand, brackets.
+# Stresses shell-quoting and object-key escaping without Unicode.
+content:
+  type: random
+  buffer_size: 4MB
+
+naming:
+  charset: ascii
+  alphabet: [lower, upper, digit]
+  special_chars: " ()[]&$#@!+=,-"
+  length: 14
+
+flat:
+  num_files: 120
+
+size:
+  type: range
+  min: 1KB
+  max: 256KB
+  distribution: uniform
+
+extensions:
+  - ext: .dat
+    weight: 50
+  - ext: .txt
+    weight: 50
