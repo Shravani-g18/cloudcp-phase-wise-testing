@@ -114,35 +114,40 @@ def parse_args(argv: Optional[list] = None) -> argparse.Namespace:
     return p.parse_args(argv)
 
 
-def ensure_mounted(args: argparse.Namespace, redact) -> str:
-    state, _cmd = ccr.get_bryck_state(
+def ensure_mounted(args: argparse.Namespace, redact, tcr: ccr.TestCaseResult) -> str:
+    state, cmd = ccr.get_bryck_state(
         argparse.Namespace(login=args.login, dry_run=args.dry_run, python_bin=args.python_bin), LOG, redact)
+    tcr.commands.append(cmd.as_dict())
     if args.dry_run or "mount" in state.lower():
         return state
     LOG.info("Bryck not mounted (state=%r); mounting before dataset generation/transfer", state)
     mount_cmd = ccr.run_py_script(
         "bryck_mount.py", ["--login", args.login, "--params", args.format_mount_params],
         LOG, args.dry_run, redact, args.python_bin)
+    tcr.commands.append(mount_cmd.as_dict())
     if mount_cmd.returncode != 0:
         LOG.warning("bryck_mount.py failed (rc=%s): %s", mount_cmd.returncode, mount_cmd.stderr or mount_cmd.stdout)
         return state
     deadline = time.time() + args.action_timeout
     while time.time() < deadline:
-        state, _cmd = ccr.get_bryck_state(
+        state, cmd = ccr.get_bryck_state(
             argparse.Namespace(login=args.login, dry_run=args.dry_run, python_bin=args.python_bin), LOG, redact)
+        tcr.commands.append(cmd.as_dict())
         if "mount" in state.lower():
             break
         time.sleep(args.poll_interval)
     return state
 
 
-def configure_cloud(args: argparse.Namespace, base_cloud_ops: dict, tier: str, redact) -> str:
+def configure_cloud(args: argparse.Namespace, base_cloud_ops: dict, tier: str, redact,
+                    tcr: ccr.TestCaseResult) -> str:
     """Deconfigure any stale cloud config, rewrite cloud_ops.json for this
     dataset/tier, then configure + verify. Mirrors Executor.configure_cloud()."""
     cloud_type = str(base_cloud_ops.get("cloud_type", "aws"))
     deconfigure_cmd = ccr.run_py_script(
         "bryck_cloud_deconfigure.py", ["--login", args.login, "--cloud-type", cloud_type],
         LOG, args.dry_run, redact, args.python_bin)
+    tcr.commands.append(deconfigure_cmd.as_dict())
     if not args.dry_run and deconfigure_cmd.returncode != 0:
         LOG.info("bryck_cloud_deconfigure.py rc=%s (ignored, likely nothing configured yet)",
                  deconfigure_cmd.returncode)
@@ -158,18 +163,21 @@ def configure_cloud(args: argparse.Namespace, base_cloud_ops: dict, tier: str, r
     configure_cmd = ccr.run_py_script(
         "bryck_cloud_configure.py", ["--login", args.login, "--params", args.params],
         LOG, args.dry_run, redact, args.python_bin)
+    tcr.commands.append(configure_cmd.as_dict())
     if not args.dry_run and configure_cmd.returncode != 0:
         raise RuntimeError(f"bryck_cloud_configure.py failed (rc={configure_cmd.returncode}): "
                             f"{configure_cmd.stderr or configure_cmd.stdout}")
     show_cmd = ccr.run_py_script(
         "bryck_cloud_show.py", ["--login", args.login], LOG, args.dry_run, redact, args.python_bin)
+    tcr.commands.append(show_cmd.as_dict())
     if not args.dry_run and show_cmd.returncode != 0:
         raise RuntimeError(f"bryck_cloud_show.py failed (rc={show_cmd.returncode}): "
                             f"{show_cmd.stderr or show_cmd.stdout}")
     return cfg["cloud_bucket"]
 
 
-def initiate_transfer_cli(args: argparse.Namespace, src: str, dst: str, redact) -> Optional[str]:
+def initiate_transfer_cli(args: argparse.Namespace, src: str, dst: str, redact,
+                         tcr: ccr.TestCaseResult) -> Optional[str]:
     """`/opt/bryck/.venv/bryck/bin/bryckcloud transfer add aws --src <src> --dst <dst>`
     -- same CLI adapter cloud_cli_runner.py's --cli transfer method uses."""
     batchmeta_dir = pathlib.Path(args.batchmeta_dir)
@@ -180,6 +188,7 @@ def initiate_transfer_cli(args: argparse.Namespace, src: str, dst: str, redact) 
         [args.bryckcloud_bin, "transfer", "add", "aws", "--src", src, "--dst", dst],
         LOG, args.dry_run, redact, timeout=args.wait_timeout,
     )
+    tcr.commands.append(cmd.as_dict())
     if args.dry_run:
         return "DRYRUN-ID"
     if cmd.returncode != 0:
@@ -194,7 +203,8 @@ def initiate_transfer_cli(args: argparse.Namespace, src: str, dst: str, redact) 
 
 
 def poll_until_terminal(args: argparse.Namespace, transfer_id: str,
-                        active_journal_raw: Optional[pathlib.Path], redact) -> str:
+                        active_journal_raw: Optional[pathlib.Path], redact,
+                        tcr: ccr.TestCaseResult) -> str:
     """Poll to a terminal state via bryck_cloud_transfer_status.py, falling back
     -- in order -- to the live journal_raw.log tail, transfer_summary.txt on
     disk, and a bounded journalctl re-query, exactly like cloud_cli_runner.py's
@@ -206,7 +216,8 @@ def poll_until_terminal(args: argparse.Namespace, transfer_id: str,
     state = "UNKNOWN"
     ns = argparse.Namespace(login=args.login, dry_run=args.dry_run, python_bin=args.python_bin)
     while time.time() < deadline:
-        state, _cmd = ccr.get_transfer_status(ns, transfer_id, LOG, redact)
+        state, cmd = ccr.get_transfer_status(ns, transfer_id, LOG, redact)
+        tcr.commands.append(cmd.as_dict())
         if state == "UNKNOWN":
             if active_journal_raw is not None:
                 live = ccr.read_live_journal_transfer_status(active_journal_raw, transfer_id)
@@ -227,9 +238,10 @@ def poll_until_terminal(args: argparse.Namespace, transfer_id: str,
     return state or "UNKNOWN"
 
 
-def cleanup(args: argparse.Namespace, tier: str, redact) -> None:
+def cleanup(args: argparse.Namespace, tier: str, redact, tcr: ccr.TestCaseResult) -> None:
     if args.dry_run or args.keep:
         LOG.info("cleanup skipped (dry-run or --keep)")
+        tcr.notes.append("cleanup skipped (dry-run or --keep)")
         return
     for base_dir in (args.output_base, args.download_base):
         target = pathlib.Path(base_dir) / tier
@@ -239,13 +251,15 @@ def cleanup(args: argparse.Namespace, tier: str, redact) -> None:
                 shutil.rmtree(target)
             except OSError as exc:
                 LOG.warning("cleanup: could not remove %s: %s", target, exc)
+                tcr.notes.append(f"cleanup: could not remove {target}: {exc}")
     bucket_prefix = f"{args.bucket}/{tier}"
     argv = [args.aws_cli, "s3", "rm", bucket_prefix, "--recursive"]
     if args.aws_endpoint_url:
         argv += ["--endpoint-url", args.aws_endpoint_url]
     if not args.aws_verify_ssl:
         argv += ["--no-verify-ssl"]
-    ccr.run_argv("aws s3 cleanup", argv, LOG, args.dry_run, redact)
+    cmd = ccr.run_argv("aws s3 cleanup", argv, LOG, args.dry_run, redact)
+    tcr.commands.append(cmd.as_dict())
 
 
 def main(argv: Optional[list] = None) -> int:
@@ -266,7 +280,14 @@ def main(argv: Optional[list] = None) -> int:
     base_cloud_ops = cloud_ops_cfg or {}
     redact = ccr.build_redactor(login_cfg, base_cloud_ops)
 
-    state = "DRYRUN" if args.dry_run else ensure_mounted(args, redact)
+    backup_path = run_dir / "cloud_ops.json.bak"
+    if not backup_path.exists():
+        backup_path.write_text(json.dumps(base_cloud_ops, indent=2), encoding="utf-8")
+
+    tcr = ccr.TestCaseResult(
+        test_id=run_id, kind=args.mode, description=f"transfer-only {args.mode} of {args.dataset}")
+
+    state = "DRYRUN" if args.dry_run else ensure_mounted(args, redact, tcr)
     if not args.skip_mount_check and not args.dry_run and "mount" not in state.lower():
         LOG.error("Bryck did not reach Mounted state (last observed=%r); aborting.", state)
         return 4
@@ -279,7 +300,7 @@ def main(argv: Optional[list] = None) -> int:
     dataset_root, gen_summary = ccr.generate_tier_dataset(tier, args.output_base, ns, LOG, args.dataset)
     LOG.info("Dataset materialized under %s (%s)", dataset_root, gen_summary)
 
-    bucket = configure_cloud(args, base_cloud_ops, tier, redact)
+    bucket = configure_cloud(args, base_cloud_ops, tier, redact, tcr)
     LOG.info("Cloud configured: bucket=%s", bucket)
 
     perf_cfg = {
@@ -303,34 +324,37 @@ def main(argv: Optional[list] = None) -> int:
         local_dst = f"{args.download_base}/{tier}"
 
         if args.mode == "upload":
-            transfer_id = initiate_transfer_cli(args, local_src, s3_path, redact)
+            transfer_id = initiate_transfer_cli(args, local_src, s3_path, redact, tcr)
         elif args.mode == "download":
             # Standalone download needs source data in the bucket first --
             # seed it with an untracked upload, matching cloud_cli_runner.py's
             # _seed_upload_for_download().
-            seed_id = initiate_transfer_cli(args, local_src, s3_path, redact)
+            seed_id = initiate_transfer_cli(args, local_src, s3_path, redact, tcr)
             if seed_id and not args.dry_run:
-                seed_state = poll_until_terminal(args, seed_id, active_journal_raw, redact)
+                seed_state = poll_until_terminal(args, seed_id, active_journal_raw, redact, tcr)
                 LOG.info("seed upload (transfer %s) finished with state=%s", seed_id, seed_state)
+                tcr.notes.append(f"seed_upload_transfer_id={seed_id} seed_upload_final_state={seed_state}")
                 if seed_state != TERMINAL_SUCCESS:
                     raise RuntimeError(f"seed upload did not complete (state={seed_state}); "
                                        f"cannot proceed with download")
-            transfer_id = initiate_transfer_cli(args, s3_path, local_dst, redact)
+            transfer_id = initiate_transfer_cli(args, s3_path, local_dst, redact, tcr)
         else:  # both
-            upload_id = initiate_transfer_cli(args, local_src, s3_path, redact)
+            upload_id = initiate_transfer_cli(args, local_src, s3_path, redact, tcr)
             if upload_id and not args.dry_run:
-                upload_state = poll_until_terminal(args, upload_id, active_journal_raw, redact)
+                upload_state = poll_until_terminal(args, upload_id, active_journal_raw, redact, tcr)
                 LOG.info("upload (transfer %s) finished with state=%s", upload_id, upload_state)
-            transfer_id = initiate_transfer_cli(args, s3_path, local_dst, redact)
+                tcr.notes.append(f"upload_transfer_id={upload_id} upload_final_state={upload_state}")
+            transfer_id = initiate_transfer_cli(args, s3_path, local_dst, redact, tcr)
 
         if not transfer_id:
             raise RuntimeError("transfer initiate did not return a transfer_id")
 
-        final_state = poll_until_terminal(args, transfer_id, active_journal_raw, redact)
+        final_state = poll_until_terminal(args, transfer_id, active_journal_raw, redact, tcr)
         LOG.info("transfer %s finished with state=%s", transfer_id, final_state)
     except RuntimeError as exc:
         error = str(exc)
         LOG.error("transfer failed: %s", error)
+        tcr.notes.append(f"ERROR: {error}")
 
     perf_data = None
     if collector is not None:
@@ -339,8 +363,15 @@ def main(argv: Optional[list] = None) -> int:
             description=f"transfer-only {args.mode} of {args.dataset}", gen_summary=gen_summary,
         )
         LOG.info("Perf report: %s", perf_data.get("html_report"))
+        tcr.notes.append(f"perf_report={perf_data.get('html_report')}")
 
-    cleanup(args, tier, redact)
+    cleanup(args, tier, redact, tcr)
+
+    tcr.status = "PASS" if (args.dry_run or (error is None and final_state == TERMINAL_SUCCESS)) else \
+        ("BLOCKED" if error else "FAIL")
+    tcr.expected = "Transfer reaches COMPLETED"
+    tcr.actual = f"final_state={final_state}" + (f", error={error}" if error else "")
+    tcr.notes.append(f"transfer_id={transfer_id} final_state={final_state}")
 
     result = {
         "run_id": run_id, "dataset": args.dataset, "tier": tier, "mode": args.mode,
@@ -350,11 +381,22 @@ def main(argv: Optional[list] = None) -> int:
     }
     (run_dir / "report.json").write_text(json.dumps(result, indent=2, default=str), encoding="utf-8")
 
+    plan = {"run_id": run_id, "test_cases": [
+        {"id": run_id, "dataset": args.dataset, "mode": args.mode},
+    ]}
+    commands_log = ccr.write_combined_commands_log(run_dir, [tcr])
+    ccr.write_summary(run_dir, plan, [tcr])
+
     print("\n" + "=" * 60)
     print(f"Transfer {args.mode} of {args.dataset} -> {final_state}"
           + (f" (transfer_id={transfer_id})" if transfer_id else ""))
     print(f"Results directory : {run_dir}")
     print(f"  report.json      : {run_dir / 'report.json'}")
+    print(f"  commands.log     : {commands_log}")
+    print(f"  summary.json     : {run_dir / 'summary.json'}")
+    print(f"  summary.md       : {run_dir / 'summary.md'}")
+    print(f"  summary.html     : {run_dir / 'summary.html'}")
+    print(f"  cloud_ops.json.bak: {backup_path}")
     if perf_data is not None:
         print(f"  perf HTML report : {perf_data.get('html_report')}")
         print(f"  perf JSON data   : {perf_data.get('json_data')}")
