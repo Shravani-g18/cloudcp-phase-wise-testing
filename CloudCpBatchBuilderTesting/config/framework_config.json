@@ -1,0 +1,35 @@
+{
+  "hosts": {
+    "source_host": "192.168.0.71",
+    "dest_host": "192.168.6.35",
+    "username": "bryck",
+    "password": ""
+  },
+  "paths": {
+    "source_dir": "~/dataset-spec-files",
+    "dest_dir": "/opt/bryck/.venv/bryck/lib/python3.10/site-packages/bryckcloud/lib/cloud",
+    "dest_csv": "bryck_file_list.csv",
+    "output_dir": "output",
+    "batchbuilder_python": "/opt/bryck/.venv/bryck/bin/python3"
+  },
+  "runtime": {
+    "cleanup_output": true,
+    "cleanup_remote": true,
+    "temp_sample_interval": 0.5,
+    "remote_command_timeout_sec": 1800,
+    "per_dataset_timeout_sec": 7200,
+    "dataset_pattern": "*.yaml",
+    "dataset_mode": "all",
+    "random_count": 10,
+    "max_datasets": 0
+  },
+  "validation": {
+    "overflow_tier": "large",
+    "tiers": [
+      { "name": "zero", "max_bytes": 1 },
+      { "name": "tiny", "max_bytes": 1048576 },
+      { "name": "small", "max_bytes": 67108864 },
+      { "name": "medium", "max_bytes": 1073741824 }
+    ]
+  }
+}
