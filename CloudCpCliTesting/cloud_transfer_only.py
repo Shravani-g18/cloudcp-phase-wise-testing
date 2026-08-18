@@ -262,6 +262,34 @@ def cleanup(args: argparse.Namespace, tier: str, redact, tcr: ccr.TestCaseResult
     tcr.commands.append(cmd.as_dict())
 
 
+def find_transfer_report_csv(transfer_logs_dir: str, transfer_id: str, extract_dir: pathlib.Path) -> Optional[pathlib.Path]:
+    """Locate transfer_report_<id>.csv, written by the broker alongside the
+    transfer's own logs. The broker archives + deletes the plain
+    cloud_transfer_<id>/ directory into cloud_transfer_<id>.zip shortly after
+    completion (sometimes within seconds for small/fast transfers) -- so fall
+    back to extracting the CSV straight out of that zip if the directory is
+    already gone."""
+    base = pathlib.Path(transfer_logs_dir)
+    candidate = base / f"cloud_transfer_{transfer_id}" / f"transfer_report_{transfer_id}.csv"
+    if candidate.is_file():
+        return candidate
+    zip_path = base / f"cloud_transfer_{transfer_id}.zip"
+    if not zip_path.is_file():
+        return None
+    import zipfile
+    try:
+        with zipfile.ZipFile(zip_path) as zf:
+            member = next(
+                (n for n in zf.namelist() if n.endswith(f"transfer_report_{transfer_id}.csv")), None)
+            if member is None:
+                return None
+            extract_dir.mkdir(parents=True, exist_ok=True)
+            zf.extract(member, extract_dir)
+            return extract_dir / member
+    except (zipfile.BadZipFile, OSError):
+        return None
+
+
 def main(argv: Optional[list] = None) -> int:
     args = parse_args(argv)
     setup_logging(args.verbose)
@@ -360,15 +388,14 @@ def main(argv: Optional[list] = None) -> int:
     if collector is not None:
         # The broker writes this CSV itself alongside the transfer's own logs
         # (no download needed) -- feeds the completion-histogram/per-status
-        # sections of the perf report, same lookup cloud_cli_runner.py uses.
+        # sections of the perf report. Falls back to extracting it from the
+        # broker's own cloud_transfer_<id>.zip archive if the plain directory
+        # was already cleaned up by the time we get here.
         csv_path = None
         if not args.dry_run and transfer_id and transfer_id != "DRYRUN-ID":
-            candidate = (pathlib.Path(args.transfer_logs_dir)
-                         / f"cloud_transfer_{transfer_id}" / f"transfer_report_{transfer_id}.csv")
-            if candidate.is_file():
-                csv_path = candidate
-            else:
-                tcr.notes.append(f"no transfer_report_{transfer_id}.csv found at {candidate} "
+            csv_path = find_transfer_report_csv(args.transfer_logs_dir, transfer_id, run_dir / "perf")
+            if csv_path is None:
+                tcr.notes.append(f"no transfer_report_{transfer_id}.csv found (plain dir or .zip) "
                                   f"-- completion histogram/per-status breakdown will be empty")
         perf_data = collector.finish(
             transfer_id or "unknown", csv_path=csv_path, test_id=run_id, tier=tier, mode=args.mode,
