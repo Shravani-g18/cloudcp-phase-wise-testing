@@ -218,6 +218,15 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--bryckcloud-bin", default=DEFAULT_BRYCKCLOUD,
                          help="Path to the bryckcloud CLI, used to start transfers directly "
                               "(bryckcloud transfer add aws --src <path> --dst <path>).")
+    method_group = parser.add_mutually_exclusive_group()
+    method_group.add_argument("--cli", dest="transfer_method", action="store_const", const="cli",
+                               help="Initiate transfers via the bryckcloud CLI (default): "
+                                    "bryckcloud transfer add aws --src <path> --dst <path>.")
+    method_group.add_argument("--restapi", dest="transfer_method", action="store_const", const="restapi",
+                               help="Initiate transfers via the REST-API wrapper instead: "
+                                    "bryck_cloud_transfer_initiate.py --mode {upload,download,both}. "
+                                    "Mutually exclusive with --cli.")
+    parser.set_defaults(transfer_method="cli")
     parser.add_argument("--python-bin", default=DEFAULT_PYTHON_BIN)
     parser.add_argument("--batchmeta-dir", default=DEFAULT_BATCHMETA)
     parser.add_argument("--transfer-logs-dir", default=DEFAULT_TRANSFER_LOGS)
@@ -785,6 +794,7 @@ def build_plan(args: argparse.Namespace, logger: logging.Logger) -> dict:
             "bucket": args.bucket,
             "datagen_bin": args.datagen_bin,
             "bryckcloud_bin": args.bryckcloud_bin,
+            "transfer_method": args.transfer_method,
             "python_bin": args.python_bin,
             "batchmeta_dir": args.batchmeta_dir,
             "transfer_logs_dir": args.transfer_logs_dir,
@@ -831,6 +841,7 @@ def render_confirmation(plan: dict) -> str:
         f"Bryck state   : {plan['bryck_state_before']}",
         f"Dataset(s)    : {dataset_line}",
         f"Transfer Mode : {modes_line}",
+        f"Init. Method  : {'REST API (bryck_cloud_transfer_initiate.py)' if plan['config'].get('transfer_method') == 'restapi' else 'CLI (bryckcloud transfer add)'}",
         f"Cloud         : aws",
         f"Source base   : {plan['config']['output_base']}",
         f"Destination   : {plan['config']['bucket']}",
@@ -1169,9 +1180,34 @@ class Executor:
 
     def initiate_transfer(self, result: TestCaseResult, mode: str, tier: str,
                           dataset_root: Optional[pathlib.Path] = None) -> Optional[str]:
-        """Start a transfer via the bryckcloud CLI directly
-        (bryckcloud transfer add aws --src <path> --dst <path>), not the API-based
-        bryck_cloud_transfer_initiate.py wrapper.
+        """Dispatch to the selected transfer-initiation adapter (--cli / --restapi).
+        Only this step differs between adapters -- generation, monitoring,
+        polling, validation, and cleanup are identical either way."""
+        if self.cfg.get("transfer_method", "cli") == "restapi":
+            return self._initiate_transfer_restapi(result, mode)
+        return self._initiate_transfer_cli(result, mode, tier, dataset_root)
+
+    def _initiate_transfer_restapi(self, result: TestCaseResult, mode: str) -> Optional[str]:
+        """REST-API adapter: bryck_cloud_transfer_initiate.py --mode {upload,download,both}.
+        Reads bryck_src/cloud_bucket/bryck_dst from cloud_ops.json, already
+        rewritten by configure_cloud()/write_cloud_ops() for this dataset."""
+        cmd = self.run_py(
+            result, "bryck_cloud_transfer_initiate.py",
+            ["--login", self.cfg["login"], "--params", self.cfg["params"], "--mode", mode],
+            timeout=self.cfg["wait_timeout"],
+        )
+        if self.args.dry_run:
+            return "DRYRUN-ID"
+        if not self.require_ok(result, cmd, "bryck_cloud_transfer_initiate.py"):
+            return None
+        transfer_id = parse_transfer_id(cmd.stdout + cmd.stderr)
+        if not transfer_id:
+            result.notes.append("initiate succeeded (rc=0) but no transfer_id could be parsed from its output")
+        return transfer_id
+
+    def _initiate_transfer_cli(self, result: TestCaseResult, mode: str, tier: str,
+                               dataset_root: Optional[pathlib.Path] = None) -> Optional[str]:
+        """CLI adapter: bryckcloud transfer add aws --src <path> --dst <path>.
 
         `dataset_root` (returned by generate_tier_dataset/generate_dataset) is the
         actual materialized dataset path and must be used for --src -- it does not
@@ -1287,6 +1323,23 @@ class Executor:
             test_id=result.test_id, tier=tier, mode=mode,
             description=result.description, gen_summary=gen_summary)
         result.notes.append(f"perf_report={perf_data.get('html_report', '')}")
+        if not self.args.dry_run:
+            # Explicit surfacing (not just a cosmetic HTML placeholder) when a
+            # log collector produced nothing -- distinguishes "monitor failed
+            # to start/capture" from "monitor worked but this transfer had no
+            # matching PERF/Pending lines".
+            journal_raw = collector.perf_dir / "journal_raw.log"
+            if not journal_raw.is_file() or journal_raw.stat().st_size == 0:
+                result.notes.append(
+                    "LOG COLLECTION FAILURE: journalctl captured nothing (journal_raw.log is empty) -- "
+                    "check sudo permissions / journal_tag on the Bryck host."
+                )
+            cloudcp_raw = collector.perf_dir / "cloudcplogs.txt"
+            if not cloudcp_raw.is_file() or cloudcp_raw.stat().st_size == 0:
+                result.notes.append(
+                    "LOG COLLECTION FAILURE: cloudcp.log tail captured nothing (cloudcplogs.txt is empty) -- "
+                    "check --cloudcp-log path / sudo permissions on the Bryck host."
+                )
         return perf_data
 
     # -- test case kinds -------------------------------------------------
