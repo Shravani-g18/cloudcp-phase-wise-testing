@@ -234,6 +234,10 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--report-save-dir", default="/home/bryck/shravani",
                          help="Bryck-host directory where downloaded transfer/diagnostic reports are saved "
                               "(one subfolder per test case). Created if missing.")
+    parser.add_argument("--diagnostic-report", action="store_true", default=True)
+    parser.add_argument("--no-diagnostic-report", dest="diagnostic_report", action="store_false",
+                         help="Skip the final bryck_report.py diagnostic dump at the end of the run "
+                              "(useful while it's flaky/slow on the real host).")
     parser.add_argument("--run-id", default=None, help="Override the generated RUN_ID.")
     parser.add_argument("--keep", "--no-cleanup", dest="keep", action="store_true",
                          help="Skip auto-cleanup of datasets/cloud objects (debugging).")
@@ -792,6 +796,7 @@ def build_plan(args: argparse.Namespace, logger: logging.Logger) -> dict:
             "aws_cli": args.aws_cli,
             "results_dir": os.path.abspath(args.results_dir),
             "report_save_dir": args.report_save_dir,
+            "diagnostic_report": args.diagnostic_report,
             "journal_tag": args.journal_tag,
             "cloudcp_log": args.cloudcp_log,
             "capture_lead": args.capture_lead,
@@ -956,6 +961,9 @@ class Executor:
     def download_final_diagnostic_report(self) -> None:
         """Best-effort bryck_report.py diagnostic dump for the whole run, saved under
         --report-save-dir alongside the per-case transfer reports."""
+        if not self.cfg.get("diagnostic_report", True):
+            self.logger.info("Skipping final diagnostic report (--no-diagnostic-report).")
+            return
         out_dir = pathlib.Path(self.cfg["report_save_dir"]) / self.plan["run_id"] / "_final_diagnostic_report"
         if not self.args.dry_run:
             out_dir.mkdir(parents=True, exist_ok=True)
