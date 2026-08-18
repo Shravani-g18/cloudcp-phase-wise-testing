@@ -54,6 +54,7 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(BRYCK_CLI_DIR))
 
 import cloudcpclitesting as base  # noqa: E402  (dataset/report helpers reuse)
+import cli_perf_capture as perf_mod  # noqa: E402
 
 DEFAULT_DATAGEN = "/home/bryck/rperiyas/datagen"
 DEFAULT_PYTHON_BIN = "python3"
@@ -220,6 +221,18 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--keep", "--no-cleanup", dest="keep", action="store_true",
                          help="Skip auto-cleanup of datasets/cloud objects (debugging).")
     parser.add_argument("--aws-cli", default="aws", help="aws CLI binary used for S3 cleanup.")
+
+    parser.add_argument("--journal-tag", default="bryckcloud",
+                         help="journalctl syslog tag for broker log capture (default: bryckcloud).")
+    parser.add_argument("--cloudcp-log",
+                         default="/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloudcp.log",
+                         help="Path to cloudcp.log for per-batch throughput capture.")
+    parser.add_argument("--capture-lead", type=float, default=3,
+                         help="Seconds to settle the journalctl follower before the transfer (default: 3).")
+    parser.add_argument("--capture-drain", type=float, default=6,
+                         help="Seconds to keep capturing after the transfer completes (default: 6).")
+    parser.add_argument("--no-perf", dest="perf_capture", action="store_false", default=True,
+                         help="Disable journal/cloudcp.log performance capture and HTML reports.")
 
     parser.add_argument("--yes", action="store_true", help="Auto-confirm the plan gate (§13) non-interactively.")
     parser.add_argument("--dry-run", action="store_true",
@@ -740,6 +753,11 @@ def build_plan(args: argparse.Namespace, logger: logging.Logger) -> dict:
             "aws_cli": args.aws_cli,
             "results_dir": os.path.abspath(args.results_dir),
             "report_save_dir": args.report_save_dir,
+            "journal_tag": args.journal_tag,
+            "cloudcp_log": args.cloudcp_log,
+            "capture_lead": args.capture_lead,
+            "capture_drain": args.capture_drain,
+            "perf_capture": args.perf_capture,
         },
         "dataset_catalog": args.dataset_catalog,
         "tiers": tiers,
@@ -1106,11 +1124,43 @@ class Executor:
         with open(self.cfg["params"], "w", encoding="utf-8") as handle:
             json.dump(original, handle, indent=2)
 
+    def _perf_enabled(self) -> bool:
+        return self.cfg.get("perf_capture", True) and os.name == "posix"
+
+    def _start_perf(self, test_id: str) -> Optional[perf_mod.TransferPerfCollector]:
+        if not self._perf_enabled():
+            return None
+        collector = perf_mod.TransferPerfCollector(
+            self.case_dir(test_id), self.cfg, self.args.dry_run)
+        collector.start()
+        return collector
+
+    def _finish_perf(self, collector: Optional[perf_mod.TransferPerfCollector],
+                     result: TestCaseResult, transfer_id: str,
+                     tier: str = "", mode: str = "",
+                     gen_summary: Optional[dict] = None) -> Optional[dict]:
+        if collector is None:
+            return None
+        csv_path = None
+        if not self.args.dry_run and transfer_id and transfer_id != "DRYRUN-ID":
+            candidate = (pathlib.Path(self.cfg["transfer_logs_dir"])
+                         / f"cloud_transfer_{transfer_id}"
+                         / f"transfer_report_{transfer_id}.csv")
+            if candidate.is_file():
+                csv_path = candidate
+        perf_data = collector.finish(
+            transfer_id, csv_path=csv_path,
+            test_id=result.test_id, tier=tier, mode=mode,
+            description=result.description, gen_summary=gen_summary)
+        result.notes.append(f"perf_report={perf_data.get('html_report', '')}")
+        return perf_data
+
     # -- test case kinds -------------------------------------------------
 
     def run_transfer_case(self, tc: dict) -> TestCaseResult:
         result = TestCaseResult(tc["id"], "transfer", tc["description"])
         tier, mode = tc["tier"], tc["mode"]
+        perf_collector: Optional[perf_mod.TransferPerfCollector] = None
         try:
             if not self.ensure_mounted(result):
                 result.status = "BLOCKED"
@@ -1127,6 +1177,8 @@ class Executor:
                 result.notes.append("cloud configuration did not succeed; transfer not attempted")
                 return result
 
+            perf_collector = self._start_perf(tc["id"])
+
             transfer_id = self.initiate_transfer(result, mode)
             if not transfer_id:
                 result.status = "BLOCKED"
@@ -1135,6 +1187,10 @@ class Executor:
             result.notes.append(f"transfer_id={transfer_id}")
             final_state = self.poll_until_terminal(result, transfer_id)
             result.notes.append(f"final_state={final_state}")
+
+            self._finish_perf(perf_collector, result, transfer_id,
+                              tier=tier, mode=mode, gen_summary=gen_summary)
+            perf_collector = None
 
             report_dir = self.report_dir_for(tc["id"])
             self.run_py(
@@ -1166,6 +1222,7 @@ class Executor:
     def run_lifecycle_case(self, tc: dict) -> TestCaseResult:
         result = TestCaseResult(tc["id"], "lifecycle", tc["description"])
         tier = tc["tier"]
+        perf_collector: Optional[perf_mod.TransferPerfCollector] = None
         try:
             if not self.ensure_mounted(result):
                 result.status = "BLOCKED"
@@ -1177,6 +1234,8 @@ class Executor:
                 result.status = "BLOCKED"
                 result.notes.append("cloud configuration did not succeed; lifecycle test not attempted")
                 return result
+
+            perf_collector = self._start_perf(tc["id"])
 
             transfer_id = self.initiate_transfer(result, "both")
             if not transfer_id:
@@ -1258,6 +1317,8 @@ class Executor:
             # Best-effort recovery so subsequent test cases start clean.
             recovery_cmd = self.run_py(result, "bryck_mount.py", ["--login", self.cfg["login"], "--params", self.cfg["format_mount_params"]])
             self.require_ok(result, recovery_cmd, "post-lifecycle recovery mount")
+            self._finish_perf(perf_collector, result, transfer_id, tier=tier, mode="both")
+            perf_collector = None
             result.status = "FAIL" if any_failed else "PASS"
             self.cleanup_tier(result, tier)
         except Exception as exc:  # noqa: BLE001
@@ -1268,6 +1329,7 @@ class Executor:
     def run_service_case(self, tc: dict) -> TestCaseResult:
         result = TestCaseResult(tc["id"], "service", tc["description"])
         tier = tc["tier"]
+        perf_collector: Optional[perf_mod.TransferPerfCollector] = None
         try:
             if not self.ensure_mounted(result):
                 result.status = "BLOCKED"
@@ -1279,6 +1341,8 @@ class Executor:
                 result.status = "BLOCKED"
                 result.notes.append("cloud configuration did not succeed; service-restart test not attempted")
                 return result
+
+            perf_collector = self._start_perf(tc["id"])
 
             transfer_id = self.initiate_transfer(result, "both")
             if not transfer_id:
@@ -1304,6 +1368,8 @@ class Executor:
 
             final_state = self.poll_until_terminal(result, transfer_id)
             result.notes.append(f"before_restart={before_state} final_state={final_state}")
+            self._finish_perf(perf_collector, result, transfer_id, tier=tier, mode="both")
+            perf_collector = None
             result.status = "PASS" if final_state in TERMINAL_STATES else "FAIL"
             self.cleanup_tier(result, tier)
         except Exception as exc:  # noqa: BLE001
@@ -1315,6 +1381,7 @@ class Executor:
         result = TestCaseResult(tc["id"], "edge", tc["description"])
         dataset_id = tc["dataset"]
         tier = f"EDGE-{dataset_id}"
+        perf_collector: Optional[perf_mod.TransferPerfCollector] = None
         try:
             if not self.ensure_mounted(result):
                 result.status = "BLOCKED"
@@ -1332,6 +1399,8 @@ class Executor:
                 result.notes.append("cloud configuration did not succeed; edge case not attempted")
                 return result
 
+            perf_collector = self._start_perf(tc["id"])
+
             transfer_id = self.initiate_transfer(result, "upload")
             if not transfer_id:
                 result.status = "BLOCKED"
@@ -1339,6 +1408,9 @@ class Executor:
                 return result
             final_state = self.poll_until_terminal(result, transfer_id)
             result.notes.append(f"transfer_id={transfer_id} final_state={final_state}")
+            self._finish_perf(perf_collector, result, transfer_id,
+                              tier=tier, mode="upload", gen_summary=gen_summary)
+            perf_collector = None
 
             report_dir = self.report_dir_for(tc["id"])
             self.run_py(
@@ -1626,6 +1698,17 @@ def write_summary(run_dir: pathlib.Path, plan: dict, results: List[TestCaseResul
     def status_class(status: str) -> str:
         return {"PASS": "pass", "FAIL": "fail", "BLOCKED": "blocked"}.get(status, "")
 
+    def _perf_link(r: TestCaseResult) -> str:
+        for note in r.notes:
+            if note.startswith("perf_report=") and note != "perf_report=":
+                rel = note.split("=", 1)[1]
+                try:
+                    rel_path = pathlib.Path(rel).relative_to(run_dir)
+                except (ValueError, TypeError):
+                    rel_path = pathlib.Path(rel).name
+                return f"<a href='{rel_path}'>perf</a>"
+        return ""
+
     html_rows = "".join(
         f"<tr class='{status_class(r.status)}'>"
         f"<td><span class='badge {status_class(r.status)}'>{r.status}</span></td>"
@@ -1633,6 +1716,7 @@ def write_summary(run_dir: pathlib.Path, plan: dict, results: List[TestCaseResul
         f"<td>{tc_by_id.get(r.test_id, {}).get('dataset', '')}</td>"
         f"<td>{tc_by_id.get(r.test_id, {}).get('mode', '')}</td>"
         f"<td>{r.description}</td>"
+        f"<td>{_perf_link(r)}</td>"
         f"<td>{'; '.join(r.notes[:3])}</td></tr>"
         for r in results
     )
@@ -1653,6 +1737,7 @@ tr.blocked td {{ background: #fffbeb; }}
 .badge.pass {{ background: #dcfce7; color: #14532d; }}
 .badge.fail {{ background: #fee2e2; color: #7f1d1d; }}
 .badge.blocked {{ background: #fef3c7; color: #78350f; }}
+a {{ color: #2563eb; }}
 </style></head>
 <body>
 <h1>CloudCP CLI Run {plan['run_id']}</h1>
@@ -1663,7 +1748,7 @@ tr.blocked td {{ background: #fffbeb; }}
   <div><div class="value" style="color:#78350f">{counts.get('BLOCKED', 0)}</div>BLOCKED</div>
 </div>
 <table>
-<tr><th>Status</th><th>Test ID</th><th>Kind</th><th>Dataset</th><th>Mode</th><th>Description</th><th>Notes (first 3)</th></tr>
+<tr><th>Status</th><th>Test ID</th><th>Kind</th><th>Dataset</th><th>Mode</th><th>Description</th><th>Perf</th><th>Notes (first 3)</th></tr>
 {html_rows}
 </table>
 </body></html>"""
