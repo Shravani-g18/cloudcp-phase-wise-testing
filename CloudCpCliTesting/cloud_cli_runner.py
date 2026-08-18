@@ -900,9 +900,27 @@ class Executor:
             self.logger, self.args.dry_run, self.redact, self.cfg["python_bin"], timeout=900,
         )
         if not self.args.dry_run and cmd.returncode != 0:
-            self.logger.warning("Final diagnostic bryck_report.py failed (rc=%s); see %s", cmd.returncode, out_dir)
+            self.logger.warning(
+                "Final diagnostic bryck_report.py failed (rc=%s); %s will stay empty. "
+                "stderr: %.500s", cmd.returncode, out_dir, cmd.stderr or cmd.stdout,
+            )
         else:
             self.logger.info("Final diagnostic report saved under %s", out_dir)
+
+    def copy_logs_to_report_dir(self) -> None:
+        """Mirror every local commands.log/report.json/summary.* under
+        results/<RUN_ID>/ into --report-save-dir/<RUN_ID>/, alongside the
+        per-case transfer reports and the final diagnostic dump, so all logs
+        for a run live in one place on the Bryck host."""
+        if self.args.dry_run:
+            return
+        dest = pathlib.Path(self.cfg["report_save_dir"]) / self.plan["run_id"]
+        try:
+            dest.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(self.run_dir, dest, dirs_exist_ok=True)
+            self.logger.info("Copied run logs (commands.log/report.json/summary.*) to %s", dest)
+        except OSError as exc:
+            self.logger.warning("Could not copy run logs to %s: %s", dest, exc)
 
     def write_case_result(self, result: TestCaseResult) -> None:
         path = self.case_dir(result.test_id) / "report.json"
@@ -1791,6 +1809,11 @@ def _execute_confirmed_plan(args: argparse.Namespace, plan: dict, logger: loggin
         logger.warning("Ctrl+C received again during final diagnostic report download; skipping it.")
         interrupted = True
     write_summary(executor.run_dir, plan, results)
+    try:
+        executor.copy_logs_to_report_dir()
+    except KeyboardInterrupt:
+        logger.warning("Ctrl+C received again while copying logs to report-save-dir; skipping it.")
+        interrupted = True
     counts: Dict[str, int] = {}
     for r in results:
         counts[r.status] = counts.get(r.status, 0) + 1
@@ -1809,6 +1832,8 @@ def _execute_confirmed_plan(args: argparse.Namespace, plan: dict, logger: loggin
     print(f"Markdown summary: {md_report.resolve()}")
     print(f"HTML report: {html_report.resolve().as_uri()}")
     print(f"             ({html_report.resolve()})")
+    if not args.dry_run:
+        print(f"Logs + reports also copied to: {pathlib.Path(executor.cfg['report_save_dir']) / plan['run_id']}")
     if interrupted:
         return 130
     failed = sum(1 for r in results if r.status not in ("PASS",))
