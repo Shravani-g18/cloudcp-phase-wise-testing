@@ -1912,6 +1912,61 @@ def write_summary(run_dir: pathlib.Path, plan: dict, results: List[TestCaseResul
                 return f"<a href='{rel_path}'>perf</a>"
         return ""
 
+    def _perf_data_for(r: TestCaseResult) -> Optional[dict]:
+        """Load perf_data.json (written alongside perf_report.html) for one
+        test case, so its key numbers can be shown inline in the report."""
+        for note in r.notes:
+            if note.startswith("perf_report=") and note != "perf_report=":
+                html_path = pathlib.Path(note.split("=", 1)[1])
+                json_path = html_path.with_name("perf_data.json")
+                if json_path.is_file():
+                    try:
+                        return json.loads(json_path.read_text(encoding="utf-8"))
+                    except (OSError, json.JSONDecodeError):
+                        return None
+        return None
+
+    def _fmt_bytes(n: Any) -> str:
+        try:
+            n = float(n)
+        except (TypeError, ValueError):
+            return "-"
+        for unit in ("B", "KB", "MB", "GB", "TB"):
+            if n < 1024 or unit == "TB":
+                return f"{n:.1f} {unit}"
+            n /= 1024
+        return f"{n:.1f} TB"
+
+    def _perf_section_for(r: TestCaseResult) -> str:
+        payload = _perf_data_for(r)
+        if not payload:
+            return ""
+        meta = payload.get("meta", {})
+        csv_summary = payload.get("csv_summary", {})
+        log_counts = payload.get("log_counts", {})
+        rel_html = ""
+        for note in r.notes:
+            if note.startswith("perf_report=") and note != "perf_report=":
+                try:
+                    rel_html = str(pathlib.Path(note.split("=", 1)[1]).relative_to(run_dir))
+                except (ValueError, TypeError):
+                    rel_html = pathlib.Path(note.split("=", 1)[1]).name
+        return f"""
+<div class="perf-card">
+  <h3>{r.test_id} <span class="muted">({r.status})</span></h3>
+  <table class="perf-table">
+    <tr><th>Transfer ID</th><td>{meta.get('transfer_id', '-')}</td>
+        <th>Duration</th><td>{meta.get('duration_sec', '-')} s</td></tr>
+    <tr><th>Files (success/failed/total)</th>
+        <td>{csv_summary.get('success', 0)} / {csv_summary.get('failed', 0)} / {csv_summary.get('total', 0)}</td>
+        <th>Bytes transferred</th><td>{_fmt_bytes(csv_summary.get('total_bytes', 0))}</td></tr>
+    <tr><th>Journal log lines parsed</th><td colspan="3">{sum(v for v in log_counts.values() if isinstance(v, (int, float)))}</td></tr>
+  </table>
+  {"<a href='" + rel_html + "'>Full perf report &rarr;</a>" if rel_html else ""}
+</div>"""
+
+    perf_sections = "".join(_perf_section_for(r) for r in results)
+
     html_rows = "".join(
         f"<tr class='{status_class(r.status)}'>"
         f"<td><span class='badge {status_class(r.status)}'>{r.status}</span></td>"
@@ -1943,6 +1998,12 @@ tr.interrupted td {{ background: #ede9fe; }}
 .badge.blocked {{ background: #fef3c7; color: #78350f; }}
 .badge.interrupted {{ background: #ede9fe; color: #4c1d95; }}
 a {{ color: #2563eb; }}
+h2 {{ margin-top: 32px; }}
+.perf-card {{ background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; }}
+.perf-card h3 {{ margin: 0 0 8px 0; font-size: 14px; }}
+.muted {{ color: #6b7280; font-weight: 400; }}
+.perf-table {{ width: auto; font-size: 12px; margin-bottom: 8px; }}
+.perf-table th {{ background: #f9fafb; font-weight: 600; }}
 </style></head>
 <body>
 <h1>CloudCP CLI Run {plan['run_id']}</h1>
@@ -1957,6 +2018,8 @@ a {{ color: #2563eb; }}
 <tr><th>Status</th><th>Test ID</th><th>Kind</th><th>Dataset</th><th>Mode</th><th>Description</th><th>Perf</th><th>Notes (first 3)</th></tr>
 {html_rows}
 </table>
+<h2>Performance Results</h2>
+{perf_sections or "<p class='muted'>No performance data captured for this run.</p>"}
 </body></html>"""
     (run_dir / "summary.html").write_text(html, encoding="utf-8")
 
