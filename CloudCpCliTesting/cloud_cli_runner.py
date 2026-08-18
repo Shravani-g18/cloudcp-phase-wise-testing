@@ -1198,10 +1198,36 @@ class Executor:
                           dataset_root: Optional[pathlib.Path] = None) -> Optional[str]:
         """Dispatch to the selected transfer-initiation adapter (--cli / --restapi).
         Only this step differs between adapters -- generation, monitoring,
-        polling, validation, and cleanup are identical either way."""
+        polling, validation, and cleanup are identical either way.
+
+        A standalone "download" test case has no source data in the cloud yet
+        (unlike "both", which uploads first within the same call) -- and any
+        data a prior "upload" test case put there is already wiped by that
+        test's own cleanup_tier(). So download first seeds S3 with an
+        untracked setup upload, then does the real, measured download."""
+        if mode == "download":
+            if not self._seed_upload_for_download(result, tier, dataset_root):
+                result.notes.append("could not seed S3 with source data for the download test; download not attempted")
+                return None
         if self.cfg.get("transfer_method", "cli") == "restapi":
             return self._initiate_transfer_restapi(result, mode)
         return self._initiate_transfer_cli(result, mode, tier, dataset_root)
+
+    def _seed_upload_for_download(self, result: TestCaseResult, tier: str,
+                                  dataset_root: Optional[pathlib.Path]) -> bool:
+        """Untracked precondition upload so a standalone download test has
+        real source data in the cloud to pull from. Not the "tested"
+        transfer -- just setup, polled to completion before proceeding."""
+        result.notes.append("seeding S3 with an upload before the download test (download needs pre-existing cloud data)")
+        if self.cfg.get("transfer_method", "cli") == "restapi":
+            setup_id = self._initiate_transfer_restapi(result, "upload")
+        else:
+            setup_id = self._initiate_transfer_cli(result, "upload", tier, dataset_root)
+        if not setup_id:
+            return False
+        final_state = self.poll_until_terminal(result, setup_id)
+        result.notes.append(f"setup_upload_transfer_id={setup_id} setup_upload_final_state={final_state}")
+        return self.args.dry_run or final_state == "COMPLETED"
 
     def _initiate_transfer_restapi(self, result: TestCaseResult, mode: str) -> Optional[str]:
         """REST-API adapter: bryck_cloud_transfer_initiate.py --mode {upload,download,both}.
