@@ -196,8 +196,8 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--bryck-config-json", default=DEFAULT_BRYCK_CONFIG_JSON,
                          help="Read-only reference config (decision #14); only tier names are read from it.")
 
-    parser.add_argument("--output-base", default="/bryck/cloudcp_cli",
-                         help="Bryck-side root for materialized upload datasets.")
+    parser.add_argument("--output-base", default="/bryck",
+                         help="Bryck-side root for materialized upload datasets (e.g. /bryck/<dataset-id>).")
     parser.add_argument("--download-base", default="/bryck/cloudcp_cli_dl",
                          help="Bryck-side root for download-mode destinations.")
     parser.add_argument("--bucket", default="s3://aditya/cloudcp-cli",
