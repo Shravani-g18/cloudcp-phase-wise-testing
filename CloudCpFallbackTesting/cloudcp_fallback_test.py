@@ -79,10 +79,11 @@ DEF_REMOTE_CAPTURE_DIR = "/tmp/fb_capture"
 DEF_POLL_INTERVAL = 10
 DEF_POLL_TIMEOUT = 3600
 DEF_CONFIGURE_TIMEOUT = 60
+DEF_PAUSED_TIMEOUT = 60
 
 # Terminal transfer states (mirrors the client scripts).
 TERMINAL_SUCCESS_STATE = "COMPLETED"
-TERMINAL_FAILURE_STATES = {"FAILED", "STOPPED", "CANCELLED"}
+TERMINAL_FAILURE_STATES = {"FAILED", "STOPPED", "CANCELLED", "PAUSED_TIMEOUT"}
 TERMINAL_STATES = {TERMINAL_SUCCESS_STATE} | TERMINAL_FAILURE_STATES
 
 # Per-file report statuses that count as "transferred".
@@ -584,6 +585,7 @@ def poll_transfer(api, host: RemoteHost, rec: Recorder, transfer_id: str,
     deadline = time.time() + timeout
     last_state = ""
     polls = 0
+    paused_since: float | None = None
     while time.time() < deadline:
         polls += 1
         # Snapshot live internal files server-side (cloudcp deletes them at end).
@@ -603,6 +605,20 @@ def poll_transfer(api, host: RemoteHost, rec: Recorder, transfer_id: str,
         last_state = state or last_state
         if state in TERMINAL_STATES:
             break
+
+        # Abort if stuck in PAUSED for longer than the paused timeout.
+        if state == "PAUSED":
+            if paused_since is None:
+                paused_since = time.time()
+            elif time.time() - paused_since >= DEF_PAUSED_TIMEOUT:
+                rec.add("paused timeout", "local", "",
+                        ok=False,
+                        detail=f"transfer stuck in PAUSED for >{DEF_PAUSED_TIMEOUT}s — aborting poll")
+                last_state = "PAUSED_TIMEOUT"
+                break
+        else:
+            paused_since = None
+
         time.sleep(interval)
 
     # Pull the accumulated snapshot down.
@@ -1352,9 +1368,14 @@ def main(argv: list[str] | None = None) -> int:
 
     runner = Runner(args, api, host, creds)
     results: list[dict] = []
+    interrupted = False
     try:
         for case in selected:
             results.append(runner.run_case(case))
+    except KeyboardInterrupt:
+        interrupted = True
+        LOG.warning("Interrupted (Ctrl+C) — writing report for %d completed case(s).",
+                    len(results))
     finally:
         fin_rec = Recorder("finalize")
         try:
@@ -1373,7 +1394,7 @@ def main(argv: list[str] | None = None) -> int:
                 pass
 
     meta = {"generated": _now(), "host": host_ip, "seed": args.seed,
-            "dry_run": args.dry_run}
+            "dry_run": args.dry_run, "interrupted": interrupted}
     combined = {"meta": meta, "results": results}
     _write_json(out_dir / "fallback_report.json", combined)
     (out_dir / "fallback_report.html").write_text(
@@ -1382,13 +1403,17 @@ def main(argv: list[str] | None = None) -> int:
     tally: dict[str, int] = {}
     for r in results:
         tally[r["verdict"]] = tally.get(r["verdict"], 0) + 1
-    LOG.info("Done. %s", " ".join(f"{k}={v}" for k, v in sorted(tally.items())))
+    if interrupted:
+        LOG.info("Partial run (interrupted). %s",
+                 " ".join(f"{k}={v}" for k, v in sorted(tally.items())))
+    else:
+        LOG.info("Done. %s", " ".join(f"{k}={v}" for k, v in sorted(tally.items())))
     LOG.info("Reports: %s , %s",
              out_dir / "fallback_report.json", out_dir / "fallback_report.html")
 
     # Non-zero exit if anything failed/errored (useful for CI).
     bad = tally.get("FAIL", 0) + tally.get("ERROR", 0)
-    return 1 if bad else 0
+    return 1 if bad or interrupted else 0
 
 
 if __name__ == "__main__":
