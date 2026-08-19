@@ -1478,6 +1478,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ex = p.add_argument_group("execution")
     ex.add_argument("--dry-run", action="store_true",
                     help="Print the plan (commands + API calls) without executing.")
+    ex.add_argument("--manual", action="store_true",
+                    help="Interactive mode: print each case (with F/C fault %) and "
+                         "prompt to execute or skip it.")
     ex.add_argument("--skip-datagen", action="store_true", help="Reuse already-materialised data.")
     ex.add_argument("--skip-seed", action="store_true",
                     help="For download cases, reuse existing bucket objects (no seeding upload).")
@@ -1558,6 +1561,38 @@ def select_cases(args, catalog: list[Case]) -> list[Case]:
     if args.all:
         return list(catalog)
     return []
+
+
+def _prompt_manual(case: Case) -> str:
+    """Print a case (with F/C fault %) and prompt to execute/skip/quit.
+
+    Returns one of: "execute", "skip", "quit".
+    """
+    prof = case.prof
+    print("\n" + "=" * 66)
+    print(f"  {case.cid}  [{case.group}]  {case.direction.upper()}")
+    print("-" * 66)
+    print(f"  dataset          : {case.ds.key} ({case.ds.spec})")
+    print(f"  profile          : {case.profile} — {prof.desc}")
+    print(f"  FAIL %  (F)      : {prof.fail_pct}%")
+    print(f"  CRASH % (C)      : {prof.crash_pct}%")
+    print(f"  HI_PERF_OPT      : {case.hi_perf}")
+    print(f"  FALLBACK_ENABLED : {case.fallback_enabled}")
+    print(f"  expectation      : {case.expect}")
+    print(f"  description      : {case.desc}")
+    print("=" * 66)
+    while True:
+        try:
+            ans = input("  [e]xecute / [s]kip / [q]uit ? ").strip().lower()
+        except EOFError:
+            return "quit"
+        if ans in ("e", "execute", "y", "yes"):
+            return "execute"
+        if ans in ("s", "skip", "n", "no"):
+            return "skip"
+        if ans in ("q", "quit"):
+            return "quit"
+        print("  Please answer 'e' (execute), 's' (skip), or 'q' (quit).")
 
 
 def _load_json(path: Path) -> dict:
@@ -1641,8 +1676,18 @@ def main(argv: list[str] | None = None) -> int:
     runner = Runner(args, api, host, creds, session=session)
     results: list[dict] = []
     interrupted = False
+    skipped: list[str] = []
     try:
         for case in selected:
+            if args.manual:
+                decision = _prompt_manual(case)
+                if decision == "quit":
+                    LOG.info("Manual mode: quitting — remaining cases not run.")
+                    break
+                if decision == "skip":
+                    skipped.append(case.cid)
+                    LOG.info("Manual mode: skipped %s", case.cid)
+                    continue
             result = runner.run_case(case)
             results.append(result)
     except KeyboardInterrupt:
@@ -1685,6 +1730,9 @@ def main(argv: list[str] | None = None) -> int:
     tally: dict[str, int] = {}
     for r in results:
         tally[r["verdict"]] = tally.get(r["verdict"], 0) + 1
+    if skipped:
+        LOG.info("Manual mode skipped %d case(s): %s",
+                 len(skipped), ", ".join(skipped))
     if interrupted:
         LOG.info("Partial run (interrupted). %s",
                  " ".join(f"{k}={v}" for k, v in sorted(tally.items())))
