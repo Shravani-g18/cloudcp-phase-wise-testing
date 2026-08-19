@@ -68,9 +68,12 @@ def parse_args(argv: Optional[list] = None) -> argparse.Namespace:
                         "(e.g. 01_zero_byte -- searches CloudCpCliTesting/spec_files and "
                         "CloudCpFallbackTesting/spec_files). Required unless --spec-file is given.")
     p.add_argument("--spec-file", default=None,
-                   help="Explicit path to any datagen spec YAML, bypassing the --dataset catalog "
-                        "lookup entirely (e.g. CloudCpSchedulerTesting/spec_files/SCH-DEEP-01/L4_LARGE.yaml). "
-                        "--tier (or --dataset, used as a label) sets the folder name under --output-base.")
+                   help="Explicit path to a datagen spec YAML, OR a directory containing multiple "
+                        "spec YAMLs (e.g. CloudCpSchedulerTesting/spec_files/SCH-DEEP-01/, with "
+                        "L0_ZERO.yaml..L4_LARGE.yaml) -- every *.yaml in the directory is generated "
+                        "under one common tier root and transferred as a single dataset. Bypasses the "
+                        "--dataset catalog lookup entirely. --tier (or the file/dir stem) sets the "
+                        "folder name under --output-base.")
     p.add_argument("--mode", choices=["upload", "download", "both"], default="upload")
     p.add_argument("--tier", default=None, help="Folder-name label (default: the --dataset value).")
 
@@ -395,6 +398,32 @@ def run_leg(args: argparse.Namespace, mode_label: str, case_dir: pathlib.Path, r
     }
 
 
+def generate_spec_dir_dataset(spec_dir: pathlib.Path, tier: str, output_base: str,
+                              ns: types.SimpleNamespace, logger: logging.Logger) -> tuple[pathlib.Path, dict]:
+    """--spec-file pointed at a directory (e.g. CloudCpSchedulerTesting/spec_files/SCH-DEEP-01/,
+    with multiple tier YAMLs L0_ZERO.yaml..L4_LARGE.yaml) -- materialize every
+    *.yaml inside it under one common output_base/<tier>/<stem>/ root, so the
+    whole directory is generated and transferred as a single dataset."""
+    yaml_files = sorted(spec_dir.glob("*.yaml"))
+    if not yaml_files:
+        raise RuntimeError(f"--spec-file directory {spec_dir} has no *.yaml files")
+    target_root = pathlib.Path(output_base) / tier
+    total_files = 0
+    per_file: dict = {}
+    for spec_path in yaml_files:
+        # generate_named_spec_dataset() also uses `name` as a tempfile prefix,
+        # which can't contain a path separator -- nest via output_base instead
+        # (output_base=<tier root>, name=<stem>) so the slash never reaches it.
+        _root, summary = ccr.generate_named_spec_dataset(
+            spec_path, spec_path.stem, str(target_root), ns, logger)
+        per_file[spec_path.stem] = summary
+        total_files += summary.get("actual_files", 0)
+    return target_root, {
+        "dataset_root": str(target_root), "spec_dir": str(spec_dir),
+        "actual_files": total_files, "per_file": per_file,
+    }
+
+
 def main(argv: Optional[list] = None) -> int:
     args = parse_args(argv)
     setup_logging(args.verbose)
@@ -403,8 +432,9 @@ def main(argv: Optional[list] = None) -> int:
         LOG.error("one of --dataset or --spec-file is required")
         return 2
 
-    tier = args.tier or (pathlib.Path(args.spec_file).stem if args.spec_file else args.dataset)
-    dataset_label = args.dataset or pathlib.Path(args.spec_file).stem
+    spec_path_obj = pathlib.Path(args.spec_file) if args.spec_file else None
+    tier = args.tier or (spec_path_obj.stem if spec_path_obj else args.dataset)
+    dataset_label = args.dataset or (spec_path_obj.stem if spec_path_obj else "")
     run_id = args.run_id or f"transfer_only_{dt.datetime.now():%Y%m%d_%H%M%S}"
     run_dir = pathlib.Path(args.results_dir) / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -437,8 +467,10 @@ def main(argv: Optional[list] = None) -> int:
         datagen_bin=args.datagen_bin, dry_run=args.dry_run, verbose=args.verbose,
     )
     dataset_root, gen_summary = (
-        ccr.generate_named_spec_dataset(pathlib.Path(args.spec_file), tier, args.output_base, ns, LOG)
-        if args.spec_file else
+        generate_spec_dir_dataset(spec_path_obj, tier, args.output_base, ns, LOG)
+        if spec_path_obj is not None and spec_path_obj.is_dir() else
+        ccr.generate_named_spec_dataset(spec_path_obj, tier, args.output_base, ns, LOG)
+        if spec_path_obj is not None else
         ccr.generate_tier_dataset(tier, args.output_base, ns, LOG, args.dataset)
     )
     LOG.info("Dataset materialized under %s (%s)", dataset_root, gen_summary)
