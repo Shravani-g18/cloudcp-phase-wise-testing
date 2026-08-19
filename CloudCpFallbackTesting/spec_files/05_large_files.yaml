@@ -17,12 +17,12 @@ naming:
   length: 12
 
 flat:
-  num_files: 5
+  num_files: 50
 
 size:
   type: range
   min: 1GB
-  max: 5GB
+  max: 3GB
   distribution: uniform
 
 extensions:
