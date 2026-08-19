@@ -1,0 +1,7 @@
+AbsoluteFilePath,S3Path,FileSize,ETag,Status
+dots/name.with.many.dots.tar.gz,s3://bucket/dots/name.with.many.dots.tar.gz,4096,etag0,OK
+long/segment_segment_segment_segment_segment_segment_segment_segment_segment_segment_segment_segment_segment_segment_segment_segment_segment_segment_segment_segment_.bin,s3://bucket/long/segment_segment_segment_segment_segment_segment_segment_segment_segment_segment_segment_segment_segment_segment_segment_segment_segment_segment_segment_segment_.bin,4096,etag0,OK
+plain/ascii_name.txt,s3://bucket/plain/ascii_name.txt,4096,etag0,OK
+spaces/name with   spaces.dat,s3://bucket/spaces/name with   spaces.dat,4096,etag0,OK
+special/name(1)[2]{3}.log,s3://bucket/special/name(1)[2]{3}.log,4096,etag0,OK
+unicode/файл_名前_🎯.bin,s3://bucket/unicode/файл_名前_🎯.bin,4096,etag0,OK
