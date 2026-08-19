@@ -1110,16 +1110,24 @@ class Runner:
         except (ValueError, IndexError):
             return None
 
-    def seed_bucket_if_needed(self, rec: Recorder, case: Case) -> None:
-        """For download cases, ensure objects exist via a clean F0 upload."""
+    def seed_bucket_if_needed(self, rec: Recorder, case: Case) -> bool:
+        """For download cases, ensure objects exist via a clean F0 upload.
+
+        Returns True if the destination bucket should now hold the objects
+        (or seeding is not required); False if the seeding upload failed so the
+        caller can abort the download instead of hitting a confusing 409.
+        """
         ds = case.ds
-        if case.direction != "download" or self.args.skip_seed:
-            if self.args.skip_seed:
-                rec.add("skip seed", "local", "", detail="--skip-seed: reuse existing objects")
-            return
-        if ds.tier_dir in self.seeded_tiers:
+        if case.direction != "download":
+            return True
+        if self.args.skip_seed:
+            rec.add("skip seed", "local", "", detail="--skip-seed: reuse existing objects")
+            return True
+        # The per-case cleanup wipes the whole bucket, so a cached seed is only
+        # valid when cleanup is disabled (objects persist across cases).
+        if ds.tier_dir in self.seeded_tiers and self.args.skip_cleanup:
             rec.add("seed cached", "local", "", detail=f"{ds.tier_dir} already seeded this run")
-            return
+            return True
         seed_case = Case(f"{case.cid}-seed", case.group, "upload", case.dataset,
                          "F0", True, True, "control", "clean seed upload for download")
         src = f"{self.args.src_base}/{ds.tier_dir}"
@@ -1127,20 +1135,47 @@ class Runner:
         rec.add("seed bucket", "local",
                 f"clean F0 upload {src} -> {dst}", detail="seeding objects for download")
         self._configure_and_apply(rec, seed_case)
-        if not self.host.dry_run:
-            configure_cloud_provider(self.api, rec, self.creds)
+        if self.host.dry_run:
+            self.seeded_tiers.add(ds.tier_dir)
+            return True
+
+        configure_cloud_provider(self.api, rec, self.creds)
+        seed_ok = False
+        try:
+            tid = initiate_transfer(self.api, rec, self.creds["cloud_type"], src, dst)
+            state, _ = poll_transfer(self.api, self.host, rec, tid,
+                                     self.args.transfer_logs_dir,
+                                     self.out_dir / f"{case.cid}-seed",
+                                     self.args.poll_interval, self.args.poll_timeout,
+                                     session=self.session)
+            seed_ok = (state == TERMINAL_SUCCESS_STATE)
+            rec.add("seed result", "local", "", ok=seed_ok,
+                    detail=f"seed upload state={state}")
+        except TransferInitError as exc:
+            rec.add("seed result", "local", "", ok=False, detail=str(exc))
+
+        # Verify the objects actually landed before relying on them downstream.
+        if seed_ok:
+            _, out, _ = self.host.run(
+                rec, "verify seed objects",
+                f"aws s3 ls --recursive {dst} --endpoint-url {self.args.endpoint_url} "
+                f"2>/dev/null | wc -l", check=False)
             try:
-                tid = initiate_transfer(self.api, rec, self.creds["cloud_type"], src, dst)
-                state, _ = poll_transfer(self.api, self.host, rec, tid,
-                                         self.args.transfer_logs_dir,
-                                         self.out_dir / f"{case.cid}-seed",
-                                         self.args.poll_interval, self.args.poll_timeout,
-                                         session=self.session)
-                rec.add("seed result", "local", "", ok=(state == TERMINAL_SUCCESS_STATE),
-                        detail=f"seed upload state={state}")
-            except TransferInitError as exc:
-                rec.add("seed result", "local", "", ok=False, detail=str(exc))
-        self.seeded_tiers.add(ds.tier_dir)
+                objs = int(out.strip().splitlines()[-1]) if out.strip() else 0
+            except (ValueError, IndexError):
+                objs = 0
+            if objs == 0:
+                seed_ok = False
+                rec.add("seed verify", "local", "", ok=False,
+                        detail=f"no objects found under {dst} after seed upload")
+            else:
+                rec.add("seed verify", "local", "", ok=True,
+                        detail=f"{objs} object(s) present under {dst}")
+
+        if seed_ok:
+            self.seeded_tiers.add(ds.tier_dir)
+        return seed_ok
+
 
     def _configure_and_apply(self, rec: Recorder, case: Case) -> None:
         cfg = read_remote_config(self.host, rec, self.args.config)
@@ -1178,8 +1213,12 @@ class Runner:
             self.backup_config_once(rec)
             expected_files = self.ensure_dataset(rec, ds)
 
-            # Download cases need objects present first.
-            self.seed_bucket_if_needed(rec, case)
+            # Download cases need objects present first: datagen -> upload seed.
+            seed_ok = self.seed_bucket_if_needed(rec, case)
+            if case.direction == "download" and not seed_ok:
+                raise RuntimeError(
+                    f"seed upload failed — source objects missing at {dst}; "
+                    "cannot run the download case")
 
             # Apply this case's fault profile + toggles.
             self._configure_and_apply(rec, case)
