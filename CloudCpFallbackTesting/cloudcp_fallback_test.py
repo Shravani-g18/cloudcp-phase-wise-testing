@@ -79,7 +79,7 @@ DEF_REMOTE_CAPTURE_DIR = "/tmp/fb_capture"
 DEF_POLL_INTERVAL = 10
 DEF_POLL_TIMEOUT = 3600
 DEF_CONFIGURE_TIMEOUT = 60
-DEF_PAUSED_TIMEOUT = 60
+DEF_PAUSED_TIMEOUT = 300
 
 # Terminal transfer states (mirrors the client scripts).
 TERMINAL_SUCCESS_STATE = "COMPLETED"
@@ -472,6 +472,10 @@ def _status_entry(api, transfer_id: str) -> dict | None:
     resp = api.get_cloud_transfer_status(transfer_id)
     if resp is None:
         return None
+    # Detect auth failure responses that slipped through.
+    if getattr(resp, "status_code", 200) in (401, 403):
+        LOG.warning("status poll got HTTP %s — token may have expired", resp.status_code)
+        return None
     try:
         body = resp.json()
     except ValueError:
@@ -576,7 +580,7 @@ class TransferInitError(RuntimeError):
 
 def poll_transfer(api, host: RemoteHost, rec: Recorder, transfer_id: str,
                   log_dir_base: str, capture_dir: Path, interval: int,
-                  timeout: int) -> tuple[str, dict]:
+                  timeout: int, session=None) -> tuple[str, dict]:
     """Poll to a terminal state; snapshot live *.lst files while IN_PROGRESS."""
     remote_log_dir = f"{log_dir_base}/cloud_transfer_{transfer_id}"
     remote_snap = f"{DEF_REMOTE_CAPTURE_DIR}/{transfer_id}"
@@ -600,10 +604,33 @@ def poll_transfer(api, host: RemoteHost, rec: Recorder, transfer_id: str,
     last_state = ""
     polls = 0
     paused_since: float | None = None
+    consecutive_none = 0
     while time.time() < deadline:
         polls += 1
 
+        # Proactively refresh the token before polling to avoid mid-poll expiry.
+        if session is not None:
+            session.ensure_token()
+
         entry = _status_entry(api, transfer_id)
+
+        # Handle consecutive failed status calls (likely auth issues).
+        if entry is None:
+            consecutive_none += 1
+            if consecutive_none >= 3 and session is not None:
+                LOG.warning("3 consecutive failed status calls — forcing re-login")
+                try:
+                    session.login(silent=True)
+                except Exception:  # noqa: BLE001
+                    pass
+                consecutive_none = 0
+            rec.add(f"status (poll {polls})", "api",
+                    f"GET /api/bcloud/status_transfer transfer_id={transfer_id}",
+                    ok=False, detail="no response (possible token expiry)")
+            time.sleep(interval)
+            continue
+        consecutive_none = 0
+
         state = str((entry or {}).get("state") or "").upper()
         pct = (entry or {}).get("percent_completed")
         rec.add(f"status (poll {polls})", "api",
@@ -1022,11 +1049,12 @@ def evaluate(case: Case, state: str, capture: dict, report: dict,
 # =============================================================================
 
 class Runner:
-    def __init__(self, args, api, host: RemoteHost, creds: dict):
+    def __init__(self, args, api, host: RemoteHost, creds: dict, session=None):
         self.args = args
         self.api = api
         self.host = host
         self.creds = creds
+        self.session = session
         self.out_dir = Path(args.out_dir)
         self.spec_dir = Path(args.spec_dir)
         self.seeded_tiers: set[str] = set()
@@ -1098,7 +1126,8 @@ class Runner:
                 state, _ = poll_transfer(self.api, self.host, rec, tid,
                                          self.args.transfer_logs_dir,
                                          self.out_dir / f"{case.cid}-seed",
-                                         self.args.poll_interval, self.args.poll_timeout)
+                                         self.args.poll_interval, self.args.poll_timeout,
+                                         session=self.session)
                 rec.add("seed result", "local", "", ok=(state == TERMINAL_SUCCESS_STATE),
                         detail=f"seed upload state={state}")
             except TransferInitError as exc:
@@ -1164,6 +1193,9 @@ class Runner:
                         "GET /api/download?name=cloud_log", detail="(dry-run)")
                 verdict, reasons = "PLANNED", ["dry-run: no execution"]
             else:
+                # Ensure token is fresh before starting API-heavy operations.
+                if self.session is not None:
+                    self.session.ensure_token()
                 configure_cloud_provider(self.api, rec, self.creds)
                 if case.direction == "upload":
                     t_src, t_dst = src, dst
@@ -1184,7 +1216,11 @@ class Runner:
                     state, capture = poll_transfer(
                         self.api, self.host, rec, transfer_id,
                         self.args.transfer_logs_dir, run_dir / "live_lst",
-                        self.args.poll_interval, self.args.poll_timeout)
+                        self.args.poll_interval, self.args.poll_timeout,
+                        session=self.session)
+                    # Refresh token after potentially long polling loop.
+                    if self.session is not None:
+                        self.session.ensure_token()
                     report = download_and_parse_report(
                         self.api, rec, transfer_id, run_dir)
                     # Check system logs for fallback worker evidence.
@@ -1602,7 +1638,7 @@ def main(argv: list[str] | None = None) -> int:
         host = RemoteHost(ssh, dry_run=False)
         host_ip = session.host
 
-    runner = Runner(args, api, host, creds)
+    runner = Runner(args, api, host, creds, session=session)
     results: list[dict] = []
     interrupted = False
     try:

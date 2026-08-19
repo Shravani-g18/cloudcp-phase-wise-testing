@@ -239,6 +239,8 @@ class BryckApi:
     ) -> Response | None:
         """Centralized HTTP call with consistent error handling.
 
+        Automatically re-authenticates and retries once on 401 (token expired).
+
         Args:
             method: 'get' or 'post'.
             url_path: API endpoint path.
@@ -249,41 +251,51 @@ class BryckApi:
             Response on success or error (for caller to check status), None on connection/timeout errors.
         """
         response: Response | None = None
-        try:
-            if method == "get":
-                response = self._session.get(url_path, params=data, **kwargs)
-            elif method == "post":
-                response = self._session.post(url_path, payload=data, **kwargs)
-            else:
-                raise ValueError(f"Unsupported HTTP method: {method}")
-        except HTTPError as http_err:
-            # Return the response so caller can extract error details
-            resp = http_err.response
-            body = ""
-            if resp is not None:
-                try:
-                    payload = resp.json()
-                    err = (
-                        payload.get("error")
-                        if isinstance(payload, dict) else None
-                    )
-                    if isinstance(err, dict) and err.get("message"):
-                        body = f" | server: {err['message']}"
-                    else:
+        for attempt in range(2):
+            try:
+                self._session.ensure_token()
+                if method == "get":
+                    response = self._session.get(url_path, params=data, **kwargs)
+                elif method == "post":
+                    response = self._session.post(url_path, payload=data, **kwargs)
+                else:
+                    raise ValueError(f"Unsupported HTTP method: {method}")
+                return response
+            except HTTPError as http_err:
+                resp = http_err.response
+                # On 401, re-login and retry once.
+                if resp is not None and resp.status_code == 401 and attempt == 0:
+                    logger.warning("[%s] Token expired (HTTP 401) — re-authenticating.", url_path)
+                    try:
+                        self._session.login(silent=True)
+                    except Exception:
+                        logger.error("[%s] Re-login failed.", url_path)
+                    continue
+                body = ""
+                if resp is not None:
+                    try:
+                        payload = resp.json()
+                        err = (
+                            payload.get("error")
+                            if isinstance(payload, dict) else None
+                        )
+                        if isinstance(err, dict) and err.get("message"):
+                            body = f" | server: {err['message']}"
+                        else:
+                            body = f" | body: {resp.text[:500]}"
+                    except ValueError:
                         body = f" | body: {resp.text[:500]}"
-                except ValueError:
-                    body = f" | body: {resp.text[:500]}"
-            logger.error("[%s] HTTP error: %s%s", url_path, http_err, body)
-            return resp  # Return response instead of None so caller can check status
-        except ConnectionError as conn_err:
-            logger.error("[%s] Connection error: %s", url_path, conn_err)
-            return None
-        except Timeout as timeout_err:
-            logger.error("[%s] Timeout: %s", url_path, timeout_err)
-            return None
-        except RequestException as err:
-            logger.error("[%s] Request error: %s", url_path, err)
-            return None
+                logger.error("[%s] HTTP error: %s%s", url_path, http_err, body)
+                return resp
+            except ConnectionError as conn_err:
+                logger.error("[%s] Connection error: %s", url_path, conn_err)
+                return None
+            except Timeout as timeout_err:
+                logger.error("[%s] Timeout: %s", url_path, timeout_err)
+                return None
+            except RequestException as err:
+                logger.error("[%s] Request error: %s", url_path, err)
+                return None
         return response
 
     # ==================================================================

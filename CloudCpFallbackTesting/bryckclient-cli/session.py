@@ -128,6 +128,8 @@ class ApiSession:
         self.verify = verify
         self.base_url = f"{scheme}://{self.host}:{self.port}"
         self.token: str | None = None
+        self.token_acquired_at: float = 0.0
+        self.token_lifetime: int = 600  # assume 10 min; re-login before expiry
         self.headers: dict[str, str] = {"Content-Type": "application/json"}
 
         # SSH credentials for the Bryck server (populated by from_login_json;
@@ -259,8 +261,23 @@ class ApiSession:
             raise Exception(f"Login failed: no token in response. Response: {data}")
 
         self.headers["Authorization"] = f"JWT {self.token}"
+        self.token_acquired_at = time.time()
         logger.info("Login successful. JWT token acquired.")
         return data
+
+    def is_token_expired(self) -> bool:
+        """Check if the JWT token is likely expired (or close to expiry)."""
+        if not self.token or self.token_acquired_at == 0.0:
+            return True
+        elapsed = time.time() - self.token_acquired_at
+        # Refresh with 60s safety margin before assumed expiry.
+        return elapsed >= (self.token_lifetime - 60)
+
+    def ensure_token(self) -> None:
+        """Re-login if the token is expired or close to expiry."""
+        if self.is_token_expired():
+            logger.info("Token expired or near expiry — re-authenticating.")
+            self.login(silent=True)
 
     def change_password(
         self, username: str, old_password: str, new_password: str,
