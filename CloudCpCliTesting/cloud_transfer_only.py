@@ -372,10 +372,10 @@ def run_leg(args: argparse.Namespace, mode_label: str, case_dir: pathlib.Path, r
         LOG.info("%s perf report: %s", mode_label, perf_data.get("html_report"))
         tcr.notes.append(f"perf_report={perf_data.get('html_report')}")
         if not args.dry_run:
-            journal_raw = collector.perf_dir / "journal_raw.log"
+            journal_ok = (perf_data.get("log_diag") or {}).get("diagnosis") not in (None, "capture_empty")
             cloudcp_raw = collector.perf_dir / "cloudcplogs.txt"
             logs_collected = (
-                (journal_raw.is_file() and journal_raw.stat().st_size > 0)
+                journal_ok
                 or (cloudcp_raw.is_file() and cloudcp_raw.stat().st_size > 0)
             )
 

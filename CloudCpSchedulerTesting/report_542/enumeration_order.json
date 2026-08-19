@@ -1,0 +1,96 @@
+{
+  "dataset_id": "SCH-ORD-01",
+  "number": 1,
+  "profile": "ORDER",
+  "enumeration_order": [
+    "zero",
+    "tiny",
+    "small",
+    "medium",
+    "large"
+  ],
+  "spec_levels": [
+    {
+      "level": 0,
+      "tier": "zero",
+      "spec": "L0_ZERO.yaml"
+    },
+    {
+      "level": 1,
+      "tier": "tiny",
+      "spec": "L1_TINY.yaml"
+    },
+    {
+      "level": 2,
+      "tier": "small",
+      "spec": "L2_SMALL.yaml"
+    },
+    {
+      "level": 3,
+      "tier": "medium",
+      "spec": "L3_MEDIUM.yaml"
+    },
+    {
+      "level": 4,
+      "tier": "large",
+      "spec": "L4_LARGE.yaml"
+    }
+  ],
+  "manifest_levels": [
+    {
+      "level": 0,
+      "tier": "ZERO",
+      "seed": 1000,
+      "num_files": 16000,
+      "batches": 8,
+      "size_bytes": 0,
+      "content": "sparse",
+      "root": "/bryck/cloudcp_sched_data/SCH-ORD-01"
+    },
+    {
+      "level": 1,
+      "tier": "TINY",
+      "seed": 1001,
+      "num_files": 8176,
+      "batches": 16,
+      "size_bytes": 16384,
+      "content": "random",
+      "root": "/bryck/cloudcp_sched_data/SCH-ORD-01/L1"
+    },
+    {
+      "level": 2,
+      "tier": "SMALL",
+      "seed": 1002,
+      "num_files": 5072,
+      "batches": 16,
+      "size_bytes": 2097152,
+      "content": "random",
+      "root": "/bryck/cloudcp_sched_data/SCH-ORD-01/L1/L2"
+    },
+    {
+      "level": 3,
+      "tier": "MEDIUM",
+      "seed": 1003,
+      "num_files": 400,
+      "batches": 8,
+      "size_bytes": 104857600,
+      "content": "sparse",
+      "root": "/bryck/cloudcp_sched_data/SCH-ORD-01/L1/L2/L3"
+    },
+    {
+      "level": 4,
+      "tier": "LARGE",
+      "seed": 1004,
+      "num_files": 40,
+      "batches": 8,
+      "size_bytes": 1073741824,
+      "content": "sparse",
+      "root": "/bryck/cloudcp_sched_data/SCH-ORD-01/L1/L2/L3/L4"
+    }
+  ],
+  "totals": {
+    "files": 29688,
+    "batches": 56
+  },
+  "note": "BFS chain order L0->L4; this is the deterministic enumeration oracle."
+}

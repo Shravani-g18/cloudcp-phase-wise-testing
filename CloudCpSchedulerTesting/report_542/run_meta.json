@@ -1,0 +1,14 @@
+{
+  "dataset_id": "SCH-ORD-01",
+  "transfer_id": 542,
+  "src": "/bryck/cloudcp_sched_data/SCH-ORD-01",
+  "dst": "s3://aditya/sch_test/SCH-ORD-01",
+  "base_src": "/bryck/cloudcp_sched_data/SCH-ORD-01",
+  "transfer_dir": "/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542",
+  "start": "2026-08-04T07:10:24",
+  "end": "2026-08-04T07:12:52",
+  "duration_sec": 147.7,
+  "scheduler_exit": 0,
+  "scheduler_cmd": "/opt/bryck/.venv/bryck/bin/python3 /opt/bryck/.venv/bryck/lib/python3.10/site-packages/bryckcloud/lib/cloud/batch_scheduler.py 542 upload /bryck/cloudcp_sched_data/SCH-ORD-01 s3://aditya/sch_test/SCH-ORD-01 /bryck/cloudcp_sched_data/SCH-ORD-01 --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542 --dir-path /opt/bryck/.venv/bryck/lib/python3.10/site-packages/bryckcloud/lib/cloud --endpoint-url https://10.10.10.103:9000",
+  "endpoint_url": "https://10.10.10.103:9000"
+}

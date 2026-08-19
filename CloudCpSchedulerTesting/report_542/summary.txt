@@ -1,0 +1,65 @@
+Scheduler Test Summary
+============================================================
+dataset          : SCH-ORD-01
+transfer id      : 542
+enumeration order: zero -> tiny -> small -> medium -> large
+src              : /bryck/cloudcp_sched_data/SCH-ORD-01
+dst              : s3://aditya/sch_test/SCH-ORD-01
+transfer-dir     : /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542
+start            : 2026-08-04T07:10:24
+end              : 2026-08-04T07:12:52
+duration (s)     : 147.7
+scheduler exit   : 0
+
+Dataset structure (BFS chain L0->L4):
+  total files    : 29688
+  total bytes    : 89 GB
+  1. L0 zero      16000 files x     0.00 B =     0.00 B  (8 batches)  /bryck/cloudcp_sched_data/SCH-ORD-01
+  2. L1 tiny       8176 files x      16 KB =     128 MB  (16 batches)  /bryck/cloudcp_sched_data/SCH-ORD-01/L1
+  3. L2 small      5072 files x    2.00 MB =    9.91 GB  (16 batches)  /bryck/cloudcp_sched_data/SCH-ORD-01/L1/L2
+  4. L3 medium      400 files x     100 MB =      39 GB  (8 batches)  /bryck/cloudcp_sched_data/SCH-ORD-01/L1/L2/L3
+  5. L4 large        40 files x    1.00 GB =      40 GB  (8 batches)  /bryck/cloudcp_sched_data/SCH-ORD-01/L1/L2/L3/L4
+
+Results (CSV):
+  total files    : 29688
+  success        : 29688
+  failed         : 0
+  total bytes    : 95663423488
+  status counts  : {'SUCCESS': 29688}
+
+Log capture:
+  pending events : 58
+  running events : 56
+  free events    : 288
+  timeline frames: 145
+
+Metric definitions:
+  MB/s      = per-batch transfer rate (bytes uploaded / processing time)
+  agg MB/s  = tier bytes / tier wall-clock span
+  batch/s   = batches completed per second (batches / tier span)
+  s/batch   = per-batch processing time (cloudcp.log elapsed=)
+
+Throughput (MB/s per batch, grouped by tier):
+  zero   batches=  8  min=   0.00  avg=   0.00  med=   0.00  max=   0.00  files/s=   39.0  agg=   0.00  batch/s= 0.083
+  tiny   batches= 16  min=   0.22  avg=   0.76  med=   0.32  max=   2.87  files/s=   46.4  agg=   1.70  batch/s= 0.203
+  small  batches= 16  min=  10.41  avg=  13.50  med=  10.53  max=  28.07  files/s=    6.4  agg= 118.78  batch/s= 0.179
+  medium batches=  8  min=  43.00  avg=  49.32  med=  51.08  max=  53.38  files/s=    0.5  agg= 309.15  batch/s= 0.059
+  large  batches=  8  min= 134.55  avg= 152.56  med= 145.29  max= 199.15  files/s=    0.1  agg= 601.03  batch/s= 0.112
+  ALL    batches= 56  min=   0.00  avg=  32.91  med=  10.48  max= 199.15                    agg= 674.45  batch/s= 0.395
+
+Batch processing time (seconds per batch, grouped by tier):
+  zero   batches=  8  min=  29.69s  avg=  67.95s  med=  90.51s  max=  91.35s
+  tiny   batches= 16  min=   2.91s  avg=  23.19s  med=  26.74s  max=  38.84s
+  small  batches= 16  min=  23.69s  avg=  54.98s  med=  63.13s  max=  63.82s
+  medium batches=  8  min=  98.21s  avg= 107.06s  med= 102.75s  max= 121.92s
+  large  batches=  8  min=  26.96s  avg=  35.72s  med=  36.95s  max=  39.90s
+  ALL    batches= 56  min=   2.91s  avg=  52.44s  med=  38.78s  max= 121.92s
+
+Batch completion — broker PERF (journal), total time per batch:
+  (total = full batch time; upload = upload phase; mode on 0.1s-rounded totals)
+  zero   batches=  8  files=  16000  min=  30.82s  avg=  69.62s  max=  93.57s  mode=  31.1s  upl_avg=  69.62s
+  tiny   batches= 16  files=   8176  min=   3.39s  avg=  23.95s  max=  39.98s  mode=   3.4s  upl_avg=  23.95s
+  small  batches= 16  files=   5072  min=  24.10s  avg=  55.63s  max=  65.29s  mode=  63.8s  upl_avg=  55.63s
+  medium batches=  8  files=    400  min=  98.46s  avg= 107.32s  max= 122.17s  mode=  98.5s  upl_avg= 107.32s
+  large  batches=  8  files=     40  min=  27.26s  avg=  36.06s  max=  40.17s  mode=  27.3s  upl_avg=  36.06s
+  ALL    batches= 56  files=  29688  min=   3.39s  avg=  53.17s  max= 122.17s  mode=  63.8s  upl_avg=  53.17s

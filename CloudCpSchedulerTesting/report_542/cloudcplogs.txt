@@ -1,0 +1,112 @@
+2026-08-04 07:10:32.860 [Stats][3759211] SUMMARY elapsed=2.91s files=511 small=511 large=0 skipped=0 bytes=8372224 (7.98 MiB) files/sec=175.6 throughput=2.74 MiB/s
+2026-08-04 07:10:33.113 [Batch][3759211] done records=511 ok=511 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:10:34.760 [Stats][3759231] SUMMARY elapsed=4.47s files=511 small=511 large=0 skipped=0 bytes=8372224 (7.98 MiB) files/sec=114.3 throughput=1.79 MiB/s
+2026-08-04 07:10:35.041 [Batch][3759231] done records=511 ok=511 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:10:35.700 [Stats][3759272] SUMMARY elapsed=5.44s files=511 small=511 large=0 skipped=0 bytes=8372224 (7.98 MiB) files/sec=94.0 throughput=1.47 MiB/s
+2026-08-04 07:10:35.913 [Batch][3759272] done records=511 ok=511 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:10:36.566 [Stats][3759214] SUMMARY elapsed=6.41s files=511 small=511 large=0 skipped=0 bytes=8372224 (7.98 MiB) files/sec=79.7 throughput=1.25 MiB/s
+2026-08-04 07:10:36.803 [Batch][3759214] done records=511 ok=511 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:10:37.994 [Stats][3759329] SUMMARY elapsed=7.63s files=511 small=511 large=0 skipped=0 bytes=8372224 (7.98 MiB) files/sec=67.0 throughput=1.05 MiB/s
+2026-08-04 07:10:38.249 [Batch][3759329] done records=511 ok=511 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:10:40.672 [Stats][3759267] SUMMARY elapsed=10.20s files=511 small=511 large=0 skipped=0 bytes=8372224 (7.98 MiB) files/sec=50.1 throughput=0.78 MiB/s
+2026-08-04 07:10:40.881 [Batch][3759267] done records=511 ok=511 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:10:50.881 [Stats][3759673] SUMMARY elapsed=20.01s files=511 small=511 large=0 skipped=0 bytes=8372224 (7.98 MiB) files/sec=25.5 throughput=0.40 MiB/s
+2026-08-04 07:10:51.109 [Batch][3759673] done records=511 ok=511 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:10:53.635 [Stats][3759552] SUMMARY elapsed=22.83s files=511 small=511 large=0 skipped=0 bytes=8372224 (7.98 MiB) files/sec=22.4 throughput=0.35 MiB/s
+2026-08-04 07:10:53.880 [Batch][3759552] done records=511 ok=511 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:11:01.334 [Stats][3761902] SUMMARY elapsed=26.96s files=5 small=0 large=5 skipped=0 bytes=5368709120 (5.00 GiB) files/sec=0.2 throughput=189.92 MiB/s
+2026-08-04 07:11:01.341 [Batch][3761902] done records=5 ok=5 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:11:01.868 [Stats][3759660] SUMMARY elapsed=30.66s files=511 small=511 large=0 skipped=0 bytes=8372224 (7.98 MiB) files/sec=16.7 throughput=0.26 MiB/s
+2026-08-04 07:11:02.195 [Batch][3759660] done records=511 ok=511 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:11:03.012 [Stats][3759989] SUMMARY elapsed=31.52s files=511 small=511 large=0 skipped=0 bytes=8372224 (7.98 MiB) files/sec=16.2 throughput=0.25 MiB/s
+2026-08-04 07:11:03.228 [Batch][3759989] done records=511 ok=511 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:11:09.365 [Stats][3763751] SUMMARY elapsed=32.02s files=5 small=0 large=5 skipped=0 bytes=5368709120 (5.00 GiB) files/sec=0.2 throughput=159.91 MiB/s
+2026-08-04 07:11:09.384 [Batch][3763751] done records=5 ok=5 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:11:09.522 [Stats][3760078] SUMMARY elapsed=37.73s files=511 small=511 large=0 skipped=0 bytes=8372224 (7.98 MiB) files/sec=13.5 throughput=0.21 MiB/s
+2026-08-04 07:11:09.752 [Batch][3760078] done records=511 ok=511 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:11:10.498 [Stats][3760153] SUMMARY elapsed=38.67s files=511 small=511 large=0 skipped=0 bytes=8372224 (7.98 MiB) files/sec=13.2 throughput=0.21 MiB/s
+2026-08-04 07:11:10.789 [Stats][3760361] SUMMARY elapsed=38.73s files=511 small=511 large=0 skipped=0 bytes=8372224 (7.98 MiB) files/sec=13.2 throughput=0.21 MiB/s
+2026-08-04 07:11:10.966 [Stats][3760699] SUMMARY elapsed=38.64s files=511 small=511 large=0 skipped=0 bytes=8372224 (7.98 MiB) files/sec=13.2 throughput=0.21 MiB/s
+2026-08-04 07:11:10.970 [Stats][3760333] SUMMARY elapsed=38.84s files=511 small=511 large=0 skipped=0 bytes=8372224 (7.98 MiB) files/sec=13.2 throughput=0.21 MiB/s
+2026-08-04 07:11:11.355 [Batch][3760153] done records=511 ok=511 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:11:11.458 [Batch][3760361] done records=511 ok=511 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:11:11.490 [Batch][3760699] done records=511 ok=511 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:11:11.505 [Batch][3760333] done records=511 ok=511 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:11:18.701 [Stats][3766513] SUMMARY elapsed=36.79s files=5 small=0 large=5 skipped=0 bytes=5368709120 (5.00 GiB) files/sec=0.1 throughput=139.18 MiB/s
+2026-08-04 07:11:18.705 [Batch][3766513] done records=5 ok=5 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:11:18.757 [Stats][3765233] SUMMARY elapsed=38.91s files=5 small=0 large=5 skipped=0 bytes=5368709120 (5.00 GiB) files/sec=0.1 throughput=131.59 MiB/s
+2026-08-04 07:11:18.761 [Batch][3765233] done records=5 ok=5 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:11:31.001 [Stats][3759916] SUMMARY elapsed=59.67s files=317 small=317 large=0 skipped=0 bytes=664797184 (634.00 MiB) files/sec=5.3 throughput=10.63 MiB/s
+2026-08-04 07:11:31.592 [Batch][3759916] done records=317 ok=317 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:11:34.743 [Stats][3759844] SUMMARY elapsed=63.63s files=317 small=317 large=0 skipped=0 bytes=664797184 (634.00 MiB) files/sec=5.0 throughput=9.96 MiB/s
+2026-08-04 07:11:34.802 [Stats][3760042] SUMMARY elapsed=63.12s files=317 small=317 large=0 skipped=0 bytes=664797184 (634.00 MiB) files/sec=5.0 throughput=10.04 MiB/s
+2026-08-04 07:11:34.803 [Stats][3760364] SUMMARY elapsed=62.68s files=317 small=317 large=0 skipped=0 bytes=664797184 (634.00 MiB) files/sec=5.1 throughput=10.11 MiB/s
+2026-08-04 07:11:34.816 [Stats][3760085] SUMMARY elapsed=62.81s files=317 small=317 large=0 skipped=0 bytes=664797184 (634.00 MiB) files/sec=5.0 throughput=10.09 MiB/s
+2026-08-04 07:11:34.895 [Stats][3774763] SUMMARY elapsed=39.90s files=5 small=0 large=5 skipped=0 bytes=5368709120 (5.00 GiB) files/sec=0.1 throughput=128.32 MiB/s
+2026-08-04 07:11:34.899 [Batch][3774763] done records=5 ok=5 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:11:34.975 [Batch][3759844] done records=317 ok=317 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:11:35.019 [Batch][3760042] done records=317 ok=317 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:11:35.022 [Batch][3760364] done records=317 ok=317 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:11:35.023 [Batch][3760085] done records=317 ok=317 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:11:35.307 [Stats][3760277] SUMMARY elapsed=63.24s files=317 small=317 large=0 skipped=0 bytes=664797184 (634.00 MiB) files/sec=5.0 throughput=10.02 MiB/s
+2026-08-04 07:11:35.323 [Stats][3760455] SUMMARY elapsed=63.15s files=317 small=317 large=0 skipped=0 bytes=664797184 (634.00 MiB) files/sec=5.0 throughput=10.04 MiB/s
+2026-08-04 07:11:35.467 [Stats][3760428] SUMMARY elapsed=63.36s files=317 small=317 large=0 skipped=0 bytes=664797184 (634.00 MiB) files/sec=5.0 throughput=10.01 MiB/s
+2026-08-04 07:11:35.494 [Batch][3760455] done records=317 ok=317 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:11:35.495 [Batch][3760277] done records=317 ok=317 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:11:35.630 [Stats][3760623] SUMMARY elapsed=63.36s files=317 small=317 large=0 skipped=0 bytes=664797184 (634.00 MiB) files/sec=5.0 throughput=10.01 MiB/s
+2026-08-04 07:11:35.631 [Stats][3760253] SUMMARY elapsed=63.55s files=317 small=317 large=0 skipped=0 bytes=664797184 (634.00 MiB) files/sec=5.0 throughput=9.98 MiB/s
+2026-08-04 07:11:35.657 [Batch][3760428] done records=317 ok=317 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:11:35.767 [Stats][3759914] SUMMARY elapsed=63.82s files=317 small=317 large=0 skipped=0 bytes=664797184 (634.00 MiB) files/sec=5.0 throughput=9.93 MiB/s
+2026-08-04 07:11:35.879 [Stats][3760362] SUMMARY elapsed=63.78s files=317 small=317 large=0 skipped=0 bytes=664797184 (634.00 MiB) files/sec=5.0 throughput=9.94 MiB/s
+2026-08-04 07:11:36.102 [Batch][3760623] done records=317 ok=317 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:11:36.117 [Batch][3760253] done records=317 ok=317 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:11:36.270 [Batch][3759914] done records=317 ok=317 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:11:36.454 [Batch][3760362] done records=317 ok=317 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:11:41.585 [Stats][3780159] SUMMARY elapsed=37.12s files=5 small=0 large=5 skipped=0 bytes=5368709120 (5.00 GiB) files/sec=0.1 throughput=137.93 MiB/s
+2026-08-04 07:11:41.594 [Batch][3780159] done records=5 ok=5 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:11:41.730 [Stats][3779071] SUMMARY elapsed=38.71s files=5 small=0 large=5 skipped=0 bytes=5368709120 (5.00 GiB) files/sec=0.1 throughput=132.27 MiB/s
+2026-08-04 07:11:41.741 [Batch][3779071] done records=5 ok=5 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:11:45.838 [Stats][3783853] SUMMARY elapsed=35.36s files=5 small=0 large=5 skipped=0 bytes=5368709120 (5.00 GiB) files/sec=0.1 throughput=144.81 MiB/s
+2026-08-04 07:11:45.842 [Batch][3783853] done records=5 ok=5 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:11:48.804 [Stats][3784852] SUMMARY elapsed=36.32s files=511 small=511 large=0 skipped=0 bytes=8372224 (7.98 MiB) files/sec=14.1 throughput=0.22 MiB/s
+2026-08-04 07:11:49.159 [Batch][3784852] done records=511 ok=511 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:11:57.237 [Stats][3789780] SUMMARY elapsed=36.49s files=317 small=317 large=0 skipped=0 bytes=664797184 (634.00 MiB) files/sec=8.7 throughput=17.37 MiB/s
+2026-08-04 07:11:57.377 [Batch][3789780] done records=317 ok=317 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:11:57.480 [Stats][3789795] SUMMARY elapsed=36.67s files=317 small=317 large=0 skipped=0 bytes=664797184 (634.00 MiB) files/sec=8.6 throughput=17.29 MiB/s
+2026-08-04 07:11:57.666 [Batch][3789795] done records=317 ok=317 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:11:59.167 [Stats][3796912] SUMMARY elapsed=26.60s files=317 small=317 large=0 skipped=0 bytes=664797184 (634.00 MiB) files/sec=11.9 throughput=23.84 MiB/s
+2026-08-04 07:11:59.311 [Batch][3796912] done records=317 ok=317 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:12:00.696 [Stats][3799492] SUMMARY elapsed=23.69s files=317 small=317 large=0 skipped=0 bytes=664797184 (634.00 MiB) files/sec=13.4 throughput=26.77 MiB/s
+2026-08-04 07:12:00.715 [Stats][3759234] SUMMARY elapsed=90.38s files=2000 small=2000 large=0 skipped=0 bytes=0 (0.00 B) files/sec=22.1 throughput=0.00 MiB/s
+2026-08-04 07:12:00.895 [Batch][3799492] done records=317 ok=317 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:12:01.764 [Batch][3759234] done records=2000 ok=2000 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:12:01.875 [Stats][3759386] SUMMARY elapsed=90.83s files=2000 small=2000 large=0 skipped=0 bytes=0 (0.00 B) files/sec=22.0 throughput=0.00 MiB/s
+2026-08-04 07:12:02.379 [Stats][3759450] SUMMARY elapsed=91.35s files=2000 small=2000 large=0 skipped=0 bytes=0 (0.00 B) files/sec=21.9 throughput=0.00 MiB/s
+2026-08-04 07:12:02.587 [Stats][3759509] SUMMARY elapsed=91.10s files=2000 small=2000 large=0 skipped=0 bytes=0 (0.00 B) files/sec=22.0 throughput=0.00 MiB/s
+2026-08-04 07:12:02.664 [Stats][3760276] SUMMARY elapsed=90.64s files=2000 small=2000 large=0 skipped=0 bytes=0 (0.00 B) files/sec=22.1 throughput=0.00 MiB/s
+2026-08-04 07:12:02.811 [Batch][3759386] done records=2000 ok=2000 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:12:03.500 [Batch][3759450] done records=2000 ok=2000 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:12:03.723 [Batch][3759509] done records=2000 ok=2000 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:12:03.767 [Batch][3760276] done records=2000 ok=2000 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:12:06.689 [Stats][3799361] SUMMARY elapsed=29.80s files=2000 small=2000 large=0 skipped=0 bytes=0 (0.00 B) files/sec=67.1 throughput=0.00 MiB/s
+2026-08-04 07:12:06.723 [Stats][3799511] SUMMARY elapsed=29.69s files=2000 small=2000 large=0 skipped=0 bytes=0 (0.00 B) files/sec=67.4 throughput=0.00 MiB/s
+2026-08-04 07:12:06.728 [Stats][3799379] SUMMARY elapsed=29.83s files=2000 small=2000 large=0 skipped=0 bytes=0 (0.00 B) files/sec=67.0 throughput=0.00 MiB/s
+2026-08-04 07:12:07.641 [Batch][3799361] done records=2000 ok=2000 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:12:07.659 [Batch][3799511] done records=2000 ok=2000 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:12:07.681 [Batch][3799379] done records=2000 ok=2000 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:12:38.271 [Stats][3763067] SUMMARY elapsed=121.92s files=50 small=0 large=50 skipped=0 bytes=5242880000 (4.88 GiB) files/sec=0.4 throughput=41.01 MiB/s
+2026-08-04 07:12:38.295 [Batch][3763067] done records=50 ok=50 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:12:38.345 [Stats][3764076] SUMMARY elapsed=120.48s files=50 small=0 large=50 skipped=0 bytes=5242880000 (4.88 GiB) files/sec=0.4 throughput=41.50 MiB/s
+2026-08-04 07:12:38.371 [Batch][3764076] done records=50 ok=50 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:12:44.104 [Stats][3773078] SUMMARY elapsed=111.76s files=50 small=0 large=50 skipped=0 bytes=5242880000 (4.88 GiB) files/sec=0.4 throughput=44.74 MiB/s
+2026-08-04 07:12:44.129 [Batch][3773078] done records=50 ok=50 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:12:49.585 [Stats][3779537] SUMMARY elapsed=105.98s files=50 small=0 large=50 skipped=0 bytes=5242880000 (4.88 GiB) files/sec=0.5 throughput=47.18 MiB/s
+2026-08-04 07:12:49.608 [Batch][3779537] done records=50 ok=50 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:12:50.834 [Stats][3784289] SUMMARY elapsed=99.17s files=50 small=0 large=50 skipped=0 bytes=5242880000 (4.88 GiB) files/sec=0.5 throughput=50.42 MiB/s
+2026-08-04 07:12:50.837 [Stats][3784987] SUMMARY elapsed=98.21s files=50 small=0 large=50 skipped=0 bytes=5242880000 (4.88 GiB) files/sec=0.5 throughput=50.91 MiB/s
+2026-08-04 07:12:50.858 [Batch][3784289] done records=50 ok=50 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:12:50.861 [Batch][3784987] done records=50 ok=50 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:12:51.998 [Stats][3784869] SUMMARY elapsed=99.46s files=50 small=0 large=50 skipped=0 bytes=5242880000 (4.88 GiB) files/sec=0.5 throughput=50.27 MiB/s
+2026-08-04 07:12:52.017 [Stats][3784844] SUMMARY elapsed=99.53s files=50 small=0 large=50 skipped=0 bytes=5242880000 (4.88 GiB) files/sec=0.5 throughput=50.24 MiB/s
+2026-08-04 07:12:52.023 [Batch][3784869] done records=50 ok=50 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv
+2026-08-04 07:12:52.041 [Batch][3784844] done records=50 ok=50 failed=0 csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_542/transfer_report_542.csv

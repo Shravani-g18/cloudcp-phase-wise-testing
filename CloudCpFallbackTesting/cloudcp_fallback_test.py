@@ -588,10 +588,13 @@ def poll_transfer(api, host: RemoteHost, rec: Recorder, transfer_id: str,
 
     # Start a background watcher that copies .lst files every second.
     # This avoids missing short-lived files between poll intervals.
+    # The loop is bounded (timeout + slack) so it self-terminates even if the
+    # harness dies before the explicit kill below — no orphaned watchers.
     watcher_pid_file = f"/tmp/fb_watcher_{transfer_id}.pid"
+    watcher_max_secs = int(timeout) + 120
     watcher_cmd = (
         f"nohup bash -c '"
-        f"while true; do "
+        f"for _ in $(seq 1 {watcher_max_secs}); do "
         f"  cp -a {remote_log_dir}/*.txt.lst {remote_snap}/ 2>/dev/null; "
         f"  cp -a {remote_log_dir}/cloudcp_retry_{transfer_id}_*.lst {remote_snap}/ 2>/dev/null; "
         f"  sleep 1; "
@@ -605,59 +608,64 @@ def poll_transfer(api, host: RemoteHost, rec: Recorder, transfer_id: str,
     polls = 0
     paused_since: float | None = None
     consecutive_none = 0
-    while time.time() < deadline:
-        polls += 1
+    try:
+        while time.time() < deadline:
+            polls += 1
 
-        # Proactively refresh the token before polling to avoid mid-poll expiry.
-        if session is not None:
-            session.ensure_token()
+            # Proactively refresh the token before polling to avoid mid-poll expiry.
+            if session is not None:
+                session.ensure_token()
 
-        entry = _status_entry(api, transfer_id)
+            entry = _status_entry(api, transfer_id)
 
-        # Handle consecutive failed status calls (likely auth issues).
-        if entry is None:
-            consecutive_none += 1
-            if consecutive_none >= 3 and session is not None:
-                LOG.warning("3 consecutive failed status calls — forcing re-login")
-                try:
-                    session.login(silent=True)
-                except Exception:  # noqa: BLE001
-                    pass
-                consecutive_none = 0
+            # Handle consecutive failed status calls (likely auth issues).
+            if entry is None:
+                consecutive_none += 1
+                if consecutive_none >= 3 and session is not None:
+                    LOG.warning("3 consecutive failed status calls — forcing re-login")
+                    try:
+                        session.login(silent=True)
+                    except Exception:  # noqa: BLE001
+                        pass
+                    consecutive_none = 0
+                rec.add(f"status (poll {polls})", "api",
+                        f"GET /api/bcloud/status_transfer transfer_id={transfer_id}",
+                        ok=False, detail="no response (possible token expiry)")
+                time.sleep(interval)
+                continue
+            consecutive_none = 0
+
+            state = str((entry or {}).get("state") or "").upper()
+            pct = (entry or {}).get("percent_completed")
             rec.add(f"status (poll {polls})", "api",
                     f"GET /api/bcloud/status_transfer transfer_id={transfer_id}",
-                    ok=False, detail="no response (possible token expiry)")
-            time.sleep(interval)
-            continue
-        consecutive_none = 0
-
-        state = str((entry or {}).get("state") or "").upper()
-        pct = (entry or {}).get("percent_completed")
-        rec.add(f"status (poll {polls})", "api",
-                f"GET /api/bcloud/status_transfer transfer_id={transfer_id}",
-                ok=True, detail=f"state={state or '?'} percent={pct}")
-        last_state = state or last_state
-        if state in TERMINAL_STATES:
-            break
-
-        # Abort if stuck in PAUSED for longer than the paused timeout.
-        if state == "PAUSED":
-            if paused_since is None:
-                paused_since = time.time()
-            elif time.time() - paused_since >= DEF_PAUSED_TIMEOUT:
-                rec.add("paused timeout", "local", "",
-                        ok=False,
-                        detail=f"transfer stuck in PAUSED for >{DEF_PAUSED_TIMEOUT}s — aborting poll")
-                last_state = "PAUSED_TIMEOUT"
+                    ok=True, detail=f"state={state or '?'} percent={pct}")
+            last_state = state or last_state
+            if state in TERMINAL_STATES:
                 break
-        else:
-            paused_since = None
 
-        time.sleep(interval)
+            # Abort if stuck in PAUSED for longer than the paused timeout.
+            if state == "PAUSED":
+                if paused_since is None:
+                    paused_since = time.time()
+                elif time.time() - paused_since >= DEF_PAUSED_TIMEOUT:
+                    rec.add("paused timeout", "local", "",
+                            ok=False,
+                            detail=f"transfer stuck in PAUSED for >{DEF_PAUSED_TIMEOUT}s — aborting poll")
+                    last_state = "PAUSED_TIMEOUT"
+                    break
+            else:
+                paused_since = None
 
-    # Stop the watcher and do one final capture pass.
-    host.run(rec, "stop .lst watcher",
-             f"kill $(cat {watcher_pid_file} 2>/dev/null) 2>/dev/null; rm -f {watcher_pid_file}; "
+            time.sleep(interval)
+    finally:
+        # Always stop the watcher, even if the poll loop raises / is interrupted.
+        host.run(rec, "stop .lst watcher",
+                 f"kill $(cat {watcher_pid_file} 2>/dev/null) 2>/dev/null; rm -f {watcher_pid_file}",
+                 check=False)
+
+    # Do one final capture pass.
+    host.run(rec, "final .lst capture",
              f"cp -a {remote_log_dir}/*.txt.lst {remote_snap}/ 2>/dev/null; "
              f"cp -a {remote_log_dir}/cloudcp_retry_{transfer_id}_*.lst {remote_snap}/ 2>/dev/null; "
              f"ls -1 {remote_snap} 2>/dev/null | wc -l",

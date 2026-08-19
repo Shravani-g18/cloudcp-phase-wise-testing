@@ -794,8 +794,23 @@ class TransferPerfCollector:
         # Parse PERF lines from journal
         perf_data = parse_perf_from_journal(raw_path, str(transfer_id), tier_order)
 
-        # Clean, filtered per-signal logs + why-is-it-empty diagnosis
-        log_diag = split_journal_by_signal(raw_path, str(transfer_id), self.perf_dir)
+        # Clean, filtered per-signal logs under logs/ -- mirrors the
+        # schedular_test.py report_<id>/logs/ layout (pending_<id>.log,
+        # running_workers_<id>.log, free_workers_<id>.log, perf_<id>.log) so the
+        # captured worker/PERF signals are visible on their own instead of buried
+        # in the mixed raw log. Also returns the why-is-it-empty diagnosis.
+        logs_dir = self.perf_dir / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        log_diag = split_journal_by_signal(raw_path, str(transfer_id), logs_dir)
+
+        # Move the mixed raw capture into logs/raw_<id>.log (== raw_<id>.log in
+        # the scheduler report). Done after all raw parsing/splitting is complete.
+        raw_dest = logs_dir / f"raw_{transfer_id}.log"
+        try:
+            if raw_path.is_file():
+                raw_path.replace(raw_dest)
+        except OSError:
+            pass
 
         # Parse cloudcp.log throughput
         cloudcp_path = self.perf_dir / "cloudcplogs.txt"
@@ -856,12 +871,26 @@ class TransferPerfCollector:
         (self.perf_dir / "perf_data.json").write_text(
             json.dumps(payload, indent=2, default=str), encoding="utf-8")
 
+        # run_meta.json -- mirrors report_<id>/run_meta.json in the scheduler
+        (self.perf_dir / "run_meta.json").write_text(
+            json.dumps({**meta, "dataset": dataset_info}, indent=2, default=str),
+            encoding="utf-8")
+
+        # Copy the results CSV alongside the report as transfer_report_<id>.csv
+        # (== the scheduler's report_<id>/transfer_report_<id>.csv).
+        if csv_path and csv_path.is_file():
+            try:
+                (self.perf_dir / f"transfer_report_{transfer_id}.csv").write_bytes(
+                    csv_path.read_bytes())
+            except OSError:
+                pass
+
         # Render HTML
-        html_path = self.perf_dir / "perf_report.html"
+        html_path = self.perf_dir / "report.html"
         render_perf_html(payload, html_path)
 
         # Write text summary
-        txt_path = self.perf_dir / "perf_summary.txt"
+        txt_path = self.perf_dir / "summary.txt"
         write_perf_summary_txt(txt_path, meta, journal_data, csv_summary,
                                throughput, perf_data)
 
