@@ -1,0 +1,25 @@
+Transfer Summary Report
+
+- Transfer start                        : 2026-08-19 10:28:12 UTC +0000
+- Transfer completion                   : 2026-08-19 10:28:18 UTC +0000
+- Transfer status                       : Completed
+- Source                                : /bryck/cloudcp_fallback/small_files
+- Destination                           : s3://omicron/fallback/small_files
+- Transfer ID                           : 89
+
+Source Summary:
+- Source                                : /bryck/cloudcp_fallback/small_files
+- Number of files                       : 120
+- Total size                            : 1,051,792,265 bytes (1.0518 GB)
+
+Destination Summary:
+- Destination                           : s3://omicron/fallback/small_files
+- Number of objects                     : 120
+- Total size                            : 1,051,792,265 bytes (1.0518 GB)
+
+============== TOTAL SUMMARY ==============
+- Files transferred (Aprox)             : 120
+- Bytes transferred (Aprox)             : 1,051,792,265 bytes (1.0518 GB)
+- Number of missing files/objects       : 0
+- Total files                           : 120
+- Total source size                     : 1,051,792,265 bytes (1.0518 GB)

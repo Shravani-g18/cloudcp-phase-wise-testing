@@ -1,0 +1,722 @@
+[
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-0nrvaiok82gd.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-0nrvaiok82gd.dat",
+    "FileSize": "14835859",
+    "ETag": "\"3c022a68d99b78b2dff5ed630683d600\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-f1v71gark96s.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-f1v71gark96s.bin",
+    "FileSize": "1728632",
+    "ETag": "\"079ed310918f5e8d10092b00043f4436\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-kagal7qgmxnv.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-kagal7qgmxnv.bin",
+    "FileSize": "13814295",
+    "ETag": "\"2f65b917bb45837c8db6cc662e0d4fc9\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-qhwp6dovs9p3.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-qhwp6dovs9p3.dat",
+    "FileSize": "4869603",
+    "ETag": "\"eab632adb75795a4054b5da2b3b721fe\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-jrmnrdty9rw8.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-jrmnrdty9rw8.bin",
+    "FileSize": "6928487",
+    "ETag": "\"cfebeb3feeb49d4443d2d164fbe2cede\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-8s5ylqtqfdaq.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-8s5ylqtqfdaq.dat",
+    "FileSize": "16023255",
+    "ETag": "\"1799e42d80c1e97d235dbc576b2c2807\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-xbzw0uccg1rg.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-xbzw0uccg1rg.bin",
+    "FileSize": "9441650",
+    "ETag": "\"126d3adbb85801b4a283000d67fda531\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-k2md4gjl2jjo.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-k2md4gjl2jjo.dat",
+    "FileSize": "14702237",
+    "ETag": "\"968c4f11617c9cf88f0c65b64d949012\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-b8qoqptcshaa.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-b8qoqptcshaa.dat",
+    "FileSize": "9383705",
+    "ETag": "\"7977b9000060a9e1f5a7c89cb1eccbd4\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-167yrvp1xs99.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-167yrvp1xs99.bin",
+    "FileSize": "12962981",
+    "ETag": "\"db08e76c9e0cf1338a973eb4370a6d2d\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-5yyjhx9m2wff.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-5yyjhx9m2wff.dat",
+    "FileSize": "14819187",
+    "ETag": "\"d4e92ad667ba7c9f441ecf879704b976\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-bb65419mdil6.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-bb65419mdil6.bin",
+    "FileSize": "6702948",
+    "ETag": "\"7ab2de1663f1859b1d91fcf2a6384472\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-66jeg5o35wrp.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-66jeg5o35wrp.dat",
+    "FileSize": "12520407",
+    "ETag": "\"f4d8879ea8a51fc38d0a00b82c82b9b3\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-ps8dpyklq7lj.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-ps8dpyklq7lj.dat",
+    "FileSize": "3390222",
+    "ETag": "\"687dc29fd7530ecadf2e85e92a86a70d\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-7h6vm885y1rg.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-7h6vm885y1rg.bin",
+    "FileSize": "10913874",
+    "ETag": "\"5828c2366e240ea0207c0c66771dc33b\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-hewk7lks2fa8.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-hewk7lks2fa8.bin",
+    "FileSize": "12446153",
+    "ETag": "\"676ed85b375f4c1f50a9b6e0029f9e88\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-pvr9uhqxj5uw.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-pvr9uhqxj5uw.dat",
+    "FileSize": "7846404",
+    "ETag": "\"26693b8e52ce14af4f8110f53bdabb3b\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-o6gegh654iqz.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-o6gegh654iqz.bin",
+    "FileSize": "3304096",
+    "ETag": "\"446d49f58b289d71cec958fde42d1b5c\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-s3l0ewfi259e.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-s3l0ewfi259e.bin",
+    "FileSize": "11967637",
+    "ETag": "\"9e00b1afc19a2b900b61d713a7df62be\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-w8iq7tna2f62.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-w8iq7tna2f62.dat",
+    "FileSize": "1666828",
+    "ETag": "\"ecea2143188f69f782ea25f07fced874\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-9ctj99nscpoe.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-9ctj99nscpoe.bin",
+    "FileSize": "4312518",
+    "ETag": "\"a14fa2d2b8924a38446a2118f140a818\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-feua6lgn9z2x.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-feua6lgn9z2x.bin",
+    "FileSize": "6583225",
+    "ETag": "\"11359099517a9abc10549ba33f03a03a\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-zfnlmjlns2iq.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-zfnlmjlns2iq.bin",
+    "FileSize": "16370394",
+    "ETag": "\"97ccdd951dafd002ee74c2525ba4a072\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-7vsruiusdk5b.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-7vsruiusdk5b.bin",
+    "FileSize": "13852874",
+    "ETag": "\"18904a08a91e74b10de7cf907cbf6f25\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-tv4t3rnphrni.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-tv4t3rnphrni.dat",
+    "FileSize": "14590368",
+    "ETag": "\"fa1474d030f1092b656565d500c88058\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-bifrhsiseby8.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-bifrhsiseby8.bin",
+    "FileSize": "7585527",
+    "ETag": "\"ece17a0a0cf303f9be7ff5122cacf873\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-no4fo8sjaidw.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-no4fo8sjaidw.bin",
+    "FileSize": "14972292",
+    "ETag": "\"afce7fa4ee01499209b26782cbe42163\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-f2p52u8gz0b3.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-f2p52u8gz0b3.bin",
+    "FileSize": "11938315",
+    "ETag": "\"86a60c95465aa28ef197b7dda101193f\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-k4p20pj51ij5.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-k4p20pj51ij5.dat",
+    "FileSize": "1515846",
+    "ETag": "\"dfeb6e3180a2a806ec4596a20279903f\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-hrnrk8x5llci.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-hrnrk8x5llci.bin",
+    "FileSize": "8018731",
+    "ETag": "\"0a18d8a7802d650b90cd31761f023c2d\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-ray0itpq664w.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-ray0itpq664w.bin",
+    "FileSize": "7441270",
+    "ETag": "\"4167e6dbfcd4021d8432f3481bc5c166\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-0mtlshlm0jdq.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-0mtlshlm0jdq.dat",
+    "FileSize": "2921188",
+    "ETag": "\"03ce4744a3a96a303f9711e471b2c1fa\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-rlqqily11o50.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-rlqqily11o50.bin",
+    "FileSize": "8919414",
+    "ETag": "\"248b31825c7037ce57144e6baf249096\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-69uuuokfh7z6.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-69uuuokfh7z6.bin",
+    "FileSize": "11301941",
+    "ETag": "\"df170580299af6fa38a1ef1d2c0d44ab\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-j0jhujavpydl.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-j0jhujavpydl.dat",
+    "FileSize": "4975684",
+    "ETag": "\"a3ac33d4913d2420af8e1961f94bf41c\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-fdwcnvu0oxzb.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-fdwcnvu0oxzb.bin",
+    "FileSize": "7597669",
+    "ETag": "\"a20bbd3e315a5723fe7bc9224c2950eb\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-iw8u3qpkai01.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-iw8u3qpkai01.dat",
+    "FileSize": "11216519",
+    "ETag": "\"8eb690128f25a0936b33a32f6a498896\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-7jmnfp2xnr7y.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-7jmnfp2xnr7y.dat",
+    "FileSize": "6042345",
+    "ETag": "\"965ee505ebed0e51f1f58cd62e58191f\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-o5tbryuk2y5e.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-o5tbryuk2y5e.bin",
+    "FileSize": "9935910",
+    "ETag": "\"a377d144ffe79291ae2e00f5ec2c48e9\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-uii9axazjdwr.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-uii9axazjdwr.bin",
+    "FileSize": "11830519",
+    "ETag": "\"4a1c2494abe519653678b75011c3edf6\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-m02hx3etqmlo.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-m02hx3etqmlo.dat",
+    "FileSize": "2088628",
+    "ETag": "\"8a699689371db1aeba7192356404ff65\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-lhh6e6jzn1yh.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-lhh6e6jzn1yh.bin",
+    "FileSize": "12725708",
+    "ETag": "\"714a5fed15c120dc3b36081c21464bcc\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-vxmq0edqiu2z.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-vxmq0edqiu2z.dat",
+    "FileSize": "4290100",
+    "ETag": "\"c01b5da0be7ea50f0f44fd79bec89a8d\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-ljj5ava7x98r.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-ljj5ava7x98r.dat",
+    "FileSize": "3105093",
+    "ETag": "\"c94d5c6bbb4a1ebf57823f71f684d004\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-zy0a9eewbteg.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-zy0a9eewbteg.dat",
+    "FileSize": "12419301",
+    "ETag": "\"4a248eea3419dc03dbf0da69808c3dc0\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-p5bd59iyzj1g.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-p5bd59iyzj1g.dat",
+    "FileSize": "7504345",
+    "ETag": "\"83c7d7275f08731c4f1655496bf65b1c\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-n7vnif2k7mrp.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-n7vnif2k7mrp.bin",
+    "FileSize": "8521362",
+    "ETag": "\"7a6f9fded5f43819b2823e2074525950\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-7el36w84agmr.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-7el36w84agmr.bin",
+    "FileSize": "4196909",
+    "ETag": "\"96b74f08fa2f64b1d556b682ccd63dda\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-y9ukplw480f5.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-y9ukplw480f5.dat",
+    "FileSize": "9658421",
+    "ETag": "\"895a9a3bb38a48c2f3cfec95089d0349\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-cyt5omogma7f.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-cyt5omogma7f.bin",
+    "FileSize": "8939881",
+    "ETag": "\"b6c10ad565a54b7e5f5b00e71a5fa1dd\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-fkp9fp8lr7h7.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-fkp9fp8lr7h7.bin",
+    "FileSize": "8783660",
+    "ETag": "\"c0f954fbac306e0f17f816099fb56313\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-tpeyhie63sky.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-tpeyhie63sky.dat",
+    "FileSize": "14025915",
+    "ETag": "\"a96b143c5e8c6095cf3dc9faf3791f27\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-1woqs9p2w1yn.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-1woqs9p2w1yn.bin",
+    "FileSize": "3473477",
+    "ETag": "\"710332094348620826923ac5a9a8baf0\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-vy03fr66lcpx.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-vy03fr66lcpx.bin",
+    "FileSize": "1552023",
+    "ETag": "\"54d1ee8b374f59afcc8410f2b1b69be2\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-cv9haoi26g3e.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-cv9haoi26g3e.bin",
+    "FileSize": "2404755",
+    "ETag": "\"f539fa2900964266c70cdc8b3af0dffe\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-p1n9bk0r6jav.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-p1n9bk0r6jav.bin",
+    "FileSize": "3866191",
+    "ETag": "\"3cc1f650f9639841f225f332560a0487\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-rdrtdnvvuglh.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-rdrtdnvvuglh.bin",
+    "FileSize": "9825503",
+    "ETag": "\"36e74ed49448b1e19d6a70106d92db73\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-zz4o49vbeuvv.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-zz4o49vbeuvv.bin",
+    "FileSize": "5045540",
+    "ETag": "\"56bd83b6e8237cbf064bddb3d0e31d2f\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-5g5qxskcv1g8.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-5g5qxskcv1g8.bin",
+    "FileSize": "16551982",
+    "ETag": "\"06745b01ce18f58c26dd9324bdfa3a57\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-21xqfbmnxh87.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-21xqfbmnxh87.bin",
+    "FileSize": "8879741",
+    "ETag": "\"099720421923bfeed81d72e6a400b0c8\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-fzm7ofbq66i8.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-fzm7ofbq66i8.bin",
+    "FileSize": "5880934",
+    "ETag": "\"53c0a342f46743b0f8465697e369ff7b\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-aeacwvypahhl.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-aeacwvypahhl.bin",
+    "FileSize": "13687649",
+    "ETag": "\"b30b656be2fad6f74410e050a0c52c31\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-s2hif4lpmknj.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-s2hif4lpmknj.bin",
+    "FileSize": "7771005",
+    "ETag": "\"cb07579b3bc82ad4439d18b925e6ae72\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-gsudjm7wtl33.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-gsudjm7wtl33.bin",
+    "FileSize": "13112161",
+    "ETag": "\"01d1bffba4fc67dd6e7d55d0b3433a92\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-wqayyv2b14z4.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-wqayyv2b14z4.dat",
+    "FileSize": "1503396",
+    "ETag": "\"162a4522760bdff2c945a8225c68b690\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-533y8jyidvga.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-533y8jyidvga.bin",
+    "FileSize": "9719824",
+    "ETag": "\"b1ac58db6fb03ed8d4c6aadce0cd777c\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-xe0a27rq2rvn.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-xe0a27rq2rvn.bin",
+    "FileSize": "13982015",
+    "ETag": "\"a53d6f421740be54b12681f408116dd6\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-y812mst0q9uz.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-y812mst0q9uz.bin",
+    "FileSize": "6733833",
+    "ETag": "\"d4965daa96f56cb4c3089b45471db19c\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-0v3ks5a8c96j.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-0v3ks5a8c96j.bin",
+    "FileSize": "4155893",
+    "ETag": "\"1e9d53a9c25bbb6513fc7cffa81da4f4\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-csoafs3h9ysz.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-csoafs3h9ysz.dat",
+    "FileSize": "13732574",
+    "ETag": "\"6e693dc88e7881672cdf3d60cd0983ea\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-yn3pxmn2swkq.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-yn3pxmn2swkq.dat",
+    "FileSize": "9409605",
+    "ETag": "\"8b3639c3f91b2ed8fbbda528a731f9e7\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-nqqblsbonbbn.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-nqqblsbonbbn.dat",
+    "FileSize": "4520258",
+    "ETag": "\"8d3606e92a45291050977b024c02700b\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-zvlxswg3agx1.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-zvlxswg3agx1.dat",
+    "FileSize": "2935771",
+    "ETag": "\"119d5f8a00dc38696cb3022877303742\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-v97u8eoch9my.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-v97u8eoch9my.bin",
+    "FileSize": "15477483",
+    "ETag": "\"0ff4fe8ad34325c63207d3ea08d0670e\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-2mz61051w2bs.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-2mz61051w2bs.bin",
+    "FileSize": "7879307",
+    "ETag": "\"7243331fcdbe965f5d7cb8baa8d07b99\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-xskzq5dnqeqt.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-xskzq5dnqeqt.dat",
+    "FileSize": "2433440",
+    "ETag": "\"72c393a364b21328f97b227145698bc1\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-od0oim365w9y.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-od0oim365w9y.dat",
+    "FileSize": "5845738",
+    "ETag": "\"d41bcf6bfbbb085eb9ec9b915d5cec96\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-msyvsk85o6kw.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-msyvsk85o6kw.bin",
+    "FileSize": "5021029",
+    "ETag": "\"ab1478e35b6fde558df89c494334c6ac\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-tv0tcaemfju7.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-tv0tcaemfju7.bin",
+    "FileSize": "14916452",
+    "ETag": "\"6d1009d9c3204bc3167bfbe296b92038\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-d4p66ac82xzg.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-d4p66ac82xzg.bin",
+    "FileSize": "6832878",
+    "ETag": "\"bccc6461b6253537dd1f26711273033a\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-mxiydkq70eqv.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-mxiydkq70eqv.dat",
+    "FileSize": "2169889",
+    "ETag": "\"e99ca0f3f0d407d1315da3c932b03caf\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-a2phq9xixr1g.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-a2phq9xixr1g.dat",
+    "FileSize": "14056084",
+    "ETag": "\"c1ff107aa8937f91312d5ecbbade55d5\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-wt2a3vaecbea.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-wt2a3vaecbea.bin",
+    "FileSize": "5472448",
+    "ETag": "\"2227b3bac7c22888e159f8099e06474a\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-qjogqrar1jfa.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-qjogqrar1jfa.dat",
+    "FileSize": "16389313",
+    "ETag": "\"b2f24ad9953b9c2355779494c0ec6898\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-6g0zs8a5vsfs.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-6g0zs8a5vsfs.dat",
+    "FileSize": "2198552",
+    "ETag": "\"8e75303e66294bac47db3063550f448b\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-9l1xn56xxrky.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-9l1xn56xxrky.bin",
+    "FileSize": "10200631",
+    "ETag": "\"a319d2d852955828e05af6a836a284a6\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-5cd39kx1l88v.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-5cd39kx1l88v.dat",
+    "FileSize": "6900275",
+    "ETag": "\"d907470d06a43d6824813780384453ac\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-489w1ffmq49u.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-489w1ffmq49u.bin",
+    "FileSize": "5642909",
+    "ETag": "\"dc605d6cec838ed97e627269d08779ea\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-0yjc062qm4ls.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-0yjc062qm4ls.bin",
+    "FileSize": "3679239",
+    "ETag": "\"de84f1c9eab8c3e3aefd883cf5002313\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-oqi989yb9av0.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-oqi989yb9av0.bin",
+    "FileSize": "2315755",
+    "ETag": "\"d6eac143ec812d0b5ef4168369bfafc8\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-crpkdf3yfu8p.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-crpkdf3yfu8p.bin",
+    "FileSize": "3386533",
+    "ETag": "\"32be2e1de78b4f37c8a061e61beaa0c6\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-v7fywg999ykd.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-v7fywg999ykd.bin",
+    "FileSize": "3837494",
+    "ETag": "\"aaefe6ad023f336285d92a7ff6387b40\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-dc4ma0x8g088.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-dc4ma0x8g088.dat",
+    "FileSize": "2968619",
+    "ETag": "\"17dea44f290c86e99bee64217f65d7ad\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-mz3l0yiirm5y.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-mz3l0yiirm5y.bin",
+    "FileSize": "6833451",
+    "ETag": "\"7fc32c8e34be730c4e36c2c32a1af4ae\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-xr21rf7bdalk.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-xr21rf7bdalk.dat",
+    "FileSize": "15834736",
+    "ETag": "\"d443e96c6e05bb77c9a9ddf470f97dfb\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-c101oafsacj4.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-c101oafsacj4.bin",
+    "FileSize": "11384016",
+    "ETag": "\"cd44fff7282d21a05aee1b3a85e5754a\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-j23h4agfg9au.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-j23h4agfg9au.bin",
+    "FileSize": "15893875",
+    "ETag": "\"cc4111baf49f6b889a54a7e30b6f991f\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-72b4u1oioacn.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-72b4u1oioacn.dat",
+    "FileSize": "3847011",
+    "ETag": "\"6af3347b91c53493218db2aee0503b82\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-3fclji4dzjbo.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-3fclji4dzjbo.dat",
+    "FileSize": "9674173",
+    "ETag": "\"dd87777f4bb516a980fdc73ad7eacf2e\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-7fwzr1v1lpk2.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-7fwzr1v1lpk2.dat",
+    "FileSize": "14768186",
+    "ETag": "\"a8958372ca18f307f211864b85d51a2d\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-psing0yg6087.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-psing0yg6087.dat",
+    "FileSize": "15602773",
+    "ETag": "\"5bf7515b5bc9efc52d44d28275c380af\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-8fvb3axu4qzv.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-8fvb3axu4qzv.dat",
+    "FileSize": "4476790",
+    "ETag": "\"cf2b8bd024ea961c14259a5afdfee0d7\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-wyom2z0x1bgw.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-wyom2z0x1bgw.bin",
+    "FileSize": "10276083",
+    "ETag": "\"94b1b69bdb1b401c6b68bc19d37742bc\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-y03ecn1dyegi.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-y03ecn1dyegi.bin",
+    "FileSize": "16447441",
+    "ETag": "\"4ae647f470079af9a13d18b7a449bd45\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-x6n0x5e14ckk.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-x6n0x5e14ckk.bin",
+    "FileSize": "4401202",
+    "ETag": "\"7e70a303be20ab0f2a274b3fe1904bf0\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-q0z7oxwhbac4.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-q0z7oxwhbac4.bin",
+    "FileSize": "1606352",
+    "ETag": "\"e10f4e8ff0a9177924b45dd84460de78\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-2nkpe2k0u3sx.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-2nkpe2k0u3sx.bin",
+    "FileSize": "14392670",
+    "ETag": "\"5d0d6f812a4de2c466dd79db6c070c2a\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-ncqrqbykpqdb.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-ncqrqbykpqdb.dat",
+    "FileSize": "12220507",
+    "ETag": "\"937c1cbae51a06c0154cb7c067147407\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-3bey3i4hm0ih.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-3bey3i4hm0ih.bin",
+    "FileSize": "8928605",
+    "ETag": "\"d927aa4e3eae7eda7a0de2d3237a0a53\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-sk39he23546i.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-sk39he23546i.dat",
+    "FileSize": "8077728",
+    "ETag": "\"5f1209e696cca5ac5c15fb8d3a577655\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-2zwpiceaf6zd.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-2zwpiceaf6zd.bin",
+    "FileSize": "5968440",
+    "ETag": "\"a8683e19e9e476b819fca06124850463\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-0uc3yzbtiego.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-0uc3yzbtiego.dat",
+    "FileSize": "12650508",
+    "ETag": "\"7eaee95df431a234083708724e0c5d2f\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-cwoy459hix4y.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-cwoy459hix4y.dat",
+    "FileSize": "7537022",
+    "ETag": "\"efbcc28e3d06efb71995989d8bae3cfd\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-xz4l6cq82ixf.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-xz4l6cq82ixf.dat",
+    "FileSize": "15839243",
+    "ETag": "\"0337c8843ea78b403b4b542f2e01160a\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-cbdk2nr7kzdj.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-cbdk2nr7kzdj.bin",
+    "FileSize": "16156927",
+    "ETag": "\"114e9b337241f0db9b72472c768233af\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-b8948hj4q44h.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-b8948hj4q44h.dat",
+    "FileSize": "10030396",
+    "ETag": "\"4d5ef3d9e664d86f28076cc7a18238b7\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-tsnceaxzjmr7.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-tsnceaxzjmr7.bin",
+    "FileSize": "13413400",
+    "ETag": "\"9c03b46a9ea5189dcd50caab528cde35\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-hxz4t564r53k.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-hxz4t564r53k.bin",
+    "FileSize": "8978426",
+    "ETag": "\"4fba8f04c4f690ea79746eac69d090ef\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-1zupvflosjzc.bin",
+    "S3Path": "s3://omicron/fallback/small_files/small-1zupvflosjzc.bin",
+    "FileSize": "13547927",
+    "ETag": "\"f1a7b55835ec0e1fe4dd62f1ccc391fc\""
+  },
+  {
+    "AbsoluteFilePath": "/bryck/cloudcp_fallback/small_files/small-ynwyxcktla4q.dat",
+    "S3Path": "s3://omicron/fallback/small_files/small-ynwyxcktla4q.dat",
+    "FileSize": "8185847",
+    "ETag": "\"884519f7abae7c89600d371b0c347210\""
+  }
+]
