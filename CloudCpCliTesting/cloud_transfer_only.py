@@ -63,10 +63,17 @@ def parse_args(argv: Optional[list] = None) -> argparse.Namespace:
                      "No test matrix -- just the transfer.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p.add_argument("--dataset", required=True,
+    p.add_argument("--dataset", required=False, default=None,
                    help="DS-P* manifest id (e.g. DS-P1-04) or a local spec_files/*.yaml name "
                         "(e.g. 01_zero_byte -- searches CloudCpCliTesting/spec_files and "
-                        "CloudCpFallbackTesting/spec_files).")
+                        "CloudCpFallbackTesting/spec_files). Required unless --spec-file is given.")
+    p.add_argument("--spec-file", default=None,
+                   help="Explicit path to a datagen spec YAML, OR a directory containing multiple "
+                        "spec YAMLs (e.g. CloudCpSchedulerTesting/spec_files/SCH-DEEP-01/, with "
+                        "L0_ZERO.yaml..L4_LARGE.yaml) -- every *.yaml in the directory is generated "
+                        "under one common tier root and transferred as a single dataset. Bypasses the "
+                        "--dataset catalog lookup entirely. --tier (or the file/dir stem) sets the "
+                        "folder name under --output-base.")
     p.add_argument("--mode", choices=["upload", "download", "both"], default="upload")
     p.add_argument("--tier", default=None, help="Folder-name label (default: the --dataset value).")
 
@@ -315,14 +322,14 @@ def find_transfer_report_csv(transfer_logs_dir: str, transfer_id: str, extract_d
 
 
 def run_leg(args: argparse.Namespace, mode_label: str, case_dir: pathlib.Path, run_id: str,
-           src: str, dst: str, redact, tier: str, gen_summary: dict) -> dict:
+           src: str, dst: str, redact, tier: str, gen_summary: dict, dataset_label: str) -> dict:
     """Run one full transfer leg (upload or download) with its own perf
     capture + transfer_report CSV lookup, so each direction gets complete,
     independent results instead of sharing/overwriting a single perf window."""
     case_dir.mkdir(parents=True, exist_ok=True)
     tcr = ccr.TestCaseResult(
         test_id=f"{run_id}_{mode_label}", kind=mode_label,
-        description=f"transfer-only {mode_label} of {args.dataset}")
+        description=f"transfer-only {mode_label} of {dataset_label}")
 
     perf_cfg = {
         "journal_tag": args.journal_tag, "cloudcp_log": args.cloudcp_log,
@@ -391,11 +398,71 @@ def run_leg(args: argparse.Namespace, mode_label: str, case_dir: pathlib.Path, r
     }
 
 
+def generate_named_spec_dataset_local(spec_path: pathlib.Path, name: str, output_base: str,
+                                      run_dir: pathlib.Path, ns: types.SimpleNamespace,
+                                      logger: logging.Logger) -> tuple[pathlib.Path, dict]:
+    """Same job as cloud_cli_runner.generate_named_spec_dataset() (rewrite the
+    spec's root: line to output_base/name, then run datagen) but writes the
+    rewritten spec under run_dir/generated_specs/ instead of the system /tmp --
+    datagen has no CLI flag to override root: (confirmed in
+    DatagenSpecFileGuide.md, only --threads/--seed/--dry-run/--verbose), so a
+    rewritten copy is unavoidable; this just keeps it as a visible run
+    artifact on the same host instead of an OS temp file."""
+    target_root = pathlib.Path(output_base) / name
+    summary: dict = {"dataset_root": str(target_root), "spec_file": str(spec_path)}
+    if ns.skip_generate:
+        summary["actual_files"] = ccr.base.count_files_recursive(target_root)
+        return target_root, summary
+
+    text = spec_path.read_text(encoding="utf-8")
+    new_text = ccr.base.ROOT_LINE_RE.sub(f"root: {target_root.as_posix()}", text, count=1)
+    specs_dir = run_dir / "generated_specs"
+    specs_dir.mkdir(parents=True, exist_ok=True)
+    rewritten_path = specs_dir / f"{name.replace('/', '_')}.yaml"
+    rewritten_path.write_text(new_text, encoding="utf-8")
+
+    target_root.mkdir(parents=True, exist_ok=True)
+    proc = ccr.base.run_cmd([ns.datagen_bin, "--spec", str(rewritten_path)], logger, ns.dry_run)
+    if proc is not None:
+        ccr.base.check_completed(proc, f"datagen for {name}")
+    summary["actual_files"] = 0 if ns.dry_run else ccr.base.count_files_recursive(target_root)
+    return target_root, summary
+
+
+def generate_spec_dir_dataset(spec_dir: pathlib.Path, tier: str, output_base: str, run_dir: pathlib.Path,
+                              ns: types.SimpleNamespace, logger: logging.Logger) -> tuple[pathlib.Path, dict]:
+    """--spec-file pointed at a directory (e.g. CloudCpSchedulerTesting/spec_files/SCH-DEEP-01/,
+    with multiple tier YAMLs L0_ZERO.yaml..L4_LARGE.yaml) -- materialize every
+    *.yaml inside it under one common output_base/<tier>/<stem>/ root, so the
+    whole directory is generated and transferred as a single dataset."""
+    yaml_files = sorted(spec_dir.glob("*.yaml"))
+    if not yaml_files:
+        raise RuntimeError(f"--spec-file directory {spec_dir} has no *.yaml files")
+    target_root = pathlib.Path(output_base) / tier
+    total_files = 0
+    per_file: dict = {}
+    for spec_path in yaml_files:
+        _root, summary = generate_named_spec_dataset_local(
+            spec_path, spec_path.stem, str(target_root), run_dir, ns, logger)
+        per_file[spec_path.stem] = summary
+        total_files += summary.get("actual_files", 0)
+    return target_root, {
+        "dataset_root": str(target_root), "spec_dir": str(spec_dir),
+        "actual_files": total_files, "per_file": per_file,
+    }
+
+
 def main(argv: Optional[list] = None) -> int:
     args = parse_args(argv)
     setup_logging(args.verbose)
 
-    tier = args.tier or args.dataset
+    if not args.dataset and not args.spec_file:
+        LOG.error("one of --dataset or --spec-file is required")
+        return 2
+
+    spec_path_obj = pathlib.Path(args.spec_file) if args.spec_file else None
+    tier = args.tier or (spec_path_obj.stem if spec_path_obj else args.dataset)
+    dataset_label = args.dataset or (spec_path_obj.stem if spec_path_obj else "")
     run_id = args.run_id or f"transfer_only_{dt.datetime.now():%Y%m%d_%H%M%S}"
     run_dir = pathlib.Path(args.results_dir) / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -427,7 +494,13 @@ def main(argv: Optional[list] = None) -> int:
         output_base=args.output_base, skip_generate=args.skip_datagen,
         datagen_bin=args.datagen_bin, dry_run=args.dry_run, verbose=args.verbose,
     )
-    dataset_root, gen_summary = ccr.generate_tier_dataset(tier, args.output_base, ns, LOG, args.dataset)
+    dataset_root, gen_summary = (
+        generate_spec_dir_dataset(spec_path_obj, tier, args.output_base, run_dir, ns, LOG)
+        if spec_path_obj is not None and spec_path_obj.is_dir() else
+        generate_named_spec_dataset_local(spec_path_obj, tier, args.output_base, run_dir, ns, LOG)
+        if spec_path_obj is not None else
+        ccr.generate_tier_dataset(tier, args.output_base, ns, LOG, args.dataset)
+    )
     LOG.info("Dataset materialized under %s (%s)", dataset_root, gen_summary)
 
     bucket = configure_cloud(args, base_cloud_ops, tier, redact, mount_tcr)
@@ -444,7 +517,7 @@ def main(argv: Optional[list] = None) -> int:
     legs: List[dict] = []
     if args.mode in ("upload", "both"):
         legs.append(run_leg(args, "upload", run_dir / "upload", run_id, local_src, s3_path,
-                            redact, tier, gen_summary))
+                            redact, tier, gen_summary, dataset_label))
     if args.mode in ("download", "both"):
         if args.mode == "download":
             # Standalone download needs source data in the bucket first --
@@ -460,7 +533,7 @@ def main(argv: Optional[list] = None) -> int:
                     LOG.error("seed upload did not complete (state=%s); aborting download", seed_state)
                     return 5
         legs.append(run_leg(args, "download", run_dir / "download", run_id, s3_path, local_dst,
-                            redact, tier, gen_summary))
+                            redact, tier, gen_summary, dataset_label))
 
     all_logs_collected = all(leg["logs_collected"] for leg in legs)
     if not all_logs_collected and not args.dry_run and not args.keep and not args.force_cleanup:
@@ -472,7 +545,7 @@ def main(argv: Optional[list] = None) -> int:
 
     overall_ok = all(leg["error"] is None and leg["final_state"] == TERMINAL_SUCCESS for leg in legs) or args.dry_run
     result = {
-        "run_id": run_id, "dataset": args.dataset, "tier": tier, "mode": args.mode,
+        "run_id": run_id, "dataset": dataset_label, "tier": tier, "mode": args.mode,
         "legs": [
             {"mode": leg["tcr"].kind, "transfer_id": leg["transfer_id"], "final_state": leg["final_state"],
              "error": leg["error"], "perf": leg["perf_data"]}
@@ -485,14 +558,14 @@ def main(argv: Optional[list] = None) -> int:
 
     all_tcrs = [mount_tcr] + [leg["tcr"] for leg in legs]
     plan = {"run_id": run_id, "test_cases": [
-        {"id": t.test_id, "dataset": args.dataset, "mode": t.kind} for t in all_tcrs
+        {"id": t.test_id, "dataset": dataset_label, "mode": t.kind} for t in all_tcrs
     ]}
     commands_log = ccr.write_combined_commands_log(run_dir, all_tcrs)
     ccr.write_summary(run_dir, plan, all_tcrs)
 
     print("\n" + "=" * 60)
     for leg in legs:
-        print(f"{leg['tcr'].kind} of {args.dataset} -> {leg['final_state']}"
+        print(f"{leg['tcr'].kind} of {dataset_label} -> {leg['final_state']}"
               + (f" (transfer_id={leg['transfer_id']})" if leg["transfer_id"] else ""))
     print(f"Results directory : {run_dir}")
     print(f"  report.json      : {run_dir / 'report.json'}")
