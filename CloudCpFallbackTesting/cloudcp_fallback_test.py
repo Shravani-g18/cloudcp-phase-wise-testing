@@ -1479,7 +1479,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ex.add_argument("--dry-run", action="store_true",
                     help="Print the plan (commands + API calls) without executing.")
     ex.add_argument("--manual", action="store_true",
-                    help="Interactive mode: print each case (with F/C fault %) and "
+                    help="Interactive mode: print each case (with F/C fault %%) and "
                          "prompt to execute or skip it.")
     ex.add_argument("--skip-datagen", action="store_true", help="Reuse already-materialised data.")
     ex.add_argument("--skip-seed", action="store_true",
