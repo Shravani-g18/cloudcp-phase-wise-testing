@@ -1,0 +1,37 @@
+{
+  "P4-01": {
+    "description": "Exactly one correct status per file",
+    "steps": [
+      "Build 100 source files with matching SUCCESS report rows (same size) -> expect OK",
+      "Build 20 source files with no report row at all -> expect MISSING",
+      "Build 20 source files with a FAILED report row -> expect FAILED",
+      "Build 20 source files with a SUCCESS row but a different size -> expect MISMATCH",
+      "Add 10 report rows with no matching source file -> expect EXTRA",
+      "Add one OK file whose name embeds a comma, a quote, and a newline (CSV-quoting stress)",
+      "Run verify() on the combined 171-file set, write final_report.csv, re-read it back",
+      "Count rows per status in the re-parsed file and compare to expected counts",
+      "Confirm the tricky-named file re-parses to exactly one OK row",
+      "Confirm no file path appears more than once in the final parsed report"
+    ],
+    "passed": true,
+    "details": {
+      "expected": {
+        "OK": 101,
+        "MISSING": 20,
+        "FAILED": 20,
+        "MISMATCH": 20,
+        "EXTRA": 10
+      },
+      "actual": {
+        "OK": 101,
+        "MISSING": 20,
+        "FAILED": 20,
+        "MISMATCH": 20,
+        "EXTRA": 10
+      },
+      "csv_quoting_preserved": true,
+      "no_duplicates": true,
+      "final_report": "C:\\Cloud_cp Testing\\cloudcp-phase-wise-testing\\CloudCpReportTesting\\reports\\run_20260819_101625\\P4_01\\final_report.csv"
+    }
+  }
+}

@@ -1,0 +1,16 @@
+AbsoluteFilePath,S3Path,FileSize,ETag,Status
+perm_failed/file_0.bin,s3://bucket/perm_failed/file_0.bin,512,etag0,FAILED
+perm_failed/file_1.bin,s3://bucket/perm_failed/file_1.bin,512,etag0,FAILED
+perm_failed/file_10.bin,s3://bucket/perm_failed/file_10.bin,512,etag0,FAILED
+perm_failed/file_11.bin,s3://bucket/perm_failed/file_11.bin,512,etag0,FAILED
+perm_failed/file_12.bin,s3://bucket/perm_failed/file_12.bin,512,etag0,FAILED
+perm_failed/file_13.bin,s3://bucket/perm_failed/file_13.bin,512,etag0,FAILED
+perm_failed/file_14.bin,s3://bucket/perm_failed/file_14.bin,512,etag0,FAILED
+perm_failed/file_2.bin,s3://bucket/perm_failed/file_2.bin,512,etag0,FAILED
+perm_failed/file_3.bin,s3://bucket/perm_failed/file_3.bin,512,etag0,FAILED
+perm_failed/file_4.bin,s3://bucket/perm_failed/file_4.bin,512,etag0,FAILED
+perm_failed/file_5.bin,s3://bucket/perm_failed/file_5.bin,512,etag0,FAILED
+perm_failed/file_6.bin,s3://bucket/perm_failed/file_6.bin,512,etag0,FAILED
+perm_failed/file_7.bin,s3://bucket/perm_failed/file_7.bin,512,etag0,FAILED
+perm_failed/file_8.bin,s3://bucket/perm_failed/file_8.bin,512,etag0,FAILED
+perm_failed/file_9.bin,s3://bucket/perm_failed/file_9.bin,512,etag0,FAILED

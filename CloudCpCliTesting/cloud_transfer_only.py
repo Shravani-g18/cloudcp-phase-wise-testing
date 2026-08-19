@@ -476,6 +476,20 @@ def main(argv: Optional[list] = None) -> int:
     base_cloud_ops = cloud_ops_cfg or {}
     redact = ccr.build_redactor(login_cfg, base_cloud_ops)
 
+    # The bryckcloud broker itself fails to import (crashing every
+    # bryck_cloud_configure.py call with an opaque 409 + traceback) if this
+    # file is malformed JSON -- catch it here with a clear diagnostic instead
+    # of a deep stack trace surfacing later from configure_cloud().
+    if not args.dry_run:
+        config_ok, _tiers, config_msg, config_snippet = ccr.validate_bryck_config_json(args.bryck_config_json)
+        if not config_ok:
+            LOG.error("%s is invalid: %s", args.bryck_config_json, config_msg)
+            if config_snippet:
+                LOG.error("Context around the failing line:\n%s", config_snippet)
+            LOG.error("This must be fixed directly on the Bryck host (this file is not managed by this "
+                      "script) before any cloud configure/transfer can succeed.")
+            return 6
+
     backup_path = run_dir / "cloud_ops.json.bak"
     if not backup_path.exists():
         backup_path.write_text(json.dumps(base_cloud_ops, indent=2), encoding="utf-8")

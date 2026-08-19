@@ -1,0 +1,105 @@
+{
+  "P4-01": {
+    "description": "Exactly one correct status per file",
+    "passed": true,
+    "details": {
+      "expected": {
+        "OK": 101,
+        "MISSING": 20,
+        "FAILED": 20,
+        "MISMATCH": 20,
+        "EXTRA": 10
+      },
+      "actual": {
+        "OK": 101,
+        "MISSING": 20,
+        "FAILED": 20,
+        "MISMATCH": 20,
+        "EXTRA": 10
+      },
+      "csv_quoting_preserved": true,
+      "no_duplicates": true,
+      "final_report": "C:\\Cloud_cp Testing\\cloudcp-phase-wise-testing\\CloudCpReportTesting\\reports\\run_20260818_105558\\P4_01\\final_report.csv"
+    }
+  },
+  "P4-02": {
+    "description": "Refuse verify while scan in progress",
+    "passed": true,
+    "details": {
+      "refused_while_in_progress": true,
+      "proceeded_when_complete": true
+    }
+  },
+  "P4-03": {
+    "description": "Paused transfer does not trigger verify",
+    "passed": true,
+    "details": {
+      "blocked_while_paused": true,
+      "proceeded_after_resume": true
+    }
+  },
+  "P4-04": {
+    "description": "Encoding-safe merge-join",
+    "passed": true,
+    "details": {
+      "variants_tested": 6,
+      "all_classified_ok": true,
+      "final_report": "C:\\Cloud_cp Testing\\cloudcp-phase-wise-testing\\CloudCpReportTesting\\reports\\run_20260818_105558\\P4_04\\final_report.csv"
+    }
+  },
+  "P4-05": {
+    "description": "De-dup - last status wins",
+    "passed": true,
+    "details": {
+      "files": 50,
+      "appears_exactly_once": true,
+      "resolved_to_ok": true,
+      "final_report": "C:\\Cloud_cp Testing\\cloudcp-phase-wise-testing\\CloudCpReportTesting\\reports\\run_20260818_105558\\P4_05\\final_report.csv"
+    }
+  },
+  "P4-06": {
+    "description": "Progress counters monotonic",
+    "passed": true,
+    "details": {
+      "simulated": true,
+      "caveat": "synthetic sequence only - not a live-transfer proof",
+      "samples_taken": 20,
+      "monotonic_files_done": true,
+      "monotonic_bytes_done": true,
+      "total_files_nonzero_throughout": true
+    }
+  },
+  "P4-07": {
+    "description": "Per-tier completion summary",
+    "passed": true,
+    "details": {
+      "expected_per_tier": {
+        "zero": 20,
+        "tiny": 40,
+        "small": 30,
+        "medium": 15,
+        "large": 5
+      },
+      "actual_per_tier": {
+        "zero": 20,
+        "tiny": 40,
+        "small": 30,
+        "medium": 15,
+        "large": 5
+      },
+      "total_matches": true,
+      "final_report": "C:\\Cloud_cp Testing\\cloudcp-phase-wise-testing\\CloudCpReportTesting\\reports\\run_20260818_105558\\P4_07\\final_report.csv"
+    }
+  },
+  "P4-08": {
+    "description": "Failure-summary triage rows",
+    "passed": true,
+    "details": {
+      "permanently_failed": 15,
+      "triage_rows": 15,
+      "one_row_per_file": true,
+      "all_rows_have_context": true,
+      "final_report": "C:\\Cloud_cp Testing\\cloudcp-phase-wise-testing\\CloudCpReportTesting\\reports\\run_20260818_105558\\P4_08\\final_report.csv"
+    }
+  }
+}
