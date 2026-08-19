@@ -1,0 +1,37 @@
+version: 1
+mode: tree
+root: /bryck/cloudcp_fallback/deep_tree
+threads: 8
+seed: 42
+
+# Deep nested tree: fanout 2 x depth 12 = 2^12 = 4096 leaf dirs, files only at
+# the leaves (1 each) = 4096 files. Produces very long, 12-level object keys to
+# stress path/key construction while keeping the file COUNT deterministic and
+# modest (created == expected, so the CSV row-count check can't drift).
+content:
+  type: random
+  buffer_size: 8MB
+
+naming:
+  charset: ascii
+  alphabet: [lower, digit]
+  length: 10
+  collision_strategy: append-index
+
+tree:
+  fanout: 2
+  depth: 12
+  files_per_dir: 1
+  files_in_each_dir: false
+
+size:
+  type: range
+  min: 4KB
+  max: 512KB
+  distribution: log-uniform
+
+extensions:
+  - ext: .txt
+    weight: 70
+  - ext: .json
+    weight: 30

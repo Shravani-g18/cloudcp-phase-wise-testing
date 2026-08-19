@@ -41,8 +41,9 @@ import subprocess
 import sys
 import tempfile
 import time
+import types
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -204,6 +205,14 @@ def validate_args(args: argparse.Namespace) -> None:
         raise SystemExit("--dst must be a plain S3 URI like s3://bucket/prefix.")
 
 
+def normalize_dst_with_dataset(dst: str, dataset_id: str) -> str:
+    """Ensure destination prefix keeps the dataset id as the last path segment."""
+    cleaned = dst.rstrip("/")
+    if cleaned.endswith("/" + dataset_id) or cleaned == "s3://" + dataset_id:
+        return cleaned
+    return cleaned + "/" + dataset_id
+
+
 def load_manifest(spec_root: pathlib.Path) -> Tuple[dict, Dict[str, dict]]:
     manifest_path = spec_root / "manifest.json"
     if not manifest_path.is_file():
@@ -308,7 +317,7 @@ def count_files_recursive(root: pathlib.Path) -> int:
 
 
 def generate_dataset(
-    args: argparse.Namespace,
+    args: Union[argparse.Namespace, types.SimpleNamespace],
     dataset: DatasetSelection,
     spec_root: pathlib.Path,
     logger: logging.Logger,
@@ -803,7 +812,7 @@ def wait_for_transfer_artifacts(
     raise TimeoutError(f"timed out waiting for transfer {transfer_id} artifacts")
 
 
-def build_transfer_command(args: argparse.Namespace, dataset_root: pathlib.Path) -> List[str]:
+def build_transfer_command(args: argparse.Namespace, dataset_root: pathlib.Path, dst: str) -> List[str]:
     cmd = [
         args.bryckcloud_bin,
         "transfer",
@@ -812,19 +821,19 @@ def build_transfer_command(args: argparse.Namespace, dataset_root: pathlib.Path)
         "--src",
         str(dataset_root),
         "--dst",
-        args.dst,
+        dst,
     ]
     cmd.extend(args.transfer_arg)
     return cmd
 
 
-def confirm_or_abort(args: argparse.Namespace, dataset_root: pathlib.Path) -> None:
+def confirm_or_abort(args: argparse.Namespace, dataset_root: pathlib.Path, dst: str) -> None:
     if args.dry_run or args.yes or args.skip_transfer:
         return
     print("About to generate and transfer:")
     print(f"  dataset={args.dataset}")
     print(f"  src={dataset_root}")
-    print(f"  dst={args.dst}")
+    print(f"  dst={dst}")
     print(f"  validate_batches={args.validate_batches}")
     answer = input("Proceed? [y/N] ").strip().lower()
     if answer not in {"y", "yes"}:
@@ -861,12 +870,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     try:
         dataset_root, generation_summary = generate_dataset(args, dataset, spec_root, logger)
         payload["generation"] = generation_summary
-        confirm_or_abort(args, dataset_root)
+        normalized_dst = normalize_dst_with_dataset(args.dst, dataset.dataset_id)
+        payload["normalized_dst"] = normalized_dst
+        if normalized_dst != args.dst.rstrip("/"):
+            logger.info("destination normalized to include dataset id: %s", normalized_dst)
+        confirm_or_abort(args, dataset_root, normalized_dst)
 
         batchmeta_dir = pathlib.Path(args.batchmeta_dir)
         transfer_logs_dir = pathlib.Path(args.transfer_logs_dir)
         transfer_id = args.transfer_id
-        transfer_cmd = build_transfer_command(args, dataset_root)
+        transfer_cmd = build_transfer_command(args, dataset_root, normalized_dst)
         payload["transfer_command"] = transfer_cmd
 
         if not args.skip_transfer:
@@ -879,7 +892,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 payload["transfer_rc"] = proc.returncode
                 check_completed(proc, "bryckcloud transfer add aws")
                 command_output = (proc.stdout or "") + "\n" + (proc.stderr or "")
-            transfer_id = detect_transfer_id(args, before_ids, command_output, batchmeta_dir, transfer_logs_dir)
+            if args.dry_run:
+                transfer_id = transfer_id if transfer_id is not None else 0
+            else:
+                transfer_id = detect_transfer_id(args, before_ids, command_output, batchmeta_dir, transfer_logs_dir)
         elif transfer_id is None:
             raise RuntimeError("transfer id is required when --skip-transfer is used")
 
@@ -899,7 +915,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 final_report_path(pathlib.Path(args.transfer_logs_dir), transfer_id),
                 dataset_root,
                 dataset.expected_files,
-                args.dst,
+                normalized_dst,
             )
             failures = count_failed_upload_records(report_dir(pathlib.Path(args.transfer_logs_dir), transfer_id))
             live_retries = count_live_retry_lists(transfer_log_dir(pathlib.Path(args.transfer_logs_dir), transfer_id), transfer_id)

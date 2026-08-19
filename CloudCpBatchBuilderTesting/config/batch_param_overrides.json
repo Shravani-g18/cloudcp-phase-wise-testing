@@ -1,0 +1,33 @@
+{
+  "_description": "Override values for the BATCH section of /etc/bryck/bryckcloud/config.json on the destination host. Only the keys you specify here are changed — all other config values are left untouched. The original values are always restored automatically after each dataset run.",
+  "_usage": "Pass this file with --batch-override-file or use --suite override / --suite override-all",
+  "remote_config_path": "/etc/bryck/bryckcloud/config.json",
+  "use_sudo": false,
+  "tiers": {
+    "ZERO": {
+      "BATCH_SIZE": 8000,
+      "TARGET_SIZE_MB": 0,
+      "OPEN_BATCHES": 3
+    },
+    "TINY": {
+      "BATCH_SIZE": 1000,
+      "TARGET_SIZE_MB": 256,
+      "OPEN_BATCHES": 3
+    },
+    "SMALL": {
+      "BATCH_SIZE": 8192,
+      "TARGET_SIZE_MB": 16384,
+      "OPEN_BATCHES": 2
+    },
+    "MEDIUM": {
+      "BATCH_SIZE": 1,
+      "TARGET_SIZE_MB": 4096,
+      "OPEN_BATCHES": 2
+    },
+    "LARGE": {
+      "BATCH_SIZE": 1,
+      "TARGET_SIZE_MB": 16384,
+      "OPEN_BATCHES": 1
+    }
+  }
+}

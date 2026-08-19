@@ -1,0 +1,44 @@
+version: 1
+mode: tree
+root: /bryck/cloudcp_fallback/tiny_2million
+threads: 16
+seed: 42
+
+# SCALE: ~2,000,000 TINY files (tiny tier, < 1 MiB) for large-batch / enumeration
+# / throughput stress. Tree geometry: fanout 10 x depth 4 = 10,000 leaf dirs,
+# 200 files each = 2,000,000 files.
+#
+# Disk note: content is random and sizes are kept small (512 B - 16 KiB,
+# log-uniform => most files near the low end), so total footprint is only a few
+# GiB. Switch content.type to `sparse` if you want the file COUNT without the
+# bytes.
+content:
+  type: random
+  buffer_size: 8MB
+
+naming:
+  charset: ascii
+  alphabet: [lower, digit]
+  prefix: "t-"
+  length: 10
+  collision_strategy: append-index
+
+tree:
+  fanout: 10
+  depth: 4
+  files_per_dir: 200
+  files_in_each_dir: false
+
+size:
+  type: range
+  min: 512
+  max: 16KB
+  distribution: log-uniform
+
+extensions:
+  - ext: .txt
+    weight: 60
+  - ext: .json
+    weight: 25
+  - ext: .log
+    weight: 15

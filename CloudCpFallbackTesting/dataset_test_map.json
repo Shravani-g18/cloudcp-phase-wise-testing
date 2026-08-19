@@ -1,0 +1,270 @@
+{
+  "schema": "cloudcp-fallback-dataset-test-map/v1",
+  "generated_note": "Maps every datagen dataset in spec_files/ to the fallback test cases (in cloudcp_fallback_test.py / plan_cp_fallback.md) that exercise it, and what each case verifies. File counts are the deterministic geometry from each spec.",
+  "bases": {
+    "spec_dir": "CloudCpFallbackTesting/spec_files",
+    "source_mount_base": "/bryck/cloudcp_fallback/<tier_dir>",
+    "bucket_base": "s3://aditya/fallback/<tier_dir>",
+    "download_target_base": "/bryck/cloudcp_fallback_dl/<tier_dir>"
+  },
+  "fault_profiles": {
+    "F0": {"fail_pct": 0, "crash_pct": 0, "meaning": "Control / no fault."},
+    "F1": {"fail_pct": 10, "crash_pct": 0, "meaning": "Light per-file failures."},
+    "F2": {"fail_pct": 50, "crash_pct": 0, "meaning": "Half the records fail."},
+    "F3": {"fail_pct": 100, "crash_pct": 0, "meaning": "Every record fails the primary path."},
+    "F4": {"fail_pct": 0, "crash_pct": 10, "meaning": "Occasional worker crash (abort)."},
+    "F5": {"fail_pct": 0, "crash_pct": 50, "meaning": "Frequent worker crashes."},
+    "F6": {"fail_pct": 0, "crash_pct": 100, "meaning": "Every record crashes the primary worker."},
+    "F7": {"fail_pct": 100, "crash_pct": 100, "meaning": "Saturation extreme (fail + crash)."}
+  },
+  "expectation_kinds": {
+    "fallback_ok": "Faulted profile, fallback ON -> transfer COMPLETED, retry/list files observed, FALLBACK_OK rows in report, all files transferred.",
+    "control": "F0, fallback ON -> COMPLETED with all SUCCESS, no FALLBACK_OK, no retry lists.",
+    "must_fail": "Faulted profile, FALLBACK_ENABLED=False -> transfer must end in terminal FAILURE.",
+    "clean_fail": "Invalid target -> fail cleanly (init reject or terminal failure), no crash/hang."
+  },
+  "datasets": [
+    {
+      "key": "zero",
+      "spec": "01_zero_byte.yaml",
+      "tier_dir": "zero_byte",
+      "tier": "zero",
+      "mode": "flat",
+      "approx_file_count": 200,
+      "file_count_formula": "flat num_files=200",
+      "size": "exactly 0 bytes",
+      "content_type": "sparse",
+      "description": "200 zero-length files. Exercises empty-object / zero-length PUT handling.",
+      "fallback_focus": "Confirms the fallback path correctly re-drives empty-object records (a common edge that can be silently skipped).",
+      "mapped_cases": [
+        {"case_id": "FB-U-01", "group": "UPLOAD", "direction": "upload", "profile": "F0", "hi_perf_opt": true, "fallback_enabled": true, "expect": "control", "tests": "Baseline zero-byte upload with no fault; must succeed cleanly with no fallback engaged."},
+        {"case_id": "FB-U-02", "group": "UPLOAD", "direction": "upload", "profile": "F3", "hi_perf_opt": true, "fallback_enabled": true, "expect": "fallback_ok", "tests": "All empty-object records fail the primary path; fallback must carry every zero-byte record."},
+        {"case_id": "FB-HP-01", "group": "MIN-ACCEPT", "direction": "upload", "profile": "F3", "hi_perf_opt": false, "fallback_enabled": true, "expect": "fallback_ok", "tests": "Same all-fail zero tier but with HI_PERF_OPT off (minimum acceptance)."},
+        {"case_id": "FB-N-06", "group": "NEGATIVE", "direction": "upload", "profile": "F0", "hi_perf_opt": true, "fallback_enabled": true, "expect": "clean_fail", "tests": "Invalid/nonexistent destination bucket; must fail cleanly with no crash/hang (uses zero tier as the cheapest payload)."}
+      ]
+    },
+    {
+      "key": "tiny",
+      "spec": "02_tiny_files.yaml",
+      "tier_dir": "tiny_files",
+      "tier": "tiny",
+      "mode": "tree",
+      "approx_file_count": 5400,
+      "file_count_formula": "fanout 6 x depth 3 = 216 leaf dirs x 25 files",
+      "size": "1 KiB .. 256 KiB (log-uniform)",
+      "content_type": "random",
+      "description": "~5,400 small files across a shallow tree. High record count, single-part PUTs.",
+      "fallback_focus": "Stresses fallback across a large number of records / retry-list entries at throughput.",
+      "mapped_cases": [
+        {"case_id": "FB-U-03", "group": "UPLOAD", "direction": "upload", "profile": "F1", "hi_perf_opt": true, "fallback_enabled": true, "expect": "fallback_ok", "tests": "Light 10% failures; only a few records are retried via fallback."},
+        {"case_id": "FB-U-04", "group": "UPLOAD", "direction": "upload", "profile": "F3", "hi_perf_opt": true, "fallback_enabled": true, "expect": "fallback_ok", "tests": "Every tiny record fails the primary path; fallback carries the entire tiny workload."},
+        {"case_id": "FB-U-05", "group": "UPLOAD", "direction": "upload", "profile": "F6", "hi_perf_opt": true, "fallback_enabled": true, "expect": "fallback_ok", "tests": "Every tiny record crashes the primary worker (abort); fallback recovers all records."},
+        {"case_id": "FB-D-03", "group": "DOWNLOAD", "direction": "download", "profile": "F1", "hi_perf_opt": true, "fallback_enabled": true, "expect": "fallback_ok", "tests": "Download of many tiny objects with light failures; a few records retried via download fallback."},
+        {"case_id": "FB-HP-02", "group": "MIN-ACCEPT", "direction": "upload", "profile": "F3", "hi_perf_opt": false, "fallback_enabled": true, "expect": "fallback_ok", "tests": "All-fail tiny tier with HI_PERF_OPT off (minimum acceptance)."},
+        {"case_id": "FB-N-02", "group": "NEGATIVE", "direction": "upload", "profile": "F3", "hi_perf_opt": true, "fallback_enabled": false, "expect": "must_fail", "tests": "FALLBACK_ENABLED=False with all records failing; no fallback to carry them, transfer must FAIL."}
+      ]
+    },
+    {
+      "key": "small",
+      "spec": "03_small_files.yaml",
+      "tier_dir": "small_files",
+      "tier": "small",
+      "mode": "flat",
+      "approx_file_count": 120,
+      "file_count_formula": "flat num_files=120",
+      "size": "1 MiB .. 16 MiB (uniform)",
+      "content_type": "random",
+      "description": "120 files straddling the 8 MiB multipart cutoff (some single-part, some multipart).",
+      "fallback_focus": "Verifies fallback across the single-part / multipart boundary; the most-used general-purpose tier.",
+      "mapped_cases": [
+        {"case_id": "FB-U-06", "group": "UPLOAD", "direction": "upload", "profile": "F2", "hi_perf_opt": true, "fallback_enabled": true, "expect": "fallback_ok", "tests": "Half the files fail while straddling the 8 MiB cutoff; fallback retries them."},
+        {"case_id": "FB-U-07", "group": "UPLOAD", "direction": "upload", "profile": "F3", "hi_perf_opt": true, "fallback_enabled": true, "expect": "fallback_ok", "tests": "All small records fail; fallback carries single-part and multipart alike."},
+        {"case_id": "FB-U-08", "group": "UPLOAD", "direction": "upload", "profile": "F7", "hi_perf_opt": true, "fallback_enabled": true, "expect": "fallback_ok", "tests": "Saturation (100% fail + 100% crash) on the multipart boundary; fallback must still complete."},
+        {"case_id": "FB-D-01", "group": "DOWNLOAD", "direction": "download", "profile": "F0", "hi_perf_opt": true, "fallback_enabled": true, "expect": "control", "tests": "Baseline small-file download with no fault; must succeed cleanly."},
+        {"case_id": "FB-D-02", "group": "DOWNLOAD", "direction": "download", "profile": "F3", "hi_perf_opt": true, "fallback_enabled": true, "expect": "fallback_ok", "tests": "All small download records fail; download fallback carries them to completion."},
+        {"case_id": "FB-HP-03", "group": "MIN-ACCEPT", "direction": "upload", "profile": "F3", "hi_perf_opt": false, "fallback_enabled": true, "expect": "fallback_ok", "tests": "All-fail small tier with HI_PERF_OPT off (minimum acceptance)."},
+        {"case_id": "FB-N-01", "group": "NEGATIVE", "direction": "upload", "profile": "F1", "hi_perf_opt": true, "fallback_enabled": false, "expect": "must_fail", "tests": "FALLBACK_ENABLED=False with light failures; faulted records not recovered, transfer must FAIL."},
+        {"case_id": "FB-N-05", "group": "NEGATIVE", "direction": "upload", "profile": "F7", "hi_perf_opt": true, "fallback_enabled": true, "expect": "fallback_ok", "tests": "Positive counterpart to FB-N-01: same saturation but fallback ON must COMPLETE (proves fallback is the difference)."},
+        {"case_id": "FB-N-07", "group": "NEGATIVE", "direction": "download", "profile": "F3", "hi_perf_opt": true, "fallback_enabled": false, "expect": "must_fail", "tests": "FALLBACK_ENABLED=False download with all records failing; download must FAIL."}
+      ]
+    },
+    {
+      "key": "medium",
+      "spec": "04_medium_files.yaml",
+      "tier_dir": "medium_files",
+      "tier": "medium",
+      "mode": "flat",
+      "approx_file_count": 12,
+      "file_count_formula": "flat num_files=12",
+      "size": "64 MiB .. 512 MiB (uniform)",
+      "content_type": "random (direct_io >=256MB)",
+      "description": "12 multi-chunk multipart files (8 MiB chunks).",
+      "fallback_focus": "Verifies fallback on multi-chunk multipart uploads/downloads.",
+      "mapped_cases": [
+        {"case_id": "FB-U-09", "group": "UPLOAD", "direction": "upload", "profile": "F1", "hi_perf_opt": true, "fallback_enabled": true, "expect": "fallback_ok", "tests": "Light failures on multi-chunk multipart; a few objects retried via fallback."},
+        {"case_id": "FB-U-10", "group": "UPLOAD", "direction": "upload", "profile": "F3", "hi_perf_opt": true, "fallback_enabled": true, "expect": "fallback_ok", "tests": "All medium multipart uploads fail; fallback carries every multipart object."},
+        {"case_id": "FB-U-11", "group": "UPLOAD", "direction": "upload", "profile": "F6", "hi_perf_opt": true, "fallback_enabled": true, "expect": "fallback_ok", "tests": "Every medium multipart worker crashes; fallback recovers all multipart records."},
+        {"case_id": "FB-D-04", "group": "DOWNLOAD", "direction": "download", "profile": "F3", "hi_perf_opt": true, "fallback_enabled": true, "expect": "fallback_ok", "tests": "All medium multipart downloads fail; fallback carries the multipart download."},
+        {"case_id": "FB-HP-04", "group": "MIN-ACCEPT", "direction": "upload", "profile": "F3", "hi_perf_opt": false, "fallback_enabled": true, "expect": "fallback_ok", "tests": "All-fail medium tier with HI_PERF_OPT off (minimum acceptance)."},
+        {"case_id": "FB-N-03", "group": "NEGATIVE", "direction": "upload", "profile": "F6", "hi_perf_opt": true, "fallback_enabled": false, "expect": "must_fail", "tests": "FALLBACK_ENABLED=False with all-crash; no recovery path, transfer must FAIL."}
+      ]
+    },
+    {
+      "key": "large",
+      "spec": "05_large_files.yaml",
+      "tier_dir": "large_files",
+      "tier": "large",
+      "mode": "flat",
+      "approx_file_count": 5,
+      "file_count_formula": "flat num_files=5",
+      "size": "1 GiB .. 5 GiB (sparse content)",
+      "content_type": "sparse",
+      "description": "5 large sparse files; big multipart, long-running transfer, resume/retry path.",
+      "fallback_focus": "Verifies fallback on long-running large multipart transfers (heavy dataset).",
+      "mapped_cases": [
+        {"case_id": "FB-U-12", "group": "UPLOAD", "direction": "upload", "profile": "F1", "hi_perf_opt": true, "fallback_enabled": true, "expect": "fallback_ok", "tests": "Light failures on large multipart; fallback retries the few failed large objects."},
+        {"case_id": "FB-U-13", "group": "UPLOAD", "direction": "upload", "profile": "F3", "hi_perf_opt": true, "fallback_enabled": true, "expect": "fallback_ok", "tests": "All large records fail (long-running); fallback carries the whole large tier."},
+        {"case_id": "FB-U-14", "group": "UPLOAD", "direction": "upload", "profile": "F7", "hi_perf_opt": true, "fallback_enabled": true, "expect": "fallback_ok", "tests": "Saturation on large multipart; fallback must still drive to completion."},
+        {"case_id": "FB-D-05", "group": "DOWNLOAD", "direction": "download", "profile": "F6", "hi_perf_opt": true, "fallback_enabled": true, "expect": "fallback_ok", "tests": "Every large download worker crashes; fallback recovers the large-object download."},
+        {"case_id": "FB-HP-05", "group": "MIN-ACCEPT", "direction": "upload", "profile": "F3", "hi_perf_opt": false, "fallback_enabled": true, "expect": "fallback_ok", "tests": "All-fail large tier with HI_PERF_OPT off (minimum acceptance)."},
+        {"case_id": "FB-N-04", "group": "NEGATIVE", "direction": "upload", "profile": "F7", "hi_perf_opt": true, "fallback_enabled": false, "expect": "must_fail", "tests": "FALLBACK_ENABLED=False under saturation; no fallback, large transfer must FAIL."}
+      ]
+    },
+    {
+      "key": "sparse",
+      "spec": "06_sparse_files.yaml",
+      "tier_dir": "sparse_files",
+      "tier": "mixed (tiny..medium logical)",
+      "mode": "flat",
+      "approx_file_count": 60,
+      "file_count_formula": "flat num_files=60",
+      "size": "256 KiB .. 256 MiB logical (sparse holes)",
+      "content_type": "sparse",
+      "description": "60 sparse (ftruncate hole) files spanning tiny->medium logical sizes.",
+      "fallback_focus": "Verifies fallback preserves logical-vs-physical size handling and reads over holes.",
+      "mapped_cases": [
+        {"case_id": "FB-U-15", "group": "UPLOAD", "direction": "upload", "profile": "F3", "hi_perf_opt": true, "fallback_enabled": true, "expect": "fallback_ok", "tests": "All sparse-content files fail the primary path; fallback handles logical-vs-physical sizes."}
+      ]
+    },
+    {
+      "key": "fill",
+      "spec": "07_fill_files.yaml",
+      "tier_dir": "fill_files",
+      "tier": "small",
+      "mode": "flat",
+      "approx_file_count": 80,
+      "file_count_formula": "flat num_files=80",
+      "size": "fixed 4 MiB",
+      "content_type": "fill 0x00 (fsync)",
+      "description": "80 deterministic-content files (every byte 0x00) => stable, verifiable checksums.",
+      "fallback_focus": "Verifies fallback-transferred data is byte-exact (checksum verification of the fallback path).",
+      "mapped_cases": [
+        {"case_id": "FB-U-16", "group": "UPLOAD", "direction": "upload", "profile": "F3", "hi_perf_opt": true, "fallback_enabled": true, "expect": "fallback_ok", "tests": "All fill files fail the primary path; fallback data is byte-exact (checksum verify)."},
+        {"case_id": "FB-D-06", "group": "DOWNLOAD", "direction": "download", "profile": "F3", "hi_perf_opt": true, "fallback_enabled": true, "expect": "fallback_ok", "tests": "All fill-file downloads fail; downloaded bytes are byte-exact via fallback."}
+      ]
+    },
+    {
+      "key": "deep",
+      "spec": "08_deep_tree.yaml",
+      "tier_dir": "deep_tree",
+      "tier": "tiny (deep keys)",
+      "mode": "tree",
+      "approx_file_count": 4096,
+      "file_count_formula": "fanout 2 x depth 12 = 4096 leaf dirs x 1 file",
+      "size": "4 KiB .. 512 KiB (log-uniform)",
+      "content_type": "random",
+      "description": "4,096 files at the leaves of a 12-level tree; very long, deep object keys.",
+      "fallback_focus": "Verifies long/deep object keys survive the fallback retry intact.",
+      "mapped_cases": [
+        {"case_id": "FB-U-17", "group": "UPLOAD", "direction": "upload", "profile": "F3", "hi_perf_opt": true, "fallback_enabled": true, "expect": "fallback_ok", "tests": "All deeply-nested / long-key files fail the primary path; keys survive the fallback retry."}
+      ]
+    },
+    {
+      "key": "unicode",
+      "spec": "09_unicode_names.yaml",
+      "tier_dir": "unicode_names",
+      "tier": "tiny",
+      "mode": "flat",
+      "approx_file_count": 150,
+      "file_count_formula": "flat num_files=150",
+      "size": "1 KiB .. 512 KiB (uniform)",
+      "content_type": "random",
+      "description": "150 files with Unicode / emoji / CJK / Cyrillic + spaces in the filenames.",
+      "fallback_focus": "Verifies non-ASCII filenames round-trip byte-exact through the fallback retry into object keys.",
+      "mapped_cases": [
+        {"case_id": "FB-U-18", "group": "UPLOAD", "direction": "upload", "profile": "F3", "hi_perf_opt": true, "fallback_enabled": true, "expect": "fallback_ok", "tests": "All Unicode/emoji/CJK-named files fail the primary path; names round-trip through fallback."}
+      ]
+    },
+    {
+      "key": "special",
+      "spec": "10_special_char_names.yaml",
+      "tier_dir": "special_char_names",
+      "tier": "tiny",
+      "mode": "flat",
+      "approx_file_count": 120,
+      "file_count_formula": "flat num_files=120",
+      "size": "1 KiB .. 256 KiB (uniform)",
+      "content_type": "random",
+      "description": "120 files with ASCII special characters (spaces, parens, &, brackets, etc.) in names.",
+      "fallback_focus": "Verifies shell-quoting / object-key escaping is preserved verbatim through the fallback retry.",
+      "mapped_cases": [
+        {"case_id": "FB-U-19", "group": "UPLOAD", "direction": "upload", "profile": "F3", "hi_perf_opt": true, "fallback_enabled": true, "expect": "fallback_ok", "tests": "All special-char / space-named files fail the primary path; fallback preserves keys verbatim."}
+      ]
+    },
+    {
+      "key": "mixed",
+      "spec": "11_mixed_realistic.yaml",
+      "tier_dir": "mixed_realistic",
+      "tier": "mixed (tiny..large)",
+      "mode": "tree",
+      "approx_file_count": 1000,
+      "file_count_formula": "fanout 5 x depth 3 = 125 leaf dirs x 8 files",
+      "size": "4 KiB .. 2 GiB (weighted by extension, log-uniform bias to small)",
+      "content_type": "random (direct_io >=256MB)",
+      "description": "~1,000 files with a realistic weighted mix of extensions and sizes across all tiers.",
+      "fallback_focus": "Verifies fallback on a realistic, heterogeneous workload spanning every tier at once.",
+      "mapped_cases": [
+        {"case_id": "FB-U-20", "group": "UPLOAD", "direction": "upload", "profile": "F2", "hi_perf_opt": true, "fallback_enabled": true, "expect": "fallback_ok", "tests": "Realistic mixed workload with half the records faulted; fallback retries across all tiers."},
+        {"case_id": "FB-U-21", "group": "UPLOAD", "direction": "upload", "profile": "F7", "hi_perf_opt": true, "fallback_enabled": true, "expect": "fallback_ok", "tests": "Saturation on the realistic mixed workload; fallback must complete the whole mix."},
+        {"case_id": "FB-D-07", "group": "DOWNLOAD", "direction": "download", "profile": "F7", "hi_perf_opt": true, "fallback_enabled": true, "expect": "fallback_ok", "tests": "Saturation download of the realistic mix; fallback must complete the whole download."}
+      ]
+    },
+    {
+      "key": "scale",
+      "spec": "12_tiny_2million.yaml",
+      "tier_dir": "tiny_2million",
+      "tier": "tiny (scale)",
+      "mode": "tree",
+      "approx_file_count": 2000000,
+      "file_count_formula": "fanout 10 x depth 4 = 10,000 leaf dirs x 200 files",
+      "size": "512 B .. 16 KiB (log-uniform)",
+      "content_type": "random",
+      "description": "~2,000,000 tiny files for enumeration / batch / retry-list stress at volume (heavy dataset).",
+      "fallback_focus": "Stresses fallback retry-list generation and handling at extreme file counts.",
+      "mapped_cases": [
+        {"case_id": "FB-U-22", "group": "UPLOAD", "direction": "upload", "profile": "F1", "hi_perf_opt": true, "fallback_enabled": true, "expect": "fallback_ok", "tests": "Scale: ~2M tiny files with light failures; stresses fallback retry-list handling at volume."}
+      ]
+    }
+  ],
+  "case_index": {
+    "FB-U-01": "zero", "FB-U-02": "zero",
+    "FB-U-03": "tiny", "FB-U-04": "tiny", "FB-U-05": "tiny",
+    "FB-U-06": "small", "FB-U-07": "small", "FB-U-08": "small",
+    "FB-U-09": "medium", "FB-U-10": "medium", "FB-U-11": "medium",
+    "FB-U-12": "large", "FB-U-13": "large", "FB-U-14": "large",
+    "FB-U-15": "sparse", "FB-U-16": "fill", "FB-U-17": "deep",
+    "FB-U-18": "unicode", "FB-U-19": "special",
+    "FB-U-20": "mixed", "FB-U-21": "mixed", "FB-U-22": "scale",
+    "FB-D-01": "small", "FB-D-02": "small", "FB-D-03": "tiny",
+    "FB-D-04": "medium", "FB-D-05": "large", "FB-D-06": "fill", "FB-D-07": "mixed",
+    "FB-HP-01": "zero", "FB-HP-02": "tiny", "FB-HP-03": "small",
+    "FB-HP-04": "medium", "FB-HP-05": "large",
+    "FB-N-01": "small", "FB-N-02": "tiny", "FB-N-03": "medium",
+    "FB-N-04": "large", "FB-N-05": "small", "FB-N-06": "zero", "FB-N-07": "small"
+  },
+  "totals": {
+    "datasets": 12,
+    "cases": 41,
+    "cases_by_group": {"UPLOAD": 22, "DOWNLOAD": 7, "MIN-ACCEPT": 5, "NEGATIVE": 7}
+  }
+}

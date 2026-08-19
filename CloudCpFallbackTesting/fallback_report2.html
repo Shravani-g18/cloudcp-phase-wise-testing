@@ -1,0 +1,132 @@
+<!doctype html><html><head><meta charset="utf-8"><title>CloudCp Fallback Test Report</title><style>
+    body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f6f8fa;color:#1f2328}
+    header{background:#24292f;color:#fff;padding:18px 28px}
+    header h1{margin:0;font-size:20px}
+    .wrap{padding:20px 28px}
+    .badge{color:#fff;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:700}
+    table{border-collapse:collapse;width:100%;background:#fff;margin:12px 0;font-size:13px}
+    th,td{border:1px solid #d0d7de;padding:6px 8px;text-align:left;vertical-align:top}
+    th{background:#eaeef2}
+    .summary td,.summary th{white-space:nowrap}
+    .case{background:#fff;border:1px solid #d0d7de;border-radius:8px;padding:14px 18px;margin:16px 0}
+    .case h3{margin:0 0 6px}
+    .desc{color:#57606a;margin:4px 0}
+    .meta{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;color:#24292f;background:#f6f8fa;padding:6px 8px;border-radius:6px}
+    .reasons{margin:8px 0;color:#9a6700}
+    code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;color:#0550ae;word-break:break-all}
+    .detail{color:#57606a;font-size:12px;margin-top:2px}
+    pre.io{background:#0d1117;color:#c9d1d9;padding:8px;border-radius:6px;overflow:auto;max-height:220px;font-size:11px;margin:6px 0 0}
+    table.steps td:first-child{width:32px;text-align:right;color:#57606a}
+    summary{cursor:pointer;font-weight:600;margin:6px 0}
+    </style></head><body><header><h1>CloudCp Fallback Test Report</h1><div>2026-08-18T07:29:02 · host 192.168.6.32 · seed 1337 · 1 case(s)</div></header><div class="wrap"><p><span class="badge" style="background:#9a6700">WARN: 1</span></p><table class="summary"><thead><tr><th>case</th><th>group</th><th>dir</th><th>dataset</th><th>profile (F/C%)</th><th>HI_PERF</th><th>FALLBACK</th><th>state</th><th>verdict</th></tr></thead><tbody><tr><td><a href="#FB-U-09">FB-U-09</a></td><td>UPLOAD</td><td>upload</td><td>medium</td><td>F1 (10/0)</td><td>True</td><td>True</td><td>COMPLETED</td><td><span class="badge" style="background:#9a6700">WARN</span></td></tr></tbody></table><section id="FB-U-09" class="case"><h3>FB-U-09 <span class="badge" style="background:#9a6700">WARN</span></h3><p class="desc">Light failures on multi-chunk multipart medium files; a few chunk records retried via fallback.</p><p class="meta">transfer_id=51 · state=COMPLETED · expected_files=12 · captured_lst=0 · success_rows=12 · fallback_ok=0 · failed_rows=0</p><ul class=reasons><li>no live retry/list files captured — fallback engagement unverified</li><li>report has no FALLBACK_OK rows despite injected faults</li></ul><details open><summary>Steps &amp; commands (28)</summary><table class="steps"><thead><tr><th>#</th><th>kind</th><th>step / command</th><th>result</th></tr></thead><tbody><tr><td>1</td><td>local</td><td>case<br><div class=detail>FB-U-09 [UPLOAD] upload dataset=medium profile=F1 HI_PERF_OPT=True FALLBACK_ENABLED=True</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>2</td><td>local</td><td>description<br><div class=detail>Light failures on multi-chunk multipart medium files; a few chunk records retried via fallback.</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>3</td><td>ssh</td><td>backup original config<br><code>test -f /tmp/fb_config_backup.json || cp /etc/bryck/bryckcloud/config.json /tmp/fb_config_backup.json</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>4</td><td>ssh</td><td>prep remote spec dir<br><code>mkdir -p /tmp/fb_specs</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>5</td><td>ssh</td><td>upload spec<br><code>sftp put /home/bryck/fallback/cloudcp-phase-wise-testing/CloudCpFallbackTesting/spec_files/04_medium_files.yaml -&gt; /tmp/fb_specs/04_medium_files.yaml</code><div class=detail>uploaded</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>6</td><td>ssh</td><td>datagen<br><code>/home/bryck/rperiyas/datagen --spec /tmp/fb_specs/04_medium_files.yaml</code><div class=detail>rc=0</div><pre class="io">Planned 12 files; mode=flat, threads=4
+
+[Done] 12 files | 2.6 GB | 8.94331 files/s | 1.9 GB/s | elapsed 1.34179s</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>7</td><td>ssh</td><td>count source files<br><code>find /bryck/cloudcp_fallback/medium_files -type f 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">12</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>8</td><td>ssh</td><td>read config<br><code>cat /etc/bryck/bryckcloud/config.json</code><div class=detail>rc=0</div><pre class="io">{
+  &quot;SERVICE&quot;: {
+    &quot;PID_FILE&quot;: &quot;/run/bryck/bcloud_transfer.pid&quot;,
+    &quot;AUTH_KEY&quot;: &quot;bryck&quot;,
+    &quot;QUEUE_PORT&quot;: 2002,
+    &quot;ADDRESS&quot;: &quot;127.0.0.1&quot;,
+    &quot;QUEUE_NAME&quot;: &quot;get_queue&quot;,
+    &quot;MAX_CONCURRENT_TRANSFERS&quot;: 5,
+    &quot;MAX_TRANSFER_SIZE&quot;: 1000000000,
+    &quot;USER&quot;: &quot;bryck&quot;
+  },
+  &quot;DATABASE&quot;: {
+    &quot;DB_USERNAME&quot;: &quot;bryck&quot;,
+    &quot;DB_PASSWORD&quot;: &quot;password&quot;,
+    &quot;DB_NAME&quot;: &quot;Bcloud&quot;,
+    &quot;DB_PORT&quot;: 5432
+  },
+  &quot;CLOUD&quot;: {
+    &quot;LOCAL_AWS&quot;: &quot;https://10.10.10.103:9000&quot;,
+    &quot;PROVIDER&quot;: &quot;minio&quot;,
+    &quot;AWS_CONFIG_FILE&quot;: &quot;/home/bryck/.aws/config&quot;
+  },
+  &quot;TRANSFER&quot;: {
+    &quot;PARALLEL_TRANSFER&quot;: &quot;True&quot;,
+    &quot;PARALLEL_WORKERS&quot;: 14,
+    &quot;TRANSFER_CMD&quot;: &quot;export LD_LIBRARY_PATH=/opt/bryck/aws/lib/; /opt/bryck/aws/bin/cloudcp&quot;,
+    &quot;FALLBACK_ENABLED&quot;: &quot;True&quot;,
+    &quot;TRANSFER_CLIENT_TYPE&quot;: &quot;transfermanager&quot;,
+    &quot;TM_THREAD_POOL_SIZE&quot;: 10,
+    &quot;CHUNK_SIZE_MB&quot;: 64,
+    &quot;HI_PERF_OPT&quot;: &quot;True&quot;,
+    &quot;PERF_STATS&quot;: &quot;True&quot;,
+    &quot;TXR_BATCH_VERIFYSIZE&quot;: &quot;True&quot;,
+    &quot;AZURE_RESUME&quot;: &quot;False&quot;,
+    &quot;BATCH_INCLUDE_SIZE&quot;: &quot;True&quot;,
+    &quot;TRANSFER_DISPATCH&quot;: &quot;broker&quot;
+  },
+  &quot;NETWORK_PROFILE&quot;: &quot;default_balanced&quot;,
+  &quot;BATCH&quot;: {
+    &quot;BATCH_BUILDER_ONLY&quot;: &quot;False&quot;,
+    &quot;BATCH_FILE_DIR&quot;: &quot;/opt/bryck/bryckapi/downloads/bcloud_batchmeta&quot;,
+    &quot;ZERO&quot;: {
+      &quot;BATCH_SIZE&quot;: 8000,
+      &quot;TARGET_SIZE_MB&quot;: 0,
+      &quot;OPEN_BATCHES&quot;: 3
+    },
+    &quot;TINY&quot;: {
+      &quot;BATCH_SIZE&quot;: 1000,
+      &quot;TARGET_SIZE_MB&quot;: 256,
+      &quot;OPEN_BATCHES&quot;: 3
+    },
+    &quot;SMALL&quot;: {
+      &quot;BATCH_SIZE&quot;: 8192,
+      &quot;TARGET_SIZE_MB&quot;: 16384,
+      &quot;OPEN_BATCHES&quot;: 2
+    },
+    &quot;MEDIUM&quot;: {
+      &quot;BATCH_SIZE&quot;: 1,
+      &quot;TARGET_SIZE_MB&quot;: 4096,
+      &quot;OPEN_BATCHES&quot;: 2
+    },
+    &quot;LARGE&quot;: {
+      &quot;BATCH_SIZE&quot;: 1,
+      &quot;TARGET_SIZE_MB&quot;: 16384,
+      &quot;OPEN_BATCHES&quot;: 1
+    }
+  },
+  &quot;LOGGING&quot;: {
+    &quot;LOGS_DIR&quot;: &quot;/opt/bryck/bryckapi/downloads/cloud_transfer_logs&quot;,
+    &quot;DEBUG_LOG_FILE&quot;: &quot;/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloudcp.log&quot;,
+    &quot;AWS_XFER_STAT&quot;: &quot;/tmp/aws_xfer_stats&quot;,
+    &quot;AWS_STAT_PREFIX&quot;: &quot;/tmp/aws_bryck_zfer_stat&quot;
+  },
+  &quot;VERIFICATION&quot;: {
+    &quot;REPORT_FORMAT&quot;: &quot;json&quot;,
+    &quot;TRANSFER_SUMMARY_FILES&quot;: &quot;/etc/bryck/bryckcloud/transfer_summary_files.json&quot;,
+    &quot;VERIFY_S3_WORKERS&quot;: 16,
+    &quot;VERIFY_STAT_THREADS&quot;: 32
+  },
+  &quot;RCLONE_PARAMS&quot;: {
+    &quot;S3_UPLOAD_CONCURRENCY&quot;: 8,
+    &quot;TRANSFERS&quot;: 4,
+    &quot;MULTI_THREAD_STREAMS&quot;: 4,
+    &quot;upload_cutoff&quot;: &quot;8Mi&quot;,
+    &quot;chunk_size&quot;: &quot;8Mi&quot;
+  },
+  &quot;TEST&quot;: {
+    &quot;SIM_TRANSFER&quot;: false,
+    &quot;SIM_SLEEP_TINY_MS&quot;: 0,
+    &quot;SIM_SLEEP_SMALL_MS&quot;: 0,
+    &quot;SIM_SLEEP_MEDIUM_MS&quot;: 0,
+    &quot;SIM_SLEEP_LARGE_MS&quot;: 0,
+    &quot;SIM_SLEEP_DOWNLOAD_MS&quot;: 0,
+    &quot;FAULT_FAIL_PERCENT&quot;: 0,
+    &quot;FAULT_CRASH_PERCENT&quot;: 0,
+    &quot;FAULT_CRASH_MODE&quot;: &quot;abort&quot;,
+    &quot;FAULT_SEED&quot;: 0
+  }
+}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>9</td><td>ssh</td><td>upload patched config<br><code>sftp put /home/bryck/fallback/cloudcp-phase-wise-testing/CloudCpFallbackTesting/runs/config_FB-U-09.json -&gt; /tmp/fb_config_FB-U-09.json</code><div class=detail>uploaded</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>10</td><td>ssh</td><td>install config (sudo)<br><code>sudo -n cp /tmp/fb_config_FB-U-09.json /etc/bryck/bryckcloud/config.json &amp;&amp; rm -f /tmp/fb_config_FB-U-09.json</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>11</td><td>local</td><td>config applied<br><code>FAIL%=10 CRASH%=0 SEED=1337 CRASH_MODE=abort HI_PERF_OPT=True FALLBACK_ENABLED=True</code><div class=detail>FAIL%=10 CRASH%=0 SEED=1337 CRASH_MODE=abort HI_PERF_OPT=True FALLBACK_ENABLED=True</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>12</td><td>ssh</td><td>restart service (sudo)<br><code>sudo -n systemctl restart bcloud.service</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>13</td><td>ssh</td><td>await service<br><code>systemctl is-active bcloud.service || true</code><div class=detail>rc=0</div><pre class="io">active</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>14</td><td>api</td><td>configure cloud<br><code>POST /api/bcloud/config bcloud_type=aws</code><div class=detail>provider configured</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>15</td><td>api</td><td>initiate transfer<br><code>POST /api/bcloud/transfer src=/bryck/cloudcp_fallback/medium_files dst=s3://aditya/fallback/medium_files</code><div class=detail>transfer_id=51</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>16</td><td>ssh</td><td>prep capture dir<br><code>mkdir -p /tmp/fb_capture/51</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>17</td><td>ssh</td><td>snapshot .lst (poll 1)<br><code>cp -an /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_51/*.txt.lst /tmp/fb_capture/51/ 2&gt;/dev/null; cp -an /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_51/cloudcp_retry_51_*.lst /tmp/fb_capture/51/ 2&gt;/dev/null; ls -1 /tmp/fb_capture/51 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">0</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>18</td><td>api</td><td>status (poll 1)<br><code>GET /api/bcloud/status_transfer transfer_id=51</code><div class=detail>state=ACTIVE percent=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>19</td><td>ssh</td><td>snapshot .lst (poll 2)<br><code>cp -an /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_51/*.txt.lst /tmp/fb_capture/51/ 2&gt;/dev/null; cp -an /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_51/cloudcp_retry_51_*.lst /tmp/fb_capture/51/ 2&gt;/dev/null; ls -1 /tmp/fb_capture/51 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">0</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>20</td><td>api</td><td>status (poll 2)<br><code>GET /api/bcloud/status_transfer transfer_id=51</code><div class=detail>state=COMPLETED percent=100</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>21</td><td>ssh</td><td>archive captured .lst<br><code>tar czf /tmp/fb_capture_51.tgz -C /tmp/fb_capture/51 . 2&gt;/dev/null; ls -1 /tmp/fb_capture/51 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">0</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>22</td><td>ssh</td><td>download captured .lst<br><code>sftp get /tmp/fb_capture_51.tgz -&gt; /home/bryck/fallback/cloudcp-phase-wise-testing/CloudCpFallbackTesting/runs/FB-U-09/live_lst/live_lst_51.tgz</code><div class=detail>downloaded</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>23</td><td>local</td><td>captured .lst summary<br><div class=detail>0 live list file(s) captured</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>24</td><td>api</td><td>download report<br><code>GET /api/download?name=cloud_log&amp;type=51</code><div class=detail>saved 2341 bytes -&gt; cloud_transfer_report_51.zip</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>25</td><td>local</td><td>parse report<br><code>/home/bryck/fallback/cloudcp-phase-wise-testing/CloudCpFallbackTesting/runs/FB-U-09/report_51</code><div class=detail>rows=12 success=12 fallback_ok=0 failed=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>26</td><td>ssh</td><td>cleanup bucket<br><code>aws s3 rm --recursive s3://aditya --endpoint-url https://10.10.10.103:9000</code><div class=detail>rc=0</div><pre class="io">delete: s3://aditya/fallback/medium_files/medium-f1v71gark96s.bin
+delete: s3://aditya/fallback/medium_files/medium-xskzq5dnqeqt.bin
+delete: s3://aditya/fallback/medium_files/medium-ncqrqbykpqdb.bin
+delete: s3://aditya/fallback/medium_files/medium-psing0yg6087.bin
+delete: s3://aditya/fallback/medium_files/medium-8fvb3axu4qzv.bin
+delete: s3://aditya/fallback/medium_files/medium-p5bd59iyzj1g.bin
+delete: s3://aditya/fallback/medium_files/medium-mz3l0yiirm5y.bin
+delete: s3://aditya/fallback/medium_files/medium-c101oafsacj4.bin
+delete: s3://aditya/fallback/medium_files/medium-zvlxswg3agx1.bin
+delete: s3://aditya/fallback/medium_files/medium-wqayyv2b14z4.bin
+delete: s3://aditya/fallback/medium_files/medium-y812mst0q9uz.bin
+delete: s3://aditya/fallback/medium_files/medium-vxmq0edqiu2z.bin</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>27</td><td>ssh</td><td>cleanup /bryck source<br><code>rm -rf /bryck/cloudcp_fallback/medium_files</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>28</td><td>ssh</td><td>cleanup /bryck download<br><code>rm -rf /bryck/cloudcp_fallback_dl/medium_files</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr></tbody></table></details></section></div></body></html>

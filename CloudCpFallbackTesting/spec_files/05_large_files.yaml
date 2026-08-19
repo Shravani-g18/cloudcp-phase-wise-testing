@@ -1,0 +1,30 @@
+version: 1
+mode: flat
+root: /bryck/cloudcp_fallback/large_files
+threads: 4
+seed: 42
+
+# LARGE tier: >= 1 GiB. Big multipart, long-running transfer, resume/retry path.
+# Uses SPARSE content so the logical size is huge but local disk stays small.
+# (Switch to type: random for a full end-to-end checksum test if disk allows.)
+content:
+  type: sparse
+
+naming:
+  charset: ascii
+  alphabet: [lower, digit]
+  prefix: "large-"
+  length: 12
+
+flat:
+  num_files: 50
+
+size:
+  type: range
+  min: 1GB
+  max: 3GB
+  distribution: uniform
+
+extensions:
+  - ext: .img
+    weight: 1

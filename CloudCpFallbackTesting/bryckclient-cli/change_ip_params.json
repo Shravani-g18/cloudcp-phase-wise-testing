@@ -1,0 +1,10 @@
+{
+  "interface_name": "p0",
+  "dhcp": false,
+  "ip": "10.10.10.35",
+  "netmask": "255.255.255.0",
+  "gateway": null,
+  "nameservers": ["8.8.8.8"],
+  "ntp_server": "pool.ntp.org",
+  "mtu": 9000
+}

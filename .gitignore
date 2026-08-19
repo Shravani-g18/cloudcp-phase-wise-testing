@@ -1,0 +1,4 @@
+cloudcp-phase-wise-testing/
+__pycache__/
+*.pyc
+

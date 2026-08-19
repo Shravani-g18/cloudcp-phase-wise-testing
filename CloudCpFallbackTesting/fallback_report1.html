@@ -1,0 +1,176 @@
+<!doctype html><html><head><meta charset="utf-8"><title>CloudCp Fallback Test Report</title><style>
+    body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f6f8fa;color:#1f2328}
+    header{background:#24292f;color:#fff;padding:18px 28px}
+    header h1{margin:0;font-size:20px}
+    .wrap{padding:20px 28px}
+    .badge{color:#fff;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:700}
+    table{border-collapse:collapse;width:100%;background:#fff;margin:12px 0;font-size:13px}
+    th,td{border:1px solid #d0d7de;padding:6px 8px;text-align:left;vertical-align:top}
+    th{background:#eaeef2}
+    .summary td,.summary th{white-space:nowrap}
+    .case{background:#fff;border:1px solid #d0d7de;border-radius:8px;padding:14px 18px;margin:16px 0}
+    .case h3{margin:0 0 6px}
+    .desc{color:#57606a;margin:4px 0}
+    .meta{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;color:#24292f;background:#f6f8fa;padding:6px 8px;border-radius:6px}
+    .reasons{margin:8px 0;color:#9a6700}
+    code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;color:#0550ae;word-break:break-all}
+    .detail{color:#57606a;font-size:12px;margin-top:2px}
+    pre.io{background:#0d1117;color:#c9d1d9;padding:8px;border-radius:6px;overflow:auto;max-height:220px;font-size:11px;margin:6px 0 0}
+    table.steps td:first-child{width:32px;text-align:right;color:#57606a}
+    summary{cursor:pointer;font-weight:600;margin:6px 0}
+    </style></head><body><header><h1>CloudCp Fallback Test Report</h1><div>2026-08-18T06:09:11 · host 192.168.6.32 · seed 1337 · 1 case(s)</div></header><div class="wrap"><p><span class="badge" style="background:#cf222e">FAIL: 1</span></p><table class="summary"><thead><tr><th>case</th><th>group</th><th>dir</th><th>dataset</th><th>profile (F/C%)</th><th>HI_PERF</th><th>FALLBACK</th><th>state</th><th>verdict</th></tr></thead><tbody><tr><td><a href="#FB-U-05">FB-U-05</a></td><td>UPLOAD</td><td>upload</td><td>tiny</td><td>F6 (0/100)</td><td>True</td><td>True</td><td>PAUSED_TIMEOUT</td><td><span class="badge" style="background:#cf222e">FAIL</span></td></tr></tbody></table><section id="FB-U-05" class="case"><h3>FB-U-05 <span class="badge" style="background:#cf222e">FAIL</span></h3><p class="desc">Every tiny record crashes the primary worker (abort); fallback recovers all records.</p><p class="meta">transfer_id=50 · state=PAUSED_TIMEOUT · expected_files=5400 · captured_lst=0 · success_rows=0 · fallback_ok=0 · failed_rows=0</p><ul class=reasons><li>expected COMPLETED, got PAUSED_TIMEOUT</li></ul><details open><summary>Steps &amp; commands (41)</summary><table class="steps"><thead><tr><th>#</th><th>kind</th><th>step / command</th><th>result</th></tr></thead><tbody><tr><td>1</td><td>local</td><td>case<br><div class=detail>FB-U-05 [UPLOAD] upload dataset=tiny profile=F6 HI_PERF_OPT=True FALLBACK_ENABLED=True</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>2</td><td>local</td><td>description<br><div class=detail>Every tiny record crashes the primary worker (abort); fallback recovers all records.</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>3</td><td>ssh</td><td>backup original config<br><code>test -f /tmp/fb_config_backup.json || cp /etc/bryck/bryckcloud/config.json /tmp/fb_config_backup.json</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>4</td><td>ssh</td><td>prep remote spec dir<br><code>mkdir -p /tmp/fb_specs</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>5</td><td>ssh</td><td>upload spec<br><code>sftp put /home/bryck/fallback/cloudcp-phase-wise-testing/CloudCpFallbackTesting/spec_files/02_tiny_files.yaml -&gt; /tmp/fb_specs/02_tiny_files.yaml</code><div class=detail>uploaded</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>6</td><td>ssh</td><td>datagen<br><code>/home/bryck/rperiyas/datagen --spec /tmp/fb_specs/02_tiny_files.yaml</code><div class=detail>rc=0</div><pre class="io">Planned 5400 files; mode=tree, threads=8
+[Progress] 100 / 5400 files | 4.0 MB | 554.329 files/s | 21.9 MB/s
+[Progress] 200 / 5400 files | 8.2 MB | 605.607 files/s | 24.9 MB/s
+[Progress] 300 / 5400 files | 13.2 MB | 609.518 files/s | 26.7 MB/s
+[Progress] 301 / 5400 files | 13.2 MB | 611.549 files/s | 26.7 MB/s
+[Progress] 401 / 5400 files | 17.8 MB | 622.83 files/s | 27.6 MB/s
+[Progress] 501 / 5400 files | 23.3 MB | 623.881 files/s | 29.0 MB/s
+[Progress] 601 / 5400 files | 27.9 MB | 629.538 files/s | 29.2 MB/s
+[Progress] 701 / 5400 files | 32.1 MB | 631.501 files/s | 28.9 MB/s
+[Progress] 801 / 5400 files | 34.9 MB | 632.321 files/s | 27.5 MB/s
+[Progress] 901 / 5400 files | 40.7 MB | 635.561 files/s | 28.7 MB/s
+[Progress] 1001 / 5400 files | 43.8 MB | 633.725 files/s | 27.7 MB/s
+[Progress] 1101 / 5400 files | 48.7 MB | 637.101 files/s | 28.2 MB/s
+[Progress] 1202 / 5400 files | 54.7 MB | 635.997 files/s | 28.8 MB/ giving that right, so then we need to test all those video scenarios as well. The for Windows we gave all the options also right that also the same I put everything if you go to that block Cl entry now I reorganize it this one block Click no not Linux just to go to block Clint so I bare it as block CL is just one binary right now testing if you go to Linux CD Linux so you will these are things also you have the piece of partial right just need to just say you know zip do all those things like a binary basically it is actually known as that also works okay then it's a compiled by a different by part of the money because I will be aiming on those blocks testing Windows testing whatever I don't know it starts from I just showed up whatever we are capturing the versus you don't know how we can perform this is the cloud CP for batch it will take this much time it has eight batches totally to for all the transfer it has taken this much time this time is from when it was scheduled then the cip and then went back spending too much time no so it's not so medium files took more time for some reason we don't know about that I have raised this concern but you can see the difference here this is sixty nine point six seconds and this is sixty eight so difference of this is the processing time for the enumeration matching thing and transfer from the transfer from the batching to the scheduler to start the initiation of the transfer yeah and back to that but this this time is reformed also be this batch very tribe right for example batch is fluid keuing that q time is the one it's fine till the transfer is started till you also it is a waiting that waiting time is added in both and this scheduling thing so it cancels it adds in both the places but it mean we don't have to take the difference to get so this one we are adding it in both and then we are clicking we are canceling it so okay if both the parameters the timings have the same plus time then we can avoid that right for example if it's in the cube you're saying that q time is getting added time to takean addition you take the time work on the documentation I'll test it because you know ten fifty so this much times why will we take sixty nine sixty eight seconds zero fifteen what they are doing you just okay for zero files they are not doing the transfer technically since it's a zero file they are reading from source they are pitching the information about the file related metadata the ating of invertest instead of doing the transfer they are reading they are understanding the file name all the metadata they are creating the same file there that's why during the zero file transfer you see no data transfers it will be none only estimating the same can see this won't meet you transfer during the zero it should be it should be green it start transferred to the stand so this time has that complete waiting time also what I'm saying is we are calculating the from the waiting time for both so we can remove the waiting time only the difference of those things those two transfer and the from the scheduler to transfer to bank and rephrase it from scheduling to transfer to bank there is one time which confuse the waiting time only the cloud transfer has the waiting time also if both the variables have a waiting time then we can we can consider that it has zero and only the difference of those two will be the processing name the cloud transfer this has the way time plus transfer time yes let's say the full cycle two cloud transfer to back in the schedule scheduling plus cloud transfer back to schedule back to scheduling yes here that is a batch time plus batching is also here right in time plus this batch couple time plus b plus transfer that plus v which is that transfer time and the delta that delta is what you need what is the delta plus some time which is force this processing okay and now we take the v trans where delta is in that's the processing time for my scale to get a delece do we need away with this but in the laws based on time we are we have to mean we get this time because a lot of the law we have to map the time of whatever the mean we can then post processing we can remove that time and allvert it to just be like we can understand the batching use it separate but if it is parallel to scheduling one thing what I'm interested in other surface is q what is the queue wave like I have that because all you can analyze it here this rate at the start when the when the transfer is not initiated this should be the reti rest yeah starting to retire once the transfer is initiated this will go highI have those values okay the reason is this will determine how much of resource allocation is given to the transfer or the scheduler and how much of resource allocation is given to the batch let's say if my if my banching will happen to generate some sixteen batches let's say it's already exceeded into sixteen batches then it will be within quewed up here so technically no batching operation is happening this time yes so all my resources will be here so this problem is like I mean i don't know how you figure out this problem they start solved by because maximum tied up then again for example transfers them it pick up some of the cues then again you have to mean mean to release something so that batch would continue he said there is some problem but I don't know that they fix it or not so to figure out this we need to know this meet because if the number of user number of cues and then the wait time if you know this side we will know either the matching is able to perform transfers a certain order did you go what I am trying to say this is it's present here this total time it got reduced later this is to ninety two so this has wait time more wait time this has decreasing because in between this other things got priority that's why this got I mean faster yeah upload time it was lesser for this and this was for more because so while okay so when you were capturing this see if you see a pattern all if those have the same crisis it needs to increase it needs to decrease it needs to increase decrease you need to see that pattern for example this if you increases and if you keep on increasing means there's a problem if it decreases now for seven hundred twelve decrease and for some it will increase because depends on the priority as priority of the sh ok yeah this is how you can work it that's why I said if you have this q than we will know if the process switching back between the batch and the cloud you have that okay actually this is really important parameter because this is where we could go blind I mean we will not know what's happening or we will not find out who is having a problem so example this is not giving back the control right then I have a problem in both in the cloud cp or the scheduler I have never any problem it's not increasing in the memory things are done that is a problem the other thing is that is starving for stuff batching so it actually merely basic take me the memory problem on the cloud screen schedule basically memory meaning if I if I want for example I want to have a bunch of systems let's say those are the CPUs I'm I'mI want I want I want okay let's say I have four systems I have three vehicles okay I'm using two system and two more people are using one system I want more system one person is only so I took the third system I mean I'm using it but on the fourth day if a person comes back the system if you am not giving back in what will happen technically my already completed but still I am not releasing the system is a kind of as
+[Progress] 1201 / 5400 files | 54.7 MB | 635.468 files/s | 28.8 MB/s
+[Progress] 1302 / 5400 files | 59.3 MB | 637.877 files/s | 29.0 MB/s
+[Progress] 1402 / 5400 files | 64.7 MB | 637.083 files/s | 29.4 MB/s
+[Progress] 1502 / 5400 files | 69.1 MB | 638.546 files/s | 29.4 MB/s
+[Progress] 1602 / 5400 files | 73.5 MB | 638.887 files/s | 29.3 MB/s
+[Progress] 1702 / 5400 files | 77.7 MB | 638.776 files/s | 29.2 MB/s
+[Progress] 1802 / 5400 files | 81.5 MB | 640.209 files/s | 28.9 MB/s
+[Progress] 1902 / 5400 files | 86.1 MB | 639.665 files/s | 28.9 MB/s
+[Progress] 2002 / 5400 files | 90.6 MB | 640.148 files/s | 29.0 MB/s
+[Progress] 2102 / 5400 files | 95.3 MB | 640.753 files/s | 29.0 MB/s
+[Progress] 2202 / 5400 files | 100.0 MB | 640.123 files/s | 29.1 MB/s
+[Progress] 2302 / 5400 files | 103.3 MB | 641.154 files/s | 28.8 MB/s
+[Progress] 2402 / 5400 files | 107.6 MB | 640.235 files/s | 28.7 MB/s
+[Progress] 2502 / 5400 files | 112.6 MB | 641.234 files/s | 28.9 MB/s
+[Progress] 2602 / 5400 files | 116.8 MB | 640.13 files/s | 28.7 MB/s
+[Progress] 2702 / 5400 files | 121.7 MB | 641.121 files/s | 28.9 MB/s
+[Progress] 2802 / 5400 files | 126.1 MB | 640.859 files/s | 28.8 MB/s
+[Progress] 2902 / 5400 files | 130.1 MB | 639.434 files/s | 28.7 MB/s
+[Progress] 3002 / 5400 files | 135.0 MB | 640.454 files/s | 28.8 MB/s
+[Progress] 3102 / 5400 files | 139.6 MB | 640.819 files/s | 28.8 MB/s
+[Progress] 3202 / 5400 files | 143.8 MB | 641.349 files/s | 28.8 MB/s
+[Progress] 3302 / 5400 files | 148.4 MB | 641.902 files/s | 28.8 MB/s
+[Progress] 3402 / 5400 files | 152.3 MB | 642.376 files/s | 28.7 MB/s
+[Progress] 3502 / 5400 files | 156.3 MB | 642.281 files/s | 28.7 MB/s
+[Progress] 3602 / 5400 files | 161.2 MB | 643.053 files/s | 28.8 MB/s
+[Progress] 3702 / 5400 files | 165.8 MB | 642.913 files/s | 28.8 MB/s
+[Progress] 3802 / 5400 files | 171.1 MB | 643.48 files/s | 29.0 MB/s
+[Progress] 3902 / 5400 files | 174.7 MB | 643.645 files/s | 28.8 MB/s
+[Progress] 4002 / 5400 files | 179.5 MB | 643.768 files/s | 28.9 MB/s
+[Progress] 4102 / 5400 files | 185.2 MB | 644.233 files/s | 29.1 MB/s
+[Progress] 4202 / 5400 files | 189.3 MB | 643.939 files/s | 29.0 MB/s
+[Progress] 4302 / 5400 files | 193.2 MB | 644.536 files/s | 29.0 MB/s
+[Progress] 4402 / 5400 files | 197.2 MB | 644.432 files/s | 28.9 MB/s
+[Progress] 4502 / 5400 files | 202.4 MB | 644.631 files/s | 29.0 MB/s
+[Progress] 4602 / 5400 files | 206.8 MB | 644.911 files/s | 29.0 MB/s
+[Progress] 4702 / 5400 files | 211.2 MB | 644.639 files/s | 29.0 MB/s
+[Progress] 4802 / 5400 files | 216.3 MB | 645.146 files/s | 29.1 MB/s
+[Progress] 4902 / 5400 files | 221.1 MB | 645.033 files/s | 29.1 MB/s
+[Progress] 5002 / 5400 files | 226.6 MB | 645.259 files/s | 29.2 MB/s
+[Progress] 5102 / 5400 files | 230.9 MB | 645.492 files/s | 29.2 MB/s
+[Progress] 5202 / 5400 files | 234.5 MB | 645.665 files/s | 29.1 MB/s
+[Progress] 5302 / 5400 files | 239.4 MB | 645.8 files/s | 29.2 MB/s
+
+[Done] 5400 files | 243.4 MB | 645.68 files/s | 29.1 MB/s | elapsed 8.36328s</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>7</td><td>ssh</td><td>count source files<br><code>find /bryck/cloudcp_fallback/tiny_files -type f 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">5400</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>8</td><td>ssh</td><td>read config<br><code>cat /etc/bryck/bryckcloud/config.json</code><div class=detail>rc=0</div><pre class="io">{
+  &quot;SERVICE&quot;: {
+    &quot;PID_FILE&quot;: &quot;/run/bryck/bcloud_transfer.pid&quot;,
+    &quot;AUTH_KEY&quot;: &quot;bryck&quot;,
+    &quot;QUEUE_PORT&quot;: 2002,
+    &quot;ADDRESS&quot;: &quot;127.0.0.1&quot;,
+    &quot;QUEUE_NAME&quot;: &quot;get_queue&quot;,
+    &quot;MAX_CONCURRENT_TRANSFERS&quot;: 5,
+    &quot;MAX_TRANSFER_SIZE&quot;: 1000000000,
+    &quot;USER&quot;: &quot;bryck&quot;
+  },
+  &quot;DATABASE&quot;: {
+    &quot;DB_USERNAME&quot;: &quot;bryck&quot;,
+    &quot;DB_PASSWORD&quot;: &quot;password&quot;,
+    &quot;DB_NAME&quot;: &quot;Bcloud&quot;,
+    &quot;DB_PORT&quot;: 5432
+  },
+  &quot;CLOUD&quot;: {
+    &quot;LOCAL_AWS&quot;: &quot;https://10.10.10.103:9000&quot;,
+    &quot;PROVIDER&quot;: &quot;minio&quot;,
+    &quot;AWS_CONFIG_FILE&quot;: &quot;/home/bryck/.aws/config&quot;
+  },
+  &quot;TRANSFER&quot;: {
+    &quot;PARALLEL_TRANSFER&quot;: &quot;True&quot;,
+    &quot;PARALLEL_WORKERS&quot;: 14,
+    &quot;TRANSFER_CMD&quot;: &quot;export LD_LIBRARY_PATH=/opt/bryck/aws/lib/; /opt/bryck/aws/bin/cloudcp&quot;,
+    &quot;FALLBACK_ENABLED&quot;: &quot;True&quot;,
+    &quot;TRANSFER_CLIENT_TYPE&quot;: &quot;transfermanager&quot;,
+    &quot;TM_THREAD_POOL_SIZE&quot;: 10,
+    &quot;CHUNK_SIZE_MB&quot;: 64,
+    &quot;HI_PERF_OPT&quot;: &quot;True&quot;,
+    &quot;PERF_STATS&quot;: &quot;True&quot;,
+    &quot;TXR_BATCH_VERIFYSIZE&quot;: &quot;True&quot;,
+    &quot;AZURE_RESUME&quot;: &quot;False&quot;,
+    &quot;BATCH_INCLUDE_SIZE&quot;: &quot;True&quot;,
+    &quot;TRANSFER_DISPATCH&quot;: &quot;broker&quot;
+  },
+  &quot;NETWORK_PROFILE&quot;: &quot;default_balanced&quot;,
+  &quot;BATCH&quot;: {
+    &quot;BATCH_BUILDER_ONLY&quot;: &quot;False&quot;,
+    &quot;BATCH_FILE_DIR&quot;: &quot;/opt/bryck/bryckapi/downloads/bcloud_batchmeta&quot;,
+    &quot;ZERO&quot;: {
+      &quot;BATCH_SIZE&quot;: 8000,
+      &quot;TARGET_SIZE_MB&quot;: 0,
+      &quot;OPEN_BATCHES&quot;: 3
+    },
+    &quot;TINY&quot;: {
+      &quot;BATCH_SIZE&quot;: 1000,
+      &quot;TARGET_SIZE_MB&quot;: 256,
+      &quot;OPEN_BATCHES&quot;: 3
+    },
+    &quot;SMALL&quot;: {
+      &quot;BATCH_SIZE&quot;: 8192,
+      &quot;TARGET_SIZE_MB&quot;: 16384,
+      &quot;OPEN_BATCHES&quot;: 2
+    },
+    &quot;MEDIUM&quot;: {
+      &quot;BATCH_SIZE&quot;: 1,
+      &quot;TARGET_SIZE_MB&quot;: 4096,
+      &quot;OPEN_BATCHES&quot;: 2
+    },
+    &quot;LARGE&quot;: {
+      &quot;BATCH_SIZE&quot;: 1,
+      &quot;TARGET_SIZE_MB&quot;: 16384,
+      &quot;OPEN_BATCHES&quot;: 1
+    }
+  },
+  &quot;LOGGING&quot;: {
+    &quot;LOGS_DIR&quot;: &quot;/opt/bryck/bryckapi/downloads/cloud_transfer_logs&quot;,
+    &quot;DEBUG_LOG_FILE&quot;: &quot;/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloudcp.log&quot;,
+    &quot;AWS_XFER_STAT&quot;: &quot;/tmp/aws_xfer_stats&quot;,
+    &quot;AWS_STAT_PREFIX&quot;: &quot;/tmp/aws_bryck_zfer_stat&quot;
+  },
+  &quot;VERIFICATION&quot;: {
+    &quot;REPORT_FORMAT&quot;: &quot;json&quot;,
+    &quot;TRANSFER_SUMMARY_FILES&quot;: &quot;/etc/bryck/bryckcloud/transfer_summary_files.json&quot;,
+    &quot;VERIFY_S3_WORKERS&quot;: 16,
+    &quot;VERIFY_STAT_THREADS&quot;: 32
+  },
+  &quot;RCLONE_PARAMS&quot;: {
+    &quot;S3_UPLOAD_CONCURRENCY&quot;: 8,
+    &quot;TRANSFERS&quot;: 4,
+    &quot;MULTI_THREAD_STREAMS&quot;: 4,
+    &quot;upload_cutoff&quot;: &quot;8Mi&quot;,
+    &quot;chunk_size&quot;: &quot;8Mi&quot;
+  },
+  &quot;TEST&quot;: {
+    &quot;SIM_TRANSFER&quot;: false,
+    &quot;SIM_SLEEP_TINY_MS&quot;: 0,
+    &quot;SIM_SLEEP_SMALL_MS&quot;: 0,
+    &quot;SIM_SLEEP_MEDIUM_MS&quot;: 0,
+    &quot;SIM_SLEEP_LARGE_MS&quot;: 0,
+    &quot;SIM_SLEEP_DOWNLOAD_MS&quot;: 0,
+    &quot;FAULT_FAIL_PERCENT&quot;: 0,
+    &quot;FAULT_CRASH_PERCENT&quot;: 0,
+    &quot;FAULT_CRASH_MODE&quot;: &quot;abort&quot;,
+    &quot;FAULT_SEED&quot;: 0
+  }
+}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>9</td><td>ssh</td><td>upload patched config<br><code>sftp put /home/bryck/fallback/cloudcp-phase-wise-testing/CloudCpFallbackTesting/runs/config_FB-U-05.json -&gt; /tmp/fb_config_FB-U-05.json</code><div class=detail>uploaded</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>10</td><td>ssh</td><td>install config (sudo)<br><code>sudo -n cp /tmp/fb_config_FB-U-05.json /etc/bryck/bryckcloud/config.json &amp;&amp; rm -f /tmp/fb_config_FB-U-05.json</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>11</td><td>local</td><td>config applied<br><code>FAIL%=0 CRASH%=100 SEED=1337 CRASH_MODE=abort HI_PERF_OPT=True FALLBACK_ENABLED=True</code><div class=detail>FAIL%=0 CRASH%=100 SEED=1337 CRASH_MODE=abort HI_PERF_OPT=True FALLBACK_ENABLED=True</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>12</td><td>ssh</td><td>restart service (sudo)<br><code>sudo -n systemctl restart bcloud.service</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>13</td><td>ssh</td><td>await service<br><code>systemctl is-active bcloud.service || true</code><div class=detail>rc=0</div><pre class="io">active</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>14</td><td>api</td><td>configure cloud<br><code>POST /api/bcloud/config bcloud_type=aws</code><div class=detail>provider configured</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>15</td><td>api</td><td>initiate transfer<br><code>POST /api/bcloud/transfer src=/bryck/cloudcp_fallback/tiny_files dst=s3://aditya/fallback/tiny_files</code><div class=detail>transfer_id=50</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>16</td><td>ssh</td><td>prep capture dir<br><code>mkdir -p /tmp/fb_capture/50</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>17</td><td>ssh</td><td>snapshot .lst (poll 1)<br><code>cp -an /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_50/*.txt.lst /tmp/fb_capture/50/ 2&gt;/dev/null; cp -an /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_50/cloudcp_retry_50_*.lst /tmp/fb_capture/50/ 2&gt;/dev/null; ls -1 /tmp/fb_capture/50 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">0</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>18</td><td>api</td><td>status (poll 1)<br><code>GET /api/bcloud/status_transfer transfer_id=50</code><div class=detail>state=ACTIVE percent=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>19</td><td>ssh</td><td>snapshot .lst (poll 2)<br><code>cp -an /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_50/*.txt.lst /tmp/fb_capture/50/ 2&gt;/dev/null; cp -an /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_50/cloudcp_retry_50_*.lst /tmp/fb_capture/50/ 2&gt;/dev/null; ls -1 /tmp/fb_capture/50 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">0</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>20</td><td>api</td><td>status (poll 2)<br><code>GET /api/bcloud/status_transfer transfer_id=50</code><div class=detail>state=PAUSED percent=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>21</td><td>ssh</td><td>snapshot .lst (poll 3)<br><code>cp -an /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_50/*.txt.lst /tmp/fb_capture/50/ 2&gt;/dev/null; cp -an /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_50/cloudcp_retry_50_*.lst /tmp/fb_capture/50/ 2&gt;/dev/null; ls -1 /tmp/fb_capture/50 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">0</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>22</td><td>api</td><td>status (poll 3)<br><code>GET /api/bcloud/status_transfer transfer_id=50</code><div class=detail>state=PAUSED percent=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>23</td><td>ssh</td><td>snapshot .lst (poll 4)<br><code>cp -an /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_50/*.txt.lst /tmp/fb_capture/50/ 2&gt;/dev/null; cp -an /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_50/cloudcp_retry_50_*.lst /tmp/fb_capture/50/ 2&gt;/dev/null; ls -1 /tmp/fb_capture/50 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">0</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>24</td><td>api</td><td>status (poll 4)<br><code>GET /api/bcloud/status_transfer transfer_id=50</code><div class=detail>state=PAUSED percent=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>25</td><td>ssh</td><td>snapshot .lst (poll 5)<br><code>cp -an /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_50/*.txt.lst /tmp/fb_capture/50/ 2&gt;/dev/null; cp -an /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_50/cloudcp_retry_50_*.lst /tmp/fb_capture/50/ 2&gt;/dev/null; ls -1 /tmp/fb_capture/50 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">0</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>26</td><td>api</td><td>status (poll 5)<br><code>GET /api/bcloud/status_transfer transfer_id=50</code><div class=detail>state=PAUSED percent=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>27</td><td>ssh</td><td>snapshot .lst (poll 6)<br><code>cp -an /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_50/*.txt.lst /tmp/fb_capture/50/ 2&gt;/dev/null; cp -an /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_50/cloudcp_retry_50_*.lst /tmp/fb_capture/50/ 2&gt;/dev/null; ls -1 /tmp/fb_capture/50 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">0</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>28</td><td>api</td><td>status (poll 6)<br><code>GET /api/bcloud/status_transfer transfer_id=50</code><div class=detail>state=PAUSED percent=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>29</td><td>ssh</td><td>snapshot .lst (poll 7)<br><code>cp -an /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_50/*.txt.lst /tmp/fb_capture/50/ 2&gt;/dev/null; cp -an /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_50/cloudcp_retry_50_*.lst /tmp/fb_capture/50/ 2&gt;/dev/null; ls -1 /tmp/fb_capture/50 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">0</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>30</td><td>api</td><td>status (poll 7)<br><code>GET /api/bcloud/status_transfer transfer_id=50</code><div class=detail>state=PAUSED percent=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>31</td><td>ssh</td><td>snapshot .lst (poll 8)<br><code>cp -an /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_50/*.txt.lst /tmp/fb_capture/50/ 2&gt;/dev/null; cp -an /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_50/cloudcp_retry_50_*.lst /tmp/fb_capture/50/ 2&gt;/dev/null; ls -1 /tmp/fb_capture/50 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">0</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>32</td><td>api</td><td>status (poll 8)<br><code>GET /api/bcloud/status_transfer transfer_id=50</code><div class=detail>state=PAUSED percent=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>33</td><td>local</td><td>paused timeout<br><div class=detail>transfer stuck in PAUSED for &gt;60s — aborting poll</div></td><td style="color:#cf222e;font-weight:700">&#10007; </td></tr><tr><td>34</td><td>ssh</td><td>archive captured .lst<br><code>tar czf /tmp/fb_capture_50.tgz -C /tmp/fb_capture/50 . 2&gt;/dev/null; ls -1 /tmp/fb_capture/50 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">0</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>35</td><td>ssh</td><td>download captured .lst<br><code>sftp get /tmp/fb_capture_50.tgz -&gt; /home/bryck/fallback/cloudcp-phase-wise-testing/CloudCpFallbackTesting/runs/FB-U-05/live_lst/live_lst_50.tgz</code><div class=detail>downloaded</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>36</td><td>local</td><td>captured .lst summary<br><div class=detail>0 live list file(s) captured</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>37</td><td>api</td><td>download report<br><code>GET /api/download?name=cloud_log&amp;type=50</code><div class=detail>saved 733 bytes -&gt; cloud_transfer_report_50.zip</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>38</td><td>local</td><td>parse report<br><code>/home/bryck/fallback/cloudcp-phase-wise-testing/CloudCpFallbackTesting/runs/FB-U-05/report_50</code><div class=detail>rows=0 success=0 fallback_ok=0 failed=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>39</td><td>ssh</td><td>cleanup bucket<br><code>aws s3 rm --recursive s3://aditya --endpoint-url https://10.10.10.103:9000</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>40</td><td>ssh</td><td>cleanup /bryck source<br><code>rm -rf /bryck/cloudcp_fallback/tiny_files</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>41</td><td>ssh</td><td>cleanup /bryck download<br><code>rm -rf /bryck/cloudcp_fallback_dl/tiny_files</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr></tbody></table></details></section></div></body></html>

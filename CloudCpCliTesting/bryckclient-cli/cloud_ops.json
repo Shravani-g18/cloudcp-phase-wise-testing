@@ -1,0 +1,17 @@
+{
+    "cloud_type": "aws",
+    "access_key_id": "minioadmin",
+    "secret_access_key": "minioadmin",
+    "region": "us-west-1",
+    "keyfile": "",
+    "tenant_id": "",
+    "bryck_src": "/bryck/source-directory",
+    "cloud_bucket": "s3://shravani",
+    "bryck_dst": "/bryck/download-directory",
+    "notification": {
+        "sns_topic": "sns-testing",
+        "sqs_queue": "sqs-testing",
+        "emails": ["shravani.g@tsecond.ai"],
+        "states": ["COMPLETED", "FAILED", "PAUSED"]
+    }
+}

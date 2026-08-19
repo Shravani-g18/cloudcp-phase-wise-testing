@@ -1,0 +1,23 @@
+{
+  "format": {
+    "key_file": "None",
+    "description": "",
+    "encryption_option": "",
+    "mountonreboot": true,
+    "IoSize": "256",
+    "DataSync": "application sync",
+    "dedup": false,
+    "compress": false,
+    "obj": false,
+    "filestore": true,
+    "filesystem": "zfs",
+    "num_vols": "None",
+    "raid_level": 5
+  },
+  "mount": {
+    "key_file": "None",
+    "mountonreboot": true,
+    "force_check": false,
+    "encryption_option": ""
+  }
+}

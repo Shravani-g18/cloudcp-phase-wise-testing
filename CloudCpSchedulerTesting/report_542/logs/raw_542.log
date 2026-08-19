@@ -1,0 +1,467 @@
+Aug 04 07:10:28 bryckmini bryckcloud[3758112]: Broker 542: profile=dt2_100gbe max_workers=32
+Aug 04 07:10:28 bryckmini bryckcloud[3758112]: Broker 542: spawning enumerator
+Aug 04 07:10:28 bryckmini bryckcloud[3758112]: free workers 32
+Aug 04 07:10:28 bryckmini bryckcloud[3758112]: free workers 32
+Aug 04 07:10:28 bryckmini bryckcloud[3758257]: Enumerator using network profile: dt2_100gbe (batch size-in-record: True)
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: free workers 32
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'tiny': 8, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 1}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'tiny': 7, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 2}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'tiny': 6, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 2, 'zero': 1}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'tiny': 6, 'zero': 3}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 3, 'zero': 1}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'tiny': 5, 'zero': 3}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 4, 'zero': 1}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'tiny': 4, 'zero': 3}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 5, 'zero': 1}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'tiny': 3, 'zero': 3}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 5, 'zero': 2}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'tiny': 3, 'zero': 2}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 6, 'zero': 2}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'tiny': 2, 'zero': 2}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 7, 'zero': 2}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'tiny': 1, 'zero': 2}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 8, 'zero': 2}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'tiny': 0, 'zero': 2}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 8, 'zero': 3}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'tiny': 0, 'zero': 1}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 8, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'tiny': 0, 'zero': 0}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: free workers 20
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 12, 'tiny': 8, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 8, 'zero': 4, 'small': 1}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 11, 'tiny': 8, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 8, 'zero': 4, 'small': 2}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 10, 'tiny': 8, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 8, 'zero': 4, 'small': 3}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 9, 'tiny': 8, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 8, 'zero': 4, 'small': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 8, 'tiny': 8, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 8, 'zero': 4, 'small': 5}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 7, 'tiny': 8, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 8, 'zero': 4, 'small': 6}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 6, 'tiny': 8, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 8, 'zero': 4, 'small': 7}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 5, 'tiny': 8, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 8, 'zero': 4, 'small': 8}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 4, 'tiny': 8, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 9, 'zero': 4, 'small': 8}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 4, 'tiny': 7, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 9, 'zero': 4, 'small': 9}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 3, 'tiny': 7, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758257]: Tier-zero, summary-{'batches': 8, 'files': 16000, 'bytes': 0}
+Aug 04 07:10:29 bryckmini bryckcloud[3758257]: Tier-tiny, summary-{'batches': 16, 'files': 8176, 'bytes': 133955584}
+Aug 04 07:10:29 bryckmini bryckcloud[3758257]: Tier-small, summary-{'batches': 16, 'files': 5072, 'bytes': 10636754944}
+Aug 04 07:10:29 bryckmini bryckcloud[3758257]: Tier-medium, summary-{'batches': 8, 'files': 400, 'bytes': 41943040000}
+Aug 04 07:10:29 bryckmini bryckcloud[3758257]: Tier-large, summary-{'batches': 8, 'files': 40, 'bytes': 42949672960}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 10, 'zero': 4, 'small': 9}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 3, 'tiny': 6, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 10, 'zero': 4, 'small': 10}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 2, 'tiny': 6, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 11, 'zero': 4, 'small': 10}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 2, 'tiny': 5, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 11, 'zero': 4, 'small': 11}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 1, 'tiny': 5, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 12, 'zero': 4, 'small': 11}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 1, 'tiny': 4, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 12, 'zero': 4, 'small': 12}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 0, 'tiny': 4, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 13, 'zero': 4, 'small': 12}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 0, 'tiny': 3, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 14, 'zero': 4, 'small': 12}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 0, 'tiny': 2, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 14, 'zero': 5, 'small': 12}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 0, 'tiny': 2, 'zero': 3}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 15, 'zero': 5, 'small': 12}
+Aug 04 07:10:30 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:31 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:31 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:32 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:32 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:33 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:33 bryckmini bryckcloud[3759066]: PERF batch=batch_000009.txt files_count:511 total_size:8372224 upload=3.39s total=3.39s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/tiny/batch_000009.txt
+Aug 04 07:10:33 bryckmini bryckcloud[3758112]: free workers 1
+Aug 04 07:10:33 bryckmini bryckcloud[3758112]: Pending-542: {'large': 8, 'medium': 8, 'small': 4, 'tiny': 1, 'zero': 3}
+Aug 04 07:10:33 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 14, 'zero': 5, 'small': 12, 'large': 1}
+Aug 04 07:10:34 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:34 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:35 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:35 bryckmini bryckcloud[3759061]: PERF batch=batch_000008.txt files_count:511 total_size:8372224 upload=5.28s total=5.28s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/tiny/batch_000008.txt
+Aug 04 07:10:35 bryckmini bryckcloud[3758112]: free workers 1
+Aug 04 07:10:35 bryckmini bryckcloud[3758112]: Pending-542: {'large': 7, 'medium': 8, 'small': 4, 'tiny': 1, 'zero': 3}
+Aug 04 07:10:35 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 13, 'zero': 5, 'small': 12, 'large': 1, 'medium': 1}
+Aug 04 07:10:35 bryckmini bryckcloud[3759057]: PERF batch=batch_000006.txt files_count:511 total_size:8372224 upload=6.11s total=6.11s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/tiny/batch_000006.txt
+Aug 04 07:10:36 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:36 bryckmini bryckcloud[3758112]: free workers 1
+Aug 04 07:10:36 bryckmini bryckcloud[3758112]: Pending-542: {'large': 7, 'medium': 7, 'small': 4, 'tiny': 1, 'zero': 3}
+Aug 04 07:10:36 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 12, 'zero': 5, 'small': 12, 'large': 2, 'medium': 1}
+Aug 04 07:10:36 bryckmini bryckcloud[3759053]: PERF batch=batch_000005.txt files_count:511 total_size:8372224 upload=7.07s total=7.08s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/tiny/batch_000005.txt
+Aug 04 07:10:37 bryckmini bryckcloud[3758112]: free workers 1
+Aug 04 07:10:37 bryckmini bryckcloud[3758112]: Pending-542: {'large': 6, 'medium': 7, 'small': 4, 'tiny': 1, 'zero': 3}
+Aug 04 07:10:37 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 11, 'zero': 5, 'small': 12, 'large': 2, 'medium': 2}
+Aug 04 07:10:37 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:38 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:38 bryckmini bryckcloud[3759052]: PERF batch=batch_000004.txt files_count:511 total_size:8372224 upload=8.37s total=8.37s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/tiny/batch_000004.txt
+Aug 04 07:10:38 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:39 bryckmini bryckcloud[3758112]: free workers 1
+Aug 04 07:10:39 bryckmini bryckcloud[3758112]: Pending-542: {'large': 6, 'medium': 6, 'small': 4, 'tiny': 1, 'zero': 3}
+Aug 04 07:10:39 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 10, 'zero': 5, 'small': 12, 'large': 3, 'medium': 2}
+Aug 04 07:10:39 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:40 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:40 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:40 bryckmini bryckcloud[3759068]: PERF batch=batch_000010.txt files_count:511 total_size:8372224 upload=11.08s total=11.08s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/tiny/batch_000010.txt
+Aug 04 07:10:41 bryckmini bryckcloud[3758112]: free workers 1
+Aug 04 07:10:41 bryckmini bryckcloud[3758112]: Pending-542: {'large': 5, 'medium': 6, 'small': 4, 'tiny': 1, 'zero': 3}
+Aug 04 07:10:41 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 9, 'zero': 5, 'small': 12, 'large': 4, 'medium': 2}
+Aug 04 07:10:41 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:42 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:42 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:43 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:43 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:44 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:44 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:45 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:45 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:46 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:46 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:47 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:47 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:48 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:48 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:49 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:49 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:50 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:50 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:51 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:51 bryckmini bryckcloud[3759280]: PERF batch=batch_000042.txt files_count:511 total_size:8372224 upload=20.53s total=20.53s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/tiny/batch_000042.txt
+Aug 04 07:10:51 bryckmini bryckcloud[3758112]: free workers 1
+Aug 04 07:10:51 bryckmini bryckcloud[3758112]: Pending-542: {'large': 4, 'medium': 6, 'small': 4, 'tiny': 1, 'zero': 3}
+Aug 04 07:10:51 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 8, 'zero': 5, 'small': 12, 'large': 4, 'medium': 3}
+Aug 04 07:10:52 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:52 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:53 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:53 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:53 bryckmini bryckcloud[3759060]: PERF batch=batch_000007.txt files_count:511 total_size:8372224 upload=23.63s total=23.63s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/tiny/batch_000007.txt
+Aug 04 07:10:54 bryckmini bryckcloud[3758112]: free workers 1
+Aug 04 07:10:54 bryckmini bryckcloud[3758112]: Pending-542: {'large': 4, 'medium': 5, 'small': 4, 'tiny': 1, 'zero': 3}
+Aug 04 07:10:54 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 7, 'zero': 5, 'small': 12, 'large': 5, 'medium': 3}
+Aug 04 07:10:54 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:55 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:55 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:56 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:56 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:57 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:57 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:58 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:58 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:59 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:10:59 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:00 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:00 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:01 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:01 bryckmini bryckcloud[3761523]: PERF batch=batch_000028.txt files_count:5 total_size:5368709120 upload=27.26s total=27.26s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/large/batch_000028.txt
+Aug 04 07:11:01 bryckmini bryckcloud[3758112]: free workers 1
+Aug 04 07:11:01 bryckmini bryckcloud[3758112]: Pending-542: {'large': 3, 'medium': 5, 'small': 4, 'tiny': 1, 'zero': 3}
+Aug 04 07:11:01 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 7, 'zero': 5, 'small': 12, 'large': 5, 'medium': 3}
+Aug 04 07:11:02 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:02 bryckmini bryckcloud[3759071]: PERF batch=batch_000011.txt files_count:511 total_size:8372224 upload=31.76s total=31.76s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/tiny/batch_000011.txt
+Aug 04 07:11:02 bryckmini bryckcloud[3758112]: free workers 1
+Aug 04 07:11:02 bryckmini bryckcloud[3758112]: Pending-542: {'large': 2, 'medium': 5, 'small': 4, 'tiny': 1, 'zero': 3}
+Aug 04 07:11:02 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 6, 'zero': 5, 'small': 12, 'large': 5, 'medium': 4}
+Aug 04 07:11:03 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:03 bryckmini bryckcloud[3759314]: PERF batch=batch_000043.txt files_count:511 total_size:8372224 upload=32.07s total=32.07s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/tiny/batch_000043.txt
+Aug 04 07:11:03 bryckmini bryckcloud[3758112]: free workers 1
+Aug 04 07:11:03 bryckmini bryckcloud[3758112]: Pending-542: {'large': 2, 'medium': 4, 'small': 4, 'tiny': 1, 'zero': 3}
+Aug 04 07:11:03 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 5, 'zero': 5, 'small': 12, 'large': 6, 'medium': 4}
+Aug 04 07:11:04 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:04 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:05 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:05 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:06 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:06 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:07 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:07 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:08 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:08 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:09 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:09 bryckmini bryckcloud[3763318]: PERF batch=batch_000029.txt files_count:5 total_size:5368709120 upload=32.34s total=32.34s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/large/batch_000029.txt
+Aug 04 07:11:09 bryckmini bryckcloud[3758112]: free workers 1
+Aug 04 07:11:09 bryckmini bryckcloud[3758112]: Pending-542: {'large': 1, 'medium': 4, 'small': 4, 'tiny': 1, 'zero': 3}
+Aug 04 07:11:09 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 5, 'zero': 5, 'small': 12, 'large': 6, 'medium': 4}
+Aug 04 07:11:09 bryckmini bryckcloud[3759237]: PERF batch=batch_000040.txt files_count:511 total_size:8372224 upload=38.39s total=38.39s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/tiny/batch_000040.txt
+Aug 04 07:11:10 bryckmini bryckcloud[3758112]: free workers 1
+Aug 04 07:11:10 bryckmini bryckcloud[3758112]: Pending-542: {'medium': 4, 'small': 4, 'tiny': 1, 'zero': 3}
+Aug 04 07:11:10 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 4, 'zero': 5, 'small': 12, 'large': 6, 'medium': 5}
+Aug 04 07:11:10 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:11 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:11 bryckmini bryckcloud[3759271]: PERF batch=batch_000041.txt files_count:511 total_size:8372224 upload=39.98s total=39.98s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/tiny/batch_000041.txt
+Aug 04 07:11:11 bryckmini bryckcloud[3759333]: PERF batch=batch_000044.txt files_count:511 total_size:8372224 upload=39.62s total=39.62s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/tiny/batch_000044.txt
+Aug 04 07:11:11 bryckmini bryckcloud[3759359]: PERF batch=batch_000045.txt files_count:511 total_size:8372224 upload=39.72s total=39.72s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/tiny/batch_000045.txt
+Aug 04 07:11:11 bryckmini bryckcloud[3759385]: PERF batch=batch_000046.txt files_count:511 total_size:8372224 upload=39.39s total=39.39s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/tiny/batch_000046.txt
+Aug 04 07:11:11 bryckmini bryckcloud[3758112]: free workers 4
+Aug 04 07:11:11 bryckmini bryckcloud[3758112]: Pending-542: {'medium': 3, 'small': 4, 'tiny': 1, 'zero': 3}
+Aug 04 07:11:11 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 1, 'zero': 5, 'small': 12, 'large': 6, 'medium': 5}
+Aug 04 07:11:11 bryckmini bryckcloud[3758112]: Pending-542: {'medium': 3, 'small': 4, 'tiny': 0, 'zero': 3}
+Aug 04 07:11:11 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 1, 'zero': 5, 'small': 12, 'large': 6, 'medium': 6}
+Aug 04 07:11:11 bryckmini bryckcloud[3758112]: Pending-542: {'medium': 2, 'small': 4, 'tiny': 0, 'zero': 3}
+Aug 04 07:11:11 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 1, 'zero': 5, 'small': 12, 'large': 6, 'medium': 7}
+Aug 04 07:11:11 bryckmini bryckcloud[3758112]: Pending-542: {'medium': 1, 'small': 4, 'tiny': 0, 'zero': 3}
+Aug 04 07:11:11 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 1, 'zero': 5, 'small': 12, 'large': 6, 'medium': 8}
+Aug 04 07:11:12 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:12 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:13 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:13 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:14 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:14 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:15 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:15 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:16 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:16 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:17 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:17 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:18 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:18 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:18 bryckmini bryckcloud[3766118]: PERF batch=batch_000031.txt files_count:5 total_size:5368709120 upload=37.06s total=37.06s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/large/batch_000031.txt
+Aug 04 07:11:18 bryckmini bryckcloud[3764825]: PERF batch=batch_000030.txt files_count:5 total_size:5368709120 upload=39.21s total=39.21s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/large/batch_000030.txt
+Aug 04 07:11:19 bryckmini bryckcloud[3758112]: free workers 2
+Aug 04 07:11:19 bryckmini bryckcloud[3758112]: Pending-542: {'small': 4, 'zero': 3}
+Aug 04 07:11:19 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 1, 'zero': 5, 'small': 13, 'large': 4, 'medium': 8}
+Aug 04 07:11:19 bryckmini bryckcloud[3758112]: Pending-542: {'small': 3, 'zero': 3}
+Aug 04 07:11:19 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 1, 'zero': 5, 'small': 14, 'large': 4, 'medium': 8}
+Aug 04 07:11:19 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:20 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:20 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:21 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:21 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:22 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:22 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:23 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:23 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:24 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:24 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:25 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:25 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:26 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:26 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:27 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:27 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:28 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:28 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:29 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:29 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:30 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:30 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:31 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:31 bryckmini bryckcloud[3759230]: PERF batch=batch_000018.txt files_count:317 total_size:664797184 upload=60.62s total=60.63s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/small/batch_000018.txt
+Aug 04 07:11:31 bryckmini bryckcloud[3758112]: free workers 1
+Aug 04 07:11:31 bryckmini bryckcloud[3758112]: Pending-542: {'small': 2, 'zero': 3}
+Aug 04 07:11:31 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 1, 'zero': 5, 'small': 14, 'large': 4, 'medium': 8}
+Aug 04 07:11:32 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:32 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:33 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:33 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:34 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:34 bryckmini bryckcloud[3758112]: free workers 0
+Aug 04 07:11:34 bryckmini bryckcloud[3774412]: PERF batch=batch_000032.txt files_count:5 total_size:5368709120 upload=40.17s total=40.17s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/large/batch_000032.txt
+Aug 04 07:11:35 bryckmini bryckcloud[3759297]: PERF batch=batch_000050.txt files_count:317 total_size:664797184 upload=64.12s total=64.12s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/small/batch_000050.txt
+Aug 04 07:11:35 bryckmini bryckcloud[3759324]: PERF batch=batch_000051.txt files_count:317 total_size:664797184 upload=63.76s total=63.76s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/small/batch_000051.txt
+Aug 04 07:11:35 bryckmini bryckcloud[3759216]: PERF batch=batch_000017.txt files_count:317 total_size:664797184 upload=63.67s total=63.67s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/small/batch_000017.txt
+Aug 04 07:11:35 bryckmini bryckcloud[3759193]: PERF batch=batch_000012.txt files_count:317 total_size:664797184 upload=63.19s total=63.19s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/small/batch_000012.txt
+Aug 04 07:11:35 bryckmini bryckcloud[3758112]: free workers 5
+Aug 04 07:11:35 bryckmini bryckcloud[3758112]: Pending-542: {'small': 1, 'zero': 3}
+Aug 04 07:11:35 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 1, 'zero': 5, 'small': 11, 'large': 3, 'medium': 8}
+Aug 04 07:11:35 bryckmini bryckcloud[3758112]: Pending-542: {'small': 0, 'zero': 3}
+Aug 04 07:11:35 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 1, 'zero': 6, 'small': 11, 'large': 3, 'medium': 8}
+Aug 04 07:11:35 bryckmini bryckcloud[3758112]: Pending-542: {'small': 0, 'zero': 2}
+Aug 04 07:11:35 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 1, 'zero': 7, 'small': 11, 'large': 3, 'medium': 8}
+Aug 04 07:11:35 bryckmini bryckcloud[3758112]: Pending-542: {'small': 0, 'zero': 1}
+Aug 04 07:11:35 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 1, 'zero': 8, 'small': 11, 'large': 3, 'medium': 8}
+Aug 04 07:11:35 bryckmini bryckcloud[3758112]: Pending-542: {'small': 0, 'zero': 0}
+Aug 04 07:11:35 bryckmini bryckcloud[3759194]: PERF batch=batch_000013.txt files_count:317 total_size:664797184 upload=63.58s total=63.59s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/small/batch_000013.txt
+Aug 04 07:11:35 bryckmini bryckcloud[3759254]: PERF batch=batch_000048.txt files_count:317 total_size:664797184 upload=63.78s total=63.78s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/small/batch_000048.txt
+Aug 04 07:11:35 bryckmini bryckcloud[3759199]: PERF batch=batch_000014.txt files_count:317 total_size:664797184 upload=63.82s total=63.82s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/small/batch_000014.txt
+Aug 04 07:11:35 bryckmini bryckcloud[3758112]: free workers 3
+Aug 04 07:11:36 bryckmini bryckcloud[3759235]: PERF batch=batch_000019.txt files_count:317 total_size:664797184 upload=64.09s total=64.09s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/small/batch_000019.txt
+Aug 04 07:11:36 bryckmini bryckcloud[3759278]: PERF batch=batch_000049.txt files_count:317 total_size:664797184 upload=64.44s total=64.44s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/small/batch_000049.txt
+Aug 04 07:11:36 bryckmini bryckcloud[3758112]: free workers 3
+Aug 04 07:11:36 bryckmini bryckcloud[3759204]: PERF batch=batch_000016.txt files_count:317 total_size:664797184 upload=65.29s total=65.29s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/small/batch_000016.txt
+Aug 04 07:11:36 bryckmini bryckcloud[3759203]: PERF batch=batch_000015.txt files_count:317 total_size:664797184 upload=64.65s total=64.66s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/small/batch_000015.txt
+Aug 04 07:11:36 bryckmini bryckcloud[3758112]: free workers 8
+Aug 04 07:11:37 bryckmini bryckcloud[3758112]: free workers 8
+Aug 04 07:11:37 bryckmini bryckcloud[3758112]: free workers 8
+Aug 04 07:11:38 bryckmini bryckcloud[3758112]: free workers 8
+Aug 04 07:11:38 bryckmini bryckcloud[3758112]: free workers 8
+Aug 04 07:11:39 bryckmini bryckcloud[3758112]: free workers 8
+Aug 04 07:11:39 bryckmini bryckcloud[3758112]: free workers 8
+Aug 04 07:11:40 bryckmini bryckcloud[3758112]: free workers 8
+Aug 04 07:11:40 bryckmini bryckcloud[3758112]: free workers 8
+Aug 04 07:11:41 bryckmini bryckcloud[3758112]: free workers 8
+Aug 04 07:11:41 bryckmini bryckcloud[3779750]: PERF batch=batch_000034.txt files_count:5 total_size:5368709120 upload=37.44s total=37.44s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/large/batch_000034.txt
+Aug 04 07:11:41 bryckmini bryckcloud[3758112]: free workers 8
+Aug 04 07:11:41 bryckmini bryckcloud[3778668]: PERF batch=batch_000033.txt files_count:5 total_size:5368709120 upload=39.36s total=39.36s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/large/batch_000033.txt
+Aug 04 07:11:42 bryckmini bryckcloud[3758112]: free workers 10
+Aug 04 07:11:42 bryckmini bryckcloud[3758112]: free workers 10
+Aug 04 07:11:43 bryckmini bryckcloud[3758112]: free workers 10
+Aug 04 07:11:43 bryckmini bryckcloud[3758112]: free workers 10
+Aug 04 07:11:44 bryckmini bryckcloud[3758112]: free workers 10
+Aug 04 07:11:44 bryckmini bryckcloud[3758112]: free workers 10
+Aug 04 07:11:45 bryckmini bryckcloud[3758112]: free workers 10
+Aug 04 07:11:45 bryckmini bryckcloud[3758112]: free workers 10
+Aug 04 07:11:45 bryckmini bryckcloud[3783449]: PERF batch=batch_000035.txt files_count:5 total_size:5368709120 upload=35.66s total=35.66s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/large/batch_000035.txt
+Aug 04 07:11:46 bryckmini bryckcloud[3758112]: free workers 11
+Aug 04 07:11:46 bryckmini bryckcloud[3758112]: free workers 11
+Aug 04 07:11:47 bryckmini bryckcloud[3758112]: free workers 11
+Aug 04 07:11:47 bryckmini bryckcloud[3758112]: free workers 11
+Aug 04 07:11:48 bryckmini bryckcloud[3758112]: free workers 11
+Aug 04 07:11:48 bryckmini bryckcloud[3758112]: free workers 11
+Aug 04 07:11:49 bryckmini bryckcloud[3784489]: PERF batch=batch_000047.txt files_count:511 total_size:8372224 upload=36.88s total=36.88s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/tiny/batch_000047.txt
+Aug 04 07:11:49 bryckmini bryckcloud[3758112]: free workers 12
+Aug 04 07:11:49 bryckmini bryckcloud[3758112]: free workers 12
+Aug 04 07:11:50 bryckmini bryckcloud[3758112]: free workers 12
+Aug 04 07:11:50 bryckmini bryckcloud[3758112]: free workers 12
+Aug 04 07:11:51 bryckmini bryckcloud[3758112]: free workers 12
+Aug 04 07:11:51 bryckmini bryckcloud[3758112]: free workers 12
+Aug 04 07:11:52 bryckmini bryckcloud[3758112]: free workers 12
+Aug 04 07:11:52 bryckmini bryckcloud[3758112]: free workers 12
+Aug 04 07:11:53 bryckmini bryckcloud[3758112]: free workers 12
+Aug 04 07:11:53 bryckmini bryckcloud[3758112]: free workers 12
+Aug 04 07:11:54 bryckmini bryckcloud[3758112]: free workers 12
+Aug 04 07:11:54 bryckmini bryckcloud[3758112]: free workers 12
+Aug 04 07:11:55 bryckmini bryckcloud[3758112]: free workers 12
+Aug 04 07:11:55 bryckmini bryckcloud[3758112]: free workers 12
+Aug 04 07:11:56 bryckmini bryckcloud[3758112]: free workers 12
+Aug 04 07:11:56 bryckmini bryckcloud[3758112]: free workers 12
+Aug 04 07:11:57 bryckmini bryckcloud[3758112]: free workers 12
+Aug 04 07:11:57 bryckmini bryckcloud[3789356]: PERF batch=batch_000052.txt files_count:317 total_size:664797184 upload=36.91s total=36.91s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/small/batch_000052.txt
+Aug 04 07:11:57 bryckmini bryckcloud[3789358]: PERF batch=batch_000053.txt files_count:317 total_size:664797184 upload=37.15s total=37.15s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/small/batch_000053.txt
+Aug 04 07:11:57 bryckmini bryckcloud[3758112]: free workers 14
+Aug 04 07:11:58 bryckmini bryckcloud[3758112]: free workers 14
+Aug 04 07:11:58 bryckmini bryckcloud[3758112]: free workers 14
+Aug 04 07:11:59 bryckmini bryckcloud[3796511]: PERF batch=batch_000054.txt files_count:317 total_size:664797184 upload=26.95s total=26.95s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/small/batch_000054.txt
+Aug 04 07:11:59 bryckmini bryckcloud[3758112]: free workers 14
+Aug 04 07:11:59 bryckmini bryckcloud[3758112]: free workers 15
+Aug 04 07:12:00 bryckmini bryckcloud[3758112]: free workers 15
+Aug 04 07:12:00 bryckmini bryckcloud[3758112]: free workers 15
+Aug 04 07:12:00 bryckmini bryckcloud[3798952]: PERF batch=batch_000055.txt files_count:317 total_size:664797184 upload=24.10s total=24.10s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/small/batch_000055.txt
+Aug 04 07:12:01 bryckmini bryckcloud[3758112]: free workers 16
+Aug 04 07:12:01 bryckmini bryckcloud[3759063]: PERF batch=batch_000001.txt files_count:2000 total_size:0 upload=92.01s total=92.01s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/zero/batch_000001.txt
+Aug 04 07:12:01 bryckmini bryckcloud[3758112]: free workers 16
+Aug 04 07:12:02 bryckmini bryckcloud[3758112]: free workers 17
+Aug 04 07:12:02 bryckmini bryckcloud[3759074]: PERF batch=batch_000003.txt files_count:2000 total_size:0 upload=92.87s total=92.87s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/zero/batch_000003.txt
+Aug 04 07:12:02 bryckmini bryckcloud[3758112]: free workers 17
+Aug 04 07:12:03 bryckmini bryckcloud[3758112]: free workers 18
+Aug 04 07:12:03 bryckmini bryckcloud[3759072]: PERF batch=batch_000002.txt files_count:2000 total_size:0 upload=93.42s total=93.42s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/zero/batch_000002.txt
+Aug 04 07:12:03 bryckmini bryckcloud[3759054]: PERF batch=batch_000000.txt files_count:2000 total_size:0 upload=93.57s total=93.57s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/zero/batch_000000.txt
+Aug 04 07:12:03 bryckmini bryckcloud[3759370]: PERF batch=batch_000036.txt files_count:2000 total_size:0 upload=92.04s total=92.04s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/zero/batch_000036.txt
+Aug 04 07:12:03 bryckmini bryckcloud[3758112]: free workers 21
+Aug 04 07:12:04 bryckmini bryckcloud[3758112]: free workers 21
+Aug 04 07:12:04 bryckmini bryckcloud[3758112]: free workers 21
+Aug 04 07:12:05 bryckmini bryckcloud[3758112]: free workers 21
+Aug 04 07:12:05 bryckmini bryckcloud[3758112]: free workers 21
+Aug 04 07:12:06 bryckmini bryckcloud[3758112]: free workers 21
+Aug 04 07:12:06 bryckmini bryckcloud[3758112]: free workers 21
+Aug 04 07:12:07 bryckmini bryckcloud[3758112]: free workers 21
+Aug 04 07:12:07 bryckmini bryckcloud[3798957]: PERF batch=batch_000038.txt files_count:2000 total_size:0 upload=31.14s total=31.14s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/zero/batch_000038.txt
+Aug 04 07:12:07 bryckmini bryckcloud[3798959]: PERF batch=batch_000039.txt files_count:2000 total_size:0 upload=30.82s total=30.82s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/zero/batch_000039.txt
+Aug 04 07:12:07 bryckmini bryckcloud[3798953]: PERF batch=batch_000037.txt files_count:2000 total_size:0 upload=31.11s total=31.12s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/zero/batch_000037.txt
+Aug 04 07:12:07 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:08 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:08 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:09 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:09 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:10 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:10 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:11 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:11 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:12 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:12 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:13 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:13 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:14 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:14 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:15 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:15 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:16 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:16 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:17 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:17 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:18 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:18 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:19 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:19 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:20 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:20 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:21 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:22 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:22 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:23 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:23 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:24 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:24 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:25 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:25 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:26 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:26 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:27 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:27 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:28 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:28 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:29 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:29 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:30 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:30 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:31 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:31 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:32 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:32 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:33 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:33 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:34 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:34 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:35 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:35 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:36 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:36 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:37 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:37 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:38 bryckmini bryckcloud[3758112]: free workers 24
+Aug 04 07:12:38 bryckmini bryckcloud[3762673]: PERF batch=batch_000020.txt files_count:50 total_size:5242880000 upload=122.17s total=122.17s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/medium/batch_000020.txt
+Aug 04 07:12:38 bryckmini bryckcloud[3763664]: PERF batch=batch_000021.txt files_count:50 total_size:5242880000 upload=120.75s total=120.75s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/medium/batch_000021.txt
+Aug 04 07:12:38 bryckmini bryckcloud[3758112]: free workers 26
+Aug 04 07:12:39 bryckmini bryckcloud[3758112]: free workers 26
+Aug 04 07:12:39 bryckmini bryckcloud[3758112]: free workers 26
+Aug 04 07:12:40 bryckmini bryckcloud[3758112]: free workers 26
+Aug 04 07:12:40 bryckmini bryckcloud[3758112]: free workers 26
+Aug 04 07:12:41 bryckmini bryckcloud[3758112]: free workers 26
+Aug 04 07:12:41 bryckmini bryckcloud[3758112]: free workers 26
+Aug 04 07:12:42 bryckmini bryckcloud[3758112]: free workers 26
+Aug 04 07:12:42 bryckmini bryckcloud[3758112]: free workers 26
+Aug 04 07:12:43 bryckmini bryckcloud[3758112]: free workers 26
+Aug 04 07:12:43 bryckmini bryckcloud[3758112]: free workers 26
+Aug 04 07:12:44 bryckmini bryckcloud[3758112]: free workers 26
+Aug 04 07:12:44 bryckmini bryckcloud[3772668]: PERF batch=batch_000022.txt files_count:50 total_size:5242880000 upload=112.00s total=112.00s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/medium/batch_000022.txt
+Aug 04 07:12:44 bryckmini bryckcloud[3758112]: free workers 27
+Aug 04 07:12:45 bryckmini bryckcloud[3758112]: free workers 27
+Aug 04 07:12:45 bryckmini bryckcloud[3758112]: free workers 27
+Aug 04 07:12:46 bryckmini bryckcloud[3758112]: free workers 27
+Aug 04 07:12:46 bryckmini bryckcloud[3758112]: free workers 27
+Aug 04 07:12:47 bryckmini bryckcloud[3758112]: free workers 27
+Aug 04 07:12:47 bryckmini bryckcloud[3758112]: free workers 27
+Aug 04 07:12:48 bryckmini bryckcloud[3758112]: free workers 27
+Aug 04 07:12:48 bryckmini bryckcloud[3758112]: free workers 27
+Aug 04 07:12:49 bryckmini bryckcloud[3758112]: free workers 27
+Aug 04 07:12:49 bryckmini bryckcloud[3758112]: free workers 27
+Aug 04 07:12:49 bryckmini bryckcloud[3779094]: PERF batch=batch_000023.txt files_count:50 total_size:5242880000 upload=106.23s total=106.23s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/medium/batch_000023.txt
+Aug 04 07:12:50 bryckmini bryckcloud[3758112]: free workers 28
+Aug 04 07:12:50 bryckmini bryckcloud[3758112]: free workers 28
+Aug 04 07:12:50 bryckmini bryckcloud[3784495]: PERF batch=batch_000026.txt files_count:50 total_size:5242880000 upload=98.46s total=98.46s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/medium/batch_000026.txt
+Aug 04 07:12:50 bryckmini bryckcloud[3783792]: PERF batch=batch_000024.txt files_count:50 total_size:5242880000 upload=99.43s total=99.43s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/medium/batch_000024.txt
+Aug 04 07:12:51 bryckmini bryckcloud[3758112]: free workers 30
+Aug 04 07:12:51 bryckmini bryckcloud[3758112]: free workers 30
+Aug 04 07:12:52 bryckmini bryckcloud[3784496]: PERF batch=batch_000027.txt files_count:50 total_size:5242880000 upload=99.74s total=99.74s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/medium/batch_000027.txt
+Aug 04 07:12:52 bryckmini bryckcloud[3758112]: free workers 30
+Aug 04 07:12:52 bryckmini bryckcloud[3784493]: PERF batch=batch_000025.txt files_count:50 total_size:5242880000 upload=99.79s total=99.79s rc=0 batch_file:/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_542/batches/completed/medium/batch_000025.txt
+Aug 04 07:12:52 bryckmini bryckcloud[3758112]: free workers 32
+Aug 04 07:12:52 bryckmini bryckcloud[3758112]: Broker 542: all batches dispatched and drained, crash_counts={}

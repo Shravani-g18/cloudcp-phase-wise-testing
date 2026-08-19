@@ -1,0 +1,56 @@
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 1}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 2}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 2, 'zero': 1}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 3, 'zero': 1}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 4, 'zero': 1}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 5, 'zero': 1}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 5, 'zero': 2}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 6, 'zero': 2}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 7, 'zero': 2}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 8, 'zero': 2}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 8, 'zero': 3}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 8, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 8, 'zero': 4, 'small': 1}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 8, 'zero': 4, 'small': 2}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 8, 'zero': 4, 'small': 3}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 8, 'zero': 4, 'small': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 8, 'zero': 4, 'small': 5}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 8, 'zero': 4, 'small': 6}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 8, 'zero': 4, 'small': 7}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 8, 'zero': 4, 'small': 8}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 9, 'zero': 4, 'small': 8}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 9, 'zero': 4, 'small': 9}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 10, 'zero': 4, 'small': 9}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 10, 'zero': 4, 'small': 10}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 11, 'zero': 4, 'small': 10}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 11, 'zero': 4, 'small': 11}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 12, 'zero': 4, 'small': 11}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 12, 'zero': 4, 'small': 12}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 13, 'zero': 4, 'small': 12}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 14, 'zero': 4, 'small': 12}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 14, 'zero': 5, 'small': 12}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 15, 'zero': 5, 'small': 12}
+Aug 04 07:10:33 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 14, 'zero': 5, 'small': 12, 'large': 1}
+Aug 04 07:10:35 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 13, 'zero': 5, 'small': 12, 'large': 1, 'medium': 1}
+Aug 04 07:10:36 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 12, 'zero': 5, 'small': 12, 'large': 2, 'medium': 1}
+Aug 04 07:10:37 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 11, 'zero': 5, 'small': 12, 'large': 2, 'medium': 2}
+Aug 04 07:10:39 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 10, 'zero': 5, 'small': 12, 'large': 3, 'medium': 2}
+Aug 04 07:10:41 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 9, 'zero': 5, 'small': 12, 'large': 4, 'medium': 2}
+Aug 04 07:10:51 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 8, 'zero': 5, 'small': 12, 'large': 4, 'medium': 3}
+Aug 04 07:10:54 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 7, 'zero': 5, 'small': 12, 'large': 5, 'medium': 3}
+Aug 04 07:11:01 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 7, 'zero': 5, 'small': 12, 'large': 5, 'medium': 3}
+Aug 04 07:11:02 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 6, 'zero': 5, 'small': 12, 'large': 5, 'medium': 4}
+Aug 04 07:11:03 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 5, 'zero': 5, 'small': 12, 'large': 6, 'medium': 4}
+Aug 04 07:11:09 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 5, 'zero': 5, 'small': 12, 'large': 6, 'medium': 4}
+Aug 04 07:11:10 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 4, 'zero': 5, 'small': 12, 'large': 6, 'medium': 5}
+Aug 04 07:11:11 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 1, 'zero': 5, 'small': 12, 'large': 6, 'medium': 5}
+Aug 04 07:11:11 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 1, 'zero': 5, 'small': 12, 'large': 6, 'medium': 6}
+Aug 04 07:11:11 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 1, 'zero': 5, 'small': 12, 'large': 6, 'medium': 7}
+Aug 04 07:11:11 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 1, 'zero': 5, 'small': 12, 'large': 6, 'medium': 8}
+Aug 04 07:11:19 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 1, 'zero': 5, 'small': 13, 'large': 4, 'medium': 8}
+Aug 04 07:11:19 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 1, 'zero': 5, 'small': 14, 'large': 4, 'medium': 8}
+Aug 04 07:11:31 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 1, 'zero': 5, 'small': 14, 'large': 4, 'medium': 8}
+Aug 04 07:11:35 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 1, 'zero': 5, 'small': 11, 'large': 3, 'medium': 8}
+Aug 04 07:11:35 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 1, 'zero': 6, 'small': 11, 'large': 3, 'medium': 8}
+Aug 04 07:11:35 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 1, 'zero': 7, 'small': 11, 'large': 3, 'medium': 8}
+Aug 04 07:11:35 bryckmini bryckcloud[3758112]: Running with workers : {'tiny': 1, 'zero': 8, 'small': 11, 'large': 3, 'medium': 8}

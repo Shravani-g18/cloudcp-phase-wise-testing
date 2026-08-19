@@ -1,0 +1,58 @@
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'tiny': 8, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'tiny': 7, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'tiny': 6, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'tiny': 6, 'zero': 3}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'tiny': 5, 'zero': 3}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'tiny': 4, 'zero': 3}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'tiny': 3, 'zero': 3}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'tiny': 3, 'zero': 2}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'tiny': 2, 'zero': 2}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'tiny': 1, 'zero': 2}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'tiny': 0, 'zero': 2}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'tiny': 0, 'zero': 1}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'tiny': 0, 'zero': 0}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 12, 'tiny': 8, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 11, 'tiny': 8, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 10, 'tiny': 8, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 9, 'tiny': 8, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 8, 'tiny': 8, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 7, 'tiny': 8, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 6, 'tiny': 8, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 5, 'tiny': 8, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 4, 'tiny': 8, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 4, 'tiny': 7, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 3, 'tiny': 7, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 3, 'tiny': 6, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 2, 'tiny': 6, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 2, 'tiny': 5, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 1, 'tiny': 5, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 1, 'tiny': 4, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 0, 'tiny': 4, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 0, 'tiny': 3, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 0, 'tiny': 2, 'zero': 4}
+Aug 04 07:10:29 bryckmini bryckcloud[3758112]: Pending-542: {'small': 0, 'tiny': 2, 'zero': 3}
+Aug 04 07:10:33 bryckmini bryckcloud[3758112]: Pending-542: {'large': 8, 'medium': 8, 'small': 4, 'tiny': 1, 'zero': 3}
+Aug 04 07:10:35 bryckmini bryckcloud[3758112]: Pending-542: {'large': 7, 'medium': 8, 'small': 4, 'tiny': 1, 'zero': 3}
+Aug 04 07:10:36 bryckmini bryckcloud[3758112]: Pending-542: {'large': 7, 'medium': 7, 'small': 4, 'tiny': 1, 'zero': 3}
+Aug 04 07:10:37 bryckmini bryckcloud[3758112]: Pending-542: {'large': 6, 'medium': 7, 'small': 4, 'tiny': 1, 'zero': 3}
+Aug 04 07:10:39 bryckmini bryckcloud[3758112]: Pending-542: {'large': 6, 'medium': 6, 'small': 4, 'tiny': 1, 'zero': 3}
+Aug 04 07:10:41 bryckmini bryckcloud[3758112]: Pending-542: {'large': 5, 'medium': 6, 'small': 4, 'tiny': 1, 'zero': 3}
+Aug 04 07:10:51 bryckmini bryckcloud[3758112]: Pending-542: {'large': 4, 'medium': 6, 'small': 4, 'tiny': 1, 'zero': 3}
+Aug 04 07:10:54 bryckmini bryckcloud[3758112]: Pending-542: {'large': 4, 'medium': 5, 'small': 4, 'tiny': 1, 'zero': 3}
+Aug 04 07:11:01 bryckmini bryckcloud[3758112]: Pending-542: {'large': 3, 'medium': 5, 'small': 4, 'tiny': 1, 'zero': 3}
+Aug 04 07:11:02 bryckmini bryckcloud[3758112]: Pending-542: {'large': 2, 'medium': 5, 'small': 4, 'tiny': 1, 'zero': 3}
+Aug 04 07:11:03 bryckmini bryckcloud[3758112]: Pending-542: {'large': 2, 'medium': 4, 'small': 4, 'tiny': 1, 'zero': 3}
+Aug 04 07:11:09 bryckmini bryckcloud[3758112]: Pending-542: {'large': 1, 'medium': 4, 'small': 4, 'tiny': 1, 'zero': 3}
+Aug 04 07:11:10 bryckmini bryckcloud[3758112]: Pending-542: {'medium': 4, 'small': 4, 'tiny': 1, 'zero': 3}
+Aug 04 07:11:11 bryckmini bryckcloud[3758112]: Pending-542: {'medium': 3, 'small': 4, 'tiny': 1, 'zero': 3}
+Aug 04 07:11:11 bryckmini bryckcloud[3758112]: Pending-542: {'medium': 3, 'small': 4, 'tiny': 0, 'zero': 3}
+Aug 04 07:11:11 bryckmini bryckcloud[3758112]: Pending-542: {'medium': 2, 'small': 4, 'tiny': 0, 'zero': 3}
+Aug 04 07:11:11 bryckmini bryckcloud[3758112]: Pending-542: {'medium': 1, 'small': 4, 'tiny': 0, 'zero': 3}
+Aug 04 07:11:19 bryckmini bryckcloud[3758112]: Pending-542: {'small': 4, 'zero': 3}
+Aug 04 07:11:19 bryckmini bryckcloud[3758112]: Pending-542: {'small': 3, 'zero': 3}
+Aug 04 07:11:31 bryckmini bryckcloud[3758112]: Pending-542: {'small': 2, 'zero': 3}
+Aug 04 07:11:35 bryckmini bryckcloud[3758112]: Pending-542: {'small': 1, 'zero': 3}
+Aug 04 07:11:35 bryckmini bryckcloud[3758112]: Pending-542: {'small': 0, 'zero': 3}
+Aug 04 07:11:35 bryckmini bryckcloud[3758112]: Pending-542: {'small': 0, 'zero': 2}
+Aug 04 07:11:35 bryckmini bryckcloud[3758112]: Pending-542: {'small': 0, 'zero': 1}
+Aug 04 07:11:35 bryckmini bryckcloud[3758112]: Pending-542: {'small': 0, 'zero': 0}

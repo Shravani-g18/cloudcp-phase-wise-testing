@@ -1,0 +1,56 @@
+version: 1
+mode: tree
+root: /bryck/cloudcp_fallback/mixed_realistic
+threads: 8
+seed: 42
+
+# Realistic mixed workload: weighted extensions spanning tiny -> large logical
+# sizes with a log-uniform bias toward small files (typical real trees).
+# Media extensions use sparse-friendly large ranges; docs/text stay small.
+content:
+  type: random
+  buffer_size: 8MB
+  direct_io:
+    enabled: true
+    min_size: 256MB
+
+naming:
+  charset: mixed
+  alphabet: [lower, upper, digit]
+  unicode_blocks:
+    - latin-supplement
+  special_chars: " _-"
+  prefix: "obj-"
+  length: 12
+  collision_strategy: append-index
+
+tree:
+  fanout: 5
+  depth: 3
+  files_per_dir: 8
+  files_in_each_dir: false
+
+size:
+  type: range
+  min: 4KB
+  max: 8MB
+  distribution: log-uniform
+
+extensions:
+  - ext: .txt
+    weight: 35
+  - ext: .json
+    weight: 25
+    size: { type: range, min: 1KB, max: 2MB }
+  - ext: .csv
+    weight: 15
+    size: { type: range, min: 1KB, max: 4MB }
+  - ext: .bin
+    weight: 15
+    size: { type: range, min: 1MB, max: 32MB }
+  - ext: .mp4
+    weight: 7
+    size: { type: range, min: 64MB, max: 512MB }
+  - ext: .mxf
+    weight: 3
+    size: { type: range, min: 512MB, max: 2GB }
