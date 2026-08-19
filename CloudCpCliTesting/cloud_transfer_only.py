@@ -125,12 +125,26 @@ def parse_args(argv: Optional[list] = None) -> argparse.Namespace:
 
 
 def ensure_mounted(args: argparse.Namespace, redact, tcr: ccr.TestCaseResult) -> str:
+    """Real bryck_info states are ' Mounted', ' Ejected', ' Removed' (leading
+    space, per bryckclient-cli). Only auto-mount from 'Ejected' (the only
+    state bryck_mount.py accepts) -- 'Removed' or anything else means the
+    device needs format/mount (or scan) first, which this script does not
+    attempt; surface it as a clear error instead of a confusing bryck_mount.py
+    failure."""
     state, cmd = ccr.get_bryck_state(
         argparse.Namespace(login=args.login, dry_run=args.dry_run, python_bin=args.python_bin), LOG, redact)
     tcr.commands.append(cmd.as_dict())
-    if args.dry_run or "mount" in state.lower():
+    if args.dry_run:
         return state
-    LOG.info("Bryck not mounted (state=%r); mounting before dataset generation/transfer", state)
+    normalized = state.strip().lower()
+    if normalized == "mounted":
+        return state
+    if normalized != "ejected":
+        LOG.error("Bryck state is %r -- expected 'Ejected' or 'Mounted'. Not attempting to mount "
+                  "('Removed' needs bryck_format.py + bryck_mount.py first; run bryck_info.py "
+                  "manually to confirm).", state)
+        return state
+    LOG.info("Bryck is Ejected; mounting before dataset generation/transfer")
     mount_cmd = ccr.run_py_script(
         "bryck_mount.py", ["--login", args.login, "--params", args.format_mount_params],
         LOG, args.dry_run, redact, args.python_bin)
@@ -143,7 +157,7 @@ def ensure_mounted(args: argparse.Namespace, redact, tcr: ccr.TestCaseResult) ->
         state, cmd = ccr.get_bryck_state(
             argparse.Namespace(login=args.login, dry_run=args.dry_run, python_bin=args.python_bin), LOG, redact)
         tcr.commands.append(cmd.as_dict())
-        if "mount" in state.lower():
+        if state.strip().lower() == "mounted":
             break
         time.sleep(args.poll_interval)
     return state
@@ -402,8 +416,10 @@ def main(argv: Optional[list] = None) -> int:
     mount_tcr = ccr.TestCaseResult(test_id=f"{run_id}_setup", kind="setup", description="mount + datagen + configure")
 
     state = "DRYRUN" if args.dry_run else ensure_mounted(args, redact, mount_tcr)
-    if not args.skip_mount_check and not args.dry_run and "mount" not in state.lower():
-        LOG.error("Bryck did not reach Mounted state (last observed=%r); aborting.", state)
+    if not args.skip_mount_check and not args.dry_run and state.strip().lower() != "mounted":
+        LOG.error("Bryck did not reach Mounted state (last observed=%r; expected 'Mounted' or 'Ejected' "
+                  "to auto-mount from -- 'Removed' or anything else needs manual "
+                  "bryck_format.py/bryck_mount.py first); aborting.", state)
         return 4
     LOG.info("Bryck state: %s", state)
 
