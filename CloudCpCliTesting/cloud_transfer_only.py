@@ -29,7 +29,7 @@ import pathlib
 import sys
 import time
 import types
-from typing import Optional
+from typing import List, Optional
 
 HERE = pathlib.Path(__file__).resolve().parent
 BRYCK_CLI_DIR = HERE / "bryckclient-cli"
@@ -300,6 +300,83 @@ def find_transfer_report_csv(transfer_logs_dir: str, transfer_id: str, extract_d
         return None
 
 
+def run_leg(args: argparse.Namespace, mode_label: str, case_dir: pathlib.Path, run_id: str,
+           src: str, dst: str, redact, tier: str, gen_summary: dict) -> dict:
+    """Run one full transfer leg (upload or download) with its own perf
+    capture + transfer_report CSV lookup, so each direction gets complete,
+    independent results instead of sharing/overwriting a single perf window."""
+    case_dir.mkdir(parents=True, exist_ok=True)
+    tcr = ccr.TestCaseResult(
+        test_id=f"{run_id}_{mode_label}", kind=mode_label,
+        description=f"transfer-only {mode_label} of {args.dataset}")
+
+    perf_cfg = {
+        "journal_tag": args.journal_tag, "cloudcp_log": args.cloudcp_log,
+        "capture_lead": args.capture_lead, "capture_drain": args.capture_drain,
+        "transfer_logs_dir": args.transfer_logs_dir, "bryck_config_json": args.bryck_config_json,
+    }
+    collector = perf_mod.TransferPerfCollector(case_dir, perf_cfg, args.dry_run) if args.perf_capture else None
+    active_journal_raw = None
+    if collector is not None:
+        collector.start()
+        active_journal_raw = collector.perf_dir / "journal_raw.log"
+
+    transfer_id: Optional[str] = None
+    final_state = "UNKNOWN"
+    error: Optional[str] = None
+    try:
+        transfer_id = initiate_transfer_cli(args, src, dst, redact, tcr)
+        if not transfer_id:
+            raise RuntimeError("transfer initiate did not return a transfer_id")
+
+        final_state = poll_until_terminal(args, transfer_id, active_journal_raw, redact, tcr)
+        LOG.info("%s transfer %s finished with state=%s", mode_label, transfer_id, final_state)
+    except RuntimeError as exc:
+        error = str(exc)
+        LOG.error("%s failed: %s", mode_label, error)
+        tcr.notes.append(f"ERROR: {error}")
+
+    perf_data = None
+    logs_collected = args.dry_run or collector is None
+    if collector is not None:
+        csv_path = None
+        if not args.dry_run and transfer_id and transfer_id != "DRYRUN-ID":
+            deadline = time.time() + args.log_wait_timeout
+            while True:
+                csv_path = find_transfer_report_csv(args.transfer_logs_dir, transfer_id, case_dir / "perf")
+                if csv_path is not None or time.time() >= deadline:
+                    break
+                time.sleep(args.log_wait_interval)
+            if csv_path is None:
+                tcr.notes.append(f"no transfer_report_{transfer_id}.csv found (plain dir or .zip) after "
+                                  f"waiting {args.log_wait_timeout}s -- completion histogram/per-status "
+                                  f"breakdown will be empty")
+        perf_data = collector.finish(
+            transfer_id or "unknown", csv_path=csv_path, test_id=tcr.test_id, tier=tier, mode=mode_label,
+            description=tcr.description, gen_summary=gen_summary,
+        )
+        LOG.info("%s perf report: %s", mode_label, perf_data.get("html_report"))
+        tcr.notes.append(f"perf_report={perf_data.get('html_report')}")
+        if not args.dry_run:
+            journal_raw = collector.perf_dir / "journal_raw.log"
+            cloudcp_raw = collector.perf_dir / "cloudcplogs.txt"
+            logs_collected = (
+                (journal_raw.is_file() and journal_raw.stat().st_size > 0)
+                or (cloudcp_raw.is_file() and cloudcp_raw.stat().st_size > 0)
+            )
+
+    tcr.status = "PASS" if (args.dry_run or (error is None and final_state == TERMINAL_SUCCESS)) else \
+        ("BLOCKED" if error else "FAIL")
+    tcr.expected = "Transfer reaches COMPLETED"
+    tcr.actual = f"final_state={final_state}" + (f", error={error}" if error else "")
+    tcr.notes.append(f"transfer_id={transfer_id} final_state={final_state}")
+
+    return {
+        "tcr": tcr, "transfer_id": transfer_id, "final_state": final_state, "error": error,
+        "perf_data": perf_data, "logs_collected": logs_collected,
+    }
+
+
 def main(argv: Optional[list] = None) -> int:
     args = parse_args(argv)
     setup_logging(args.verbose)
@@ -322,10 +399,9 @@ def main(argv: Optional[list] = None) -> int:
     if not backup_path.exists():
         backup_path.write_text(json.dumps(base_cloud_ops, indent=2), encoding="utf-8")
 
-    tcr = ccr.TestCaseResult(
-        test_id=run_id, kind=args.mode, description=f"transfer-only {args.mode} of {args.dataset}")
+    mount_tcr = ccr.TestCaseResult(test_id=f"{run_id}_setup", kind="setup", description="mount + datagen + configure")
 
-    state = "DRYRUN" if args.dry_run else ensure_mounted(args, redact, tcr)
+    state = "DRYRUN" if args.dry_run else ensure_mounted(args, redact, mount_tcr)
     if not args.skip_mount_check and not args.dry_run and "mount" not in state.lower():
         LOG.error("Bryck did not reach Mounted state (last observed=%r); aborting.", state)
         return 4
@@ -338,131 +414,70 @@ def main(argv: Optional[list] = None) -> int:
     dataset_root, gen_summary = ccr.generate_tier_dataset(tier, args.output_base, ns, LOG, args.dataset)
     LOG.info("Dataset materialized under %s (%s)", dataset_root, gen_summary)
 
-    bucket = configure_cloud(args, base_cloud_ops, tier, redact, tcr)
+    bucket = configure_cloud(args, base_cloud_ops, tier, redact, mount_tcr)
     LOG.info("Cloud configured: bucket=%s", bucket)
+    mount_tcr.status = "PASS"
 
-    perf_cfg = {
-        "journal_tag": args.journal_tag, "cloudcp_log": args.cloudcp_log,
-        "capture_lead": args.capture_lead, "capture_drain": args.capture_drain,
-        "transfer_logs_dir": args.transfer_logs_dir, "bryck_config_json": args.bryck_config_json,
-    }
-    collector = perf_mod.TransferPerfCollector(run_dir, perf_cfg, args.dry_run) if args.perf_capture else None
-    active_journal_raw = None
-    if collector is not None:
-        collector.start()
-        active_journal_raw = collector.perf_dir / "journal_raw.log"
+    local_src = str(dataset_root)
+    s3_path = f"{args.bucket}/{tier}"
+    local_dst = f"{args.download_base}/{tier}"
 
-    transfer_id: Optional[str] = None
-    final_state = "UNKNOWN"
-    error: Optional[str] = None
-
-    try:
-        local_src = str(dataset_root)
-        s3_path = f"{args.bucket}/{tier}"
-        local_dst = f"{args.download_base}/{tier}"
-
-        if args.mode == "upload":
-            transfer_id = initiate_transfer_cli(args, local_src, s3_path, redact, tcr)
-        elif args.mode == "download":
+    # Each direction gets its own perf capture + transfer_report CSV lookup,
+    # so --mode both captures full, independent results for upload AND
+    # download instead of only the last leg's perf data.
+    legs: List[dict] = []
+    if args.mode in ("upload", "both"):
+        legs.append(run_leg(args, "upload", run_dir / "upload", run_id, local_src, s3_path,
+                            redact, tier, gen_summary))
+    if args.mode in ("download", "both"):
+        if args.mode == "download":
             # Standalone download needs source data in the bucket first --
             # seed it with an untracked upload, matching cloud_cli_runner.py's
-            # _seed_upload_for_download().
-            seed_id = initiate_transfer_cli(args, local_src, s3_path, redact, tcr)
+            # _seed_upload_for_download(). Not one of the reported legs.
+            seed_tcr = ccr.TestCaseResult(test_id=f"{run_id}_seed", kind="seed",
+                                          description="untracked seed upload before standalone download")
+            seed_id = initiate_transfer_cli(args, local_src, s3_path, redact, seed_tcr)
             if seed_id and not args.dry_run:
-                seed_state = poll_until_terminal(args, seed_id, active_journal_raw, redact, tcr)
+                seed_state = poll_until_terminal(args, seed_id, None, redact, seed_tcr)
                 LOG.info("seed upload (transfer %s) finished with state=%s", seed_id, seed_state)
-                tcr.notes.append(f"seed_upload_transfer_id={seed_id} seed_upload_final_state={seed_state}")
                 if seed_state != TERMINAL_SUCCESS:
-                    raise RuntimeError(f"seed upload did not complete (state={seed_state}); "
-                                       f"cannot proceed with download")
-            transfer_id = initiate_transfer_cli(args, s3_path, local_dst, redact, tcr)
-        else:  # both
-            upload_id = initiate_transfer_cli(args, local_src, s3_path, redact, tcr)
-            if upload_id and not args.dry_run:
-                upload_state = poll_until_terminal(args, upload_id, active_journal_raw, redact, tcr)
-                LOG.info("upload (transfer %s) finished with state=%s", upload_id, upload_state)
-                tcr.notes.append(f"upload_transfer_id={upload_id} upload_final_state={upload_state}")
-            transfer_id = initiate_transfer_cli(args, s3_path, local_dst, redact, tcr)
+                    LOG.error("seed upload did not complete (state=%s); aborting download", seed_state)
+                    return 5
+        legs.append(run_leg(args, "download", run_dir / "download", run_id, s3_path, local_dst,
+                            redact, tier, gen_summary))
 
-        if not transfer_id:
-            raise RuntimeError("transfer initiate did not return a transfer_id")
-
-        final_state = poll_until_terminal(args, transfer_id, active_journal_raw, redact, tcr)
-        LOG.info("transfer %s finished with state=%s", transfer_id, final_state)
-    except RuntimeError as exc:
-        error = str(exc)
-        LOG.error("transfer failed: %s", error)
-        tcr.notes.append(f"ERROR: {error}")
-
-    perf_data = None
-    if collector is not None:
-        # The broker writes this CSV itself alongside the transfer's own logs
-        # (no download needed) -- feeds the completion-histogram/per-status
-        # sections of the perf report. Falls back to extracting it from the
-        # broker's own cloud_transfer_<id>.zip archive if the plain directory
-        # was already cleaned up by the time we get here.
-        csv_path = None
-        if not args.dry_run and transfer_id and transfer_id != "DRYRUN-ID":
-            # Wait/retry for the broker to finish writing (and possibly
-            # zip-archive) its own transfer_report CSV before giving up --
-            # avoids racing the broker's own log finalization.
-            deadline = time.time() + args.log_wait_timeout
-            while True:
-                csv_path = find_transfer_report_csv(args.transfer_logs_dir, transfer_id, run_dir / "perf")
-                if csv_path is not None or time.time() >= deadline:
-                    break
-                time.sleep(args.log_wait_interval)
-            if csv_path is None:
-                tcr.notes.append(f"no transfer_report_{transfer_id}.csv found (plain dir or .zip) after "
-                                  f"waiting {args.log_wait_timeout}s -- completion histogram/per-status "
-                                  f"breakdown will be empty")
-        perf_data = collector.finish(
-            transfer_id or "unknown", csv_path=csv_path, test_id=run_id, tier=tier, mode=args.mode,
-            description=f"transfer-only {args.mode} of {args.dataset}", gen_summary=gen_summary,
-        )
-        LOG.info("Perf report: %s", perf_data.get("html_report"))
-        tcr.notes.append(f"perf_report={perf_data.get('html_report')}")
-
-    # Only delete S3 objects / generated /bryck data once logs are confirmed
-    # collected (journal_raw.log/cloudcplogs.txt non-empty, or dry-run/no-perf) --
-    # otherwise cleanup can destroy the only evidence of what went wrong.
-    logs_collected = (
-        args.dry_run or collector is None
-        or ((collector.perf_dir / "journal_raw.log").stat().st_size > 0
-            if (collector.perf_dir / "journal_raw.log").is_file() else False)
-        or ((collector.perf_dir / "cloudcplogs.txt").stat().st_size > 0
-            if (collector.perf_dir / "cloudcplogs.txt").is_file() else False)
-    )
-    if not logs_collected and not args.dry_run and not args.keep and not args.force_cleanup:
-        LOG.warning("cleanup skipped: no logs were collected (journal_raw.log/cloudcplogs.txt empty) -- "
-                    "pass --force-cleanup to clean up anyway")
-        tcr.notes.append("cleanup skipped: logs not collected (use --force-cleanup to override)")
+    all_logs_collected = all(leg["logs_collected"] for leg in legs)
+    if not all_logs_collected and not args.dry_run and not args.keep and not args.force_cleanup:
+        LOG.warning("cleanup skipped: not all legs collected logs -- pass --force-cleanup to clean up anyway")
+        for leg in legs:
+            leg["tcr"].notes.append("cleanup skipped: logs not collected (use --force-cleanup to override)")
     else:
-        cleanup(args, tier, redact, tcr)
+        cleanup(args, tier, redact, legs[-1]["tcr"])
 
-    tcr.status = "PASS" if (args.dry_run or (error is None and final_state == TERMINAL_SUCCESS)) else \
-        ("BLOCKED" if error else "FAIL")
-    tcr.expected = "Transfer reaches COMPLETED"
-    tcr.actual = f"final_state={final_state}" + (f", error={error}" if error else "")
-    tcr.notes.append(f"transfer_id={transfer_id} final_state={final_state}")
-
+    overall_ok = all(leg["error"] is None and leg["final_state"] == TERMINAL_SUCCESS for leg in legs) or args.dry_run
     result = {
         "run_id": run_id, "dataset": args.dataset, "tier": tier, "mode": args.mode,
-        "transfer_id": transfer_id, "final_state": final_state, "error": error,
-        "dataset_summary": gen_summary, "perf": perf_data,
+        "legs": [
+            {"mode": leg["tcr"].kind, "transfer_id": leg["transfer_id"], "final_state": leg["final_state"],
+             "error": leg["error"], "perf": leg["perf_data"]}
+            for leg in legs
+        ],
+        "dataset_summary": gen_summary,
         "started": run_id, "finished": dt.datetime.now().isoformat(timespec="seconds"),
     }
     (run_dir / "report.json").write_text(json.dumps(result, indent=2, default=str), encoding="utf-8")
 
+    all_tcrs = [mount_tcr] + [leg["tcr"] for leg in legs]
     plan = {"run_id": run_id, "test_cases": [
-        {"id": run_id, "dataset": args.dataset, "mode": args.mode},
+        {"id": t.test_id, "dataset": args.dataset, "mode": t.kind} for t in all_tcrs
     ]}
-    commands_log = ccr.write_combined_commands_log(run_dir, [tcr])
-    ccr.write_summary(run_dir, plan, [tcr])
+    commands_log = ccr.write_combined_commands_log(run_dir, all_tcrs)
+    ccr.write_summary(run_dir, plan, all_tcrs)
 
     print("\n" + "=" * 60)
-    print(f"Transfer {args.mode} of {args.dataset} -> {final_state}"
-          + (f" (transfer_id={transfer_id})" if transfer_id else ""))
+    for leg in legs:
+        print(f"{leg['tcr'].kind} of {args.dataset} -> {leg['final_state']}"
+              + (f" (transfer_id={leg['transfer_id']})" if leg["transfer_id"] else ""))
     print(f"Results directory : {run_dir}")
     print(f"  report.json      : {run_dir / 'report.json'}")
     print(f"  commands.log     : {commands_log}")
@@ -470,13 +485,15 @@ def main(argv: Optional[list] = None) -> int:
     print(f"  summary.md       : {run_dir / 'summary.md'}")
     print(f"  summary.html     : {run_dir / 'summary.html'}")
     print(f"  cloud_ops.json.bak: {backup_path}")
-    if perf_data is not None:
-        print(f"  perf HTML report : {perf_data.get('html_report')}")
-        print(f"  perf JSON data   : {perf_data.get('json_data')}")
-        print(f"  perf zip         : {perf_data.get('zip')}")
+    for leg in legs:
+        perf_data = leg["perf_data"]
+        if perf_data is not None:
+            print(f"  [{leg['tcr'].kind}] perf HTML report : {perf_data.get('html_report')}")
+            print(f"  [{leg['tcr'].kind}] perf JSON data   : {perf_data.get('json_data')}")
+            print(f"  [{leg['tcr'].kind}] perf zip         : {perf_data.get('zip')}")
     print("=" * 60 + "\n")
 
-    return 0 if (args.dry_run or (error is None and final_state == TERMINAL_SUCCESS)) else 1
+    return 0 if (args.dry_run or overall_ok) else 1
 
 
 if __name__ == "__main__":
