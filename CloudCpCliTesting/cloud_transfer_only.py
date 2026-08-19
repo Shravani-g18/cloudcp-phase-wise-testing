@@ -398,7 +398,38 @@ def run_leg(args: argparse.Namespace, mode_label: str, case_dir: pathlib.Path, r
     }
 
 
-def generate_spec_dir_dataset(spec_dir: pathlib.Path, tier: str, output_base: str,
+def generate_named_spec_dataset_local(spec_path: pathlib.Path, name: str, output_base: str,
+                                      run_dir: pathlib.Path, ns: types.SimpleNamespace,
+                                      logger: logging.Logger) -> tuple[pathlib.Path, dict]:
+    """Same job as cloud_cli_runner.generate_named_spec_dataset() (rewrite the
+    spec's root: line to output_base/name, then run datagen) but writes the
+    rewritten spec under run_dir/generated_specs/ instead of the system /tmp --
+    datagen has no CLI flag to override root: (confirmed in
+    DatagenSpecFileGuide.md, only --threads/--seed/--dry-run/--verbose), so a
+    rewritten copy is unavoidable; this just keeps it as a visible run
+    artifact on the same host instead of an OS temp file."""
+    target_root = pathlib.Path(output_base) / name
+    summary: dict = {"dataset_root": str(target_root), "spec_file": str(spec_path)}
+    if ns.skip_generate:
+        summary["actual_files"] = ccr.base.count_files_recursive(target_root)
+        return target_root, summary
+
+    text = spec_path.read_text(encoding="utf-8")
+    new_text = ccr.base.ROOT_LINE_RE.sub(f"root: {target_root.as_posix()}", text, count=1)
+    specs_dir = run_dir / "generated_specs"
+    specs_dir.mkdir(parents=True, exist_ok=True)
+    rewritten_path = specs_dir / f"{name.replace('/', '_')}.yaml"
+    rewritten_path.write_text(new_text, encoding="utf-8")
+
+    target_root.mkdir(parents=True, exist_ok=True)
+    proc = ccr.base.run_cmd([ns.datagen_bin, "--spec", str(rewritten_path)], logger, ns.dry_run)
+    if proc is not None:
+        ccr.base.check_completed(proc, f"datagen for {name}")
+    summary["actual_files"] = 0 if ns.dry_run else ccr.base.count_files_recursive(target_root)
+    return target_root, summary
+
+
+def generate_spec_dir_dataset(spec_dir: pathlib.Path, tier: str, output_base: str, run_dir: pathlib.Path,
                               ns: types.SimpleNamespace, logger: logging.Logger) -> tuple[pathlib.Path, dict]:
     """--spec-file pointed at a directory (e.g. CloudCpSchedulerTesting/spec_files/SCH-DEEP-01/,
     with multiple tier YAMLs L0_ZERO.yaml..L4_LARGE.yaml) -- materialize every
@@ -411,11 +442,8 @@ def generate_spec_dir_dataset(spec_dir: pathlib.Path, tier: str, output_base: st
     total_files = 0
     per_file: dict = {}
     for spec_path in yaml_files:
-        # generate_named_spec_dataset() also uses `name` as a tempfile prefix,
-        # which can't contain a path separator -- nest via output_base instead
-        # (output_base=<tier root>, name=<stem>) so the slash never reaches it.
-        _root, summary = ccr.generate_named_spec_dataset(
-            spec_path, spec_path.stem, str(target_root), ns, logger)
+        _root, summary = generate_named_spec_dataset_local(
+            spec_path, spec_path.stem, str(target_root), run_dir, ns, logger)
         per_file[spec_path.stem] = summary
         total_files += summary.get("actual_files", 0)
     return target_root, {
@@ -467,9 +495,9 @@ def main(argv: Optional[list] = None) -> int:
         datagen_bin=args.datagen_bin, dry_run=args.dry_run, verbose=args.verbose,
     )
     dataset_root, gen_summary = (
-        generate_spec_dir_dataset(spec_path_obj, tier, args.output_base, ns, LOG)
+        generate_spec_dir_dataset(spec_path_obj, tier, args.output_base, run_dir, ns, LOG)
         if spec_path_obj is not None and spec_path_obj.is_dir() else
-        ccr.generate_named_spec_dataset(spec_path_obj, tier, args.output_base, ns, LOG)
+        generate_named_spec_dataset_local(spec_path_obj, tier, args.output_base, run_dir, ns, LOG)
         if spec_path_obj is not None else
         ccr.generate_tier_dataset(tier, args.output_base, ns, LOG, args.dataset)
     )
