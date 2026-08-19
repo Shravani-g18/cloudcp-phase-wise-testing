@@ -103,6 +103,16 @@ def parse_args(argv: Optional[list] = None) -> argparse.Namespace:
     p.add_argument("--transfer-logs-dir", default=ccr.DEFAULT_TRANSFER_LOGS)
 
     p.add_argument("--keep", action="store_true", help="Skip cleanup (S3 objects + generated /bryck data).")
+    p.add_argument("--force-cleanup", action="store_true",
+                   help="Run cleanup even if the transfer_report CSV/logs could not be confirmed collected "
+                        "(by default cleanup is skipped in that case, so evidence isn't destroyed before "
+                        "you can investigate).")
+    p.add_argument("--log-wait-timeout", type=float, default=30,
+                   help="Seconds to wait/retry for the broker's transfer_report_<id>.csv to appear "
+                        "(plain directory or .zip archive) before giving up and generating the perf "
+                        "report without it.")
+    p.add_argument("--log-wait-interval", type=float, default=3,
+                   help="Seconds between transfer_report CSV lookup retries.")
     p.add_argument("--aws-cli", default="aws")
     p.add_argument("--aws-endpoint-url", default="https://10.10.10.103:9000",
                    help="S3 endpoint used for cleanup. Pass an empty string to omit --endpoint-url.")
@@ -393,10 +403,19 @@ def main(argv: Optional[list] = None) -> int:
         # was already cleaned up by the time we get here.
         csv_path = None
         if not args.dry_run and transfer_id and transfer_id != "DRYRUN-ID":
-            csv_path = find_transfer_report_csv(args.transfer_logs_dir, transfer_id, run_dir / "perf")
+            # Wait/retry for the broker to finish writing (and possibly
+            # zip-archive) its own transfer_report CSV before giving up --
+            # avoids racing the broker's own log finalization.
+            deadline = time.time() + args.log_wait_timeout
+            while True:
+                csv_path = find_transfer_report_csv(args.transfer_logs_dir, transfer_id, run_dir / "perf")
+                if csv_path is not None or time.time() >= deadline:
+                    break
+                time.sleep(args.log_wait_interval)
             if csv_path is None:
-                tcr.notes.append(f"no transfer_report_{transfer_id}.csv found (plain dir or .zip) "
-                                  f"-- completion histogram/per-status breakdown will be empty")
+                tcr.notes.append(f"no transfer_report_{transfer_id}.csv found (plain dir or .zip) after "
+                                  f"waiting {args.log_wait_timeout}s -- completion histogram/per-status "
+                                  f"breakdown will be empty")
         perf_data = collector.finish(
             transfer_id or "unknown", csv_path=csv_path, test_id=run_id, tier=tier, mode=args.mode,
             description=f"transfer-only {args.mode} of {args.dataset}", gen_summary=gen_summary,
@@ -404,7 +423,22 @@ def main(argv: Optional[list] = None) -> int:
         LOG.info("Perf report: %s", perf_data.get("html_report"))
         tcr.notes.append(f"perf_report={perf_data.get('html_report')}")
 
-    cleanup(args, tier, redact, tcr)
+    # Only delete S3 objects / generated /bryck data once logs are confirmed
+    # collected (journal_raw.log/cloudcplogs.txt non-empty, or dry-run/no-perf) --
+    # otherwise cleanup can destroy the only evidence of what went wrong.
+    logs_collected = (
+        args.dry_run or collector is None
+        or ((collector.perf_dir / "journal_raw.log").stat().st_size > 0
+            if (collector.perf_dir / "journal_raw.log").is_file() else False)
+        or ((collector.perf_dir / "cloudcplogs.txt").stat().st_size > 0
+            if (collector.perf_dir / "cloudcplogs.txt").is_file() else False)
+    )
+    if not logs_collected and not args.dry_run and not args.keep and not args.force_cleanup:
+        LOG.warning("cleanup skipped: no logs were collected (journal_raw.log/cloudcplogs.txt empty) -- "
+                    "pass --force-cleanup to clean up anyway")
+        tcr.notes.append("cleanup skipped: logs not collected (use --force-cleanup to override)")
+    else:
+        cleanup(args, tier, redact, tcr)
 
     tcr.status = "PASS" if (args.dry_run or (error is None and final_state == TERMINAL_SUCCESS)) else \
         ("BLOCKED" if error else "FAIL")
