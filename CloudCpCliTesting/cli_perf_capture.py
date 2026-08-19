@@ -616,6 +616,109 @@ def parse_results_csv(csv_path: Path) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Split raw journal into clean per-signal logs (mirrors schedular_test.py)
+# ---------------------------------------------------------------------------
+_PERF_TRANSFER_RE = re.compile(r"transfer_(\d+)")
+
+
+def split_journal_by_signal(raw_path: Path, transfer_id: str, out_dir: Path) -> dict:
+    """Fan journal_raw.log into clean, filtered per-signal log files.
+
+    Produces pending_<id>.log, running_workers_<id>.log, free_workers_<id>.log
+    and perf_<id>.log -- the same clean representation schedular_test.py writes
+    live -- so the captured worker/PERF lines are visible on their own instead
+    of buried in the mixed raw log. pending/perf are filtered to this transfer_id;
+    running/free carry no id and are kept as-is.
+
+    Also returns a diagnosis that distinguishes the three empty-histogram causes:
+      - ``capture_empty``      : journal_raw.log is empty (sudo/journalctl/tag failure)
+      - ``no_scheduler_lines`` : raw has content but no Pending-/Running/free lines
+                                 (wrong journal tag, or broker didn't emit them)
+      - ``id_mismatch``        : worker lines exist but none match transfer_<id>
+                                 (the resolved transfer id is wrong)
+      - ``ok``                 : matched this transfer_id
+    """
+    tid = str(transfer_id)
+    pending_lines: list[str] = []
+    running_lines: list[str] = []
+    free_lines: list[str] = []
+    perf_lines: list[str] = []
+    pending_ids: dict[str, int] = {}
+    perf_ids: dict[str, int] = {}
+
+    text = raw_path.read_text(encoding="utf-8", errors="replace") if raw_path.is_file() else ""
+    raw_nonempty = bool(text.strip())
+
+    for line in text.splitlines(keepends=True):
+        pm = _PENDING_RE.search(line)
+        if pm:
+            pending_ids[pm.group(1)] = pending_ids.get(pm.group(1), 0) + 1
+            if pm.group(1) == tid:
+                pending_lines.append(line)
+            continue
+        if "Running with workers" in line:
+            running_lines.append(line)
+            continue
+        if "free workers" in line:
+            free_lines.append(line)
+            continue
+        if "PERF batch=" in line:
+            im = _PERF_TRANSFER_RE.search(line)
+            if im:
+                perf_ids[im.group(1)] = perf_ids.get(im.group(1), 0) + 1
+                if im.group(1) == tid:
+                    perf_lines.append(line)
+
+    paths = {
+        "pending": out_dir / f"pending_{tid}.log",
+        "running_workers": out_dir / f"running_workers_{tid}.log",
+        "free_workers": out_dir / f"free_workers_{tid}.log",
+        "perf": out_dir / f"perf_{tid}.log",
+    }
+    paths["pending"].write_text("".join(pending_lines), encoding="utf-8")
+    paths["running_workers"].write_text("".join(running_lines), encoding="utf-8")
+    paths["free_workers"].write_text("".join(free_lines), encoding="utf-8")
+    paths["perf"].write_text("".join(perf_lines), encoding="utf-8")
+
+    has_worker_lines = bool(running_lines or free_lines or pending_ids)
+    id_matched = bool(pending_lines or perf_lines)
+
+    dominant_other = None
+    if not id_matched:
+        combined: dict[str, int] = {}
+        for src in (pending_ids, perf_ids):
+            for k, v in src.items():
+                combined[k] = combined.get(k, 0) + v
+        combined.pop(tid, None)
+        if combined:
+            dominant_other = max(combined, key=lambda k: combined[k])
+
+    if not raw_nonempty:
+        diagnosis = "capture_empty"
+    elif not has_worker_lines:
+        diagnosis = "no_scheduler_lines"
+    elif not id_matched:
+        diagnosis = "id_mismatch"
+    else:
+        diagnosis = "ok"
+
+    return {
+        "paths": {k: str(v) for k, v in paths.items()},
+        "raw_nonempty": raw_nonempty,
+        "pending_ids": pending_ids,
+        "perf_ids": perf_ids,
+        "counts": {
+            "pending": len(pending_lines),
+            "running": len(running_lines),
+            "free": len(free_lines),
+            "perf": len(perf_lines),
+        },
+        "diagnosis": diagnosis,
+        "dominant_other_id": dominant_other,
+    }
+
+
+# ---------------------------------------------------------------------------
 # TransferPerfCollector — high-level wrapper
 # ---------------------------------------------------------------------------
 class TransferPerfCollector:
@@ -691,6 +794,9 @@ class TransferPerfCollector:
         # Parse PERF lines from journal
         perf_data = parse_perf_from_journal(raw_path, str(transfer_id), tier_order)
 
+        # Clean, filtered per-signal logs + why-is-it-empty diagnosis
+        log_diag = split_journal_by_signal(raw_path, str(transfer_id), self.perf_dir)
+
         # Parse cloudcp.log throughput
         cloudcp_path = self.perf_dir / "cloudcplogs.txt"
         throughput = parse_cloudcp_log(cloudcp_path, tier_order)
@@ -715,6 +821,7 @@ class TransferPerfCollector:
             "start": start_iso,
             "end": end_iso,
             "duration_sec": duration,
+            "journal_tag": self.cfg.get("journal_tag") or DEF_JOURNAL_TAGS,
         }
 
         # Dataset info
@@ -738,6 +845,7 @@ class TransferPerfCollector:
             "batch_config": {k.lower(): v for k, v in batch_cfg.items()},
             "timeline": journal_data["timeline"],
             "log_counts": journal_data["counts"],
+            "log_diag": log_diag,
             "csv_summary": csv_summary,
             "throughput": throughput,
             "perf": perf_data,
@@ -768,6 +876,7 @@ class TransferPerfCollector:
             "duration_sec": duration,
             "timeline_frames": len(journal_data["timeline"]),
             "log_counts": journal_data["counts"],
+            "log_diag": log_diag,
             "csv_summary_brief": {
                 "total": csv_summary["total"],
                 "success": csv_summary["success"],
@@ -926,6 +1035,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
 <header>
   <h1>CLI Transfer Performance — <span id="ttl"></span></h1>
   <div class="sub" id="subttl"></div>
+  <div id="diagBanner" style="display:none;margin-top:10px;padding:10px 14px;border-radius:8px;font-size:13px;font-weight:600"></div>
 </header>
 <div class="wrap">
 
@@ -1057,6 +1167,23 @@ document.getElementById('ttl').textContent = (DATA.meta.test_id||'') + '  \u00b7
 document.getElementById('subttl').textContent =
   'tier ' + (DATA.meta.tier||'-') + '  \u00b7  mode ' + (DATA.meta.mode||'-')
   + '  \u00b7  ' + (DATA.meta.start||'') + '  \u2192  ' + (DATA.meta.end||'');
+
+// ---- capture diagnosis banner (why the replay might be empty) ----
+(function(){
+  const d = DATA.log_diag || {}; const diag = d.diagnosis || 'ok';
+  if(diag==='ok' && (TL.length>0)) return;
+  const el = document.getElementById('diagBanner'); if(!el) return;
+  const msgs = {
+    capture_empty: ['#7f1d1d','#fee2e2','LOG CAPTURE FAILED \u2014 journal_raw.log is empty. journalctl produced nothing: check sudo permissions and the --journal-tag on the Bryck host.'],
+    no_scheduler_lines: ['#78350f','#fef3c7','NO SCHEDULER LINES \u2014 the journal was captured but contains no Pending-/Running with workers/free workers lines. The broker likely logs under a different journal tag than '+(JSON.stringify((DATA.meta&&DATA.meta.journal_tag)||''))+'; adjust --journal-tag.'],
+    id_mismatch: ['#4c1d95','#ede9fe','TRANSFER-ID MISMATCH \u2014 worker/PERF lines were captured but none match transfer_'+DATA.transfer_id+(d.dominant_other_id?('. The window is dominated by transfer_'+d.dominant_other_id+' \u2014 the resolved transfer id is probably wrong.'):'.')],
+    ok: ['#14532d','#dcfce7','Capture OK but no timeline frames were produced.']
+  };
+  const [fg,bg,text] = msgs[diag] || msgs.ok;
+  el.style.display='block'; el.style.color=fg; el.style.background=bg;
+  const c = d.counts||{};
+  el.textContent = text + '  [pending='+(c.pending||0)+' running='+(c.running||0)+' free='+(c.free||0)+' perf='+(c.perf||0)+']';
+})();
 
 // ---- summary cards ----
 const cs = DATA.csv_summary || {};

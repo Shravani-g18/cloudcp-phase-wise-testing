@@ -1406,14 +1406,28 @@ class Executor:
         result.notes.append(f"perf_report={perf_data.get('html_report', '')}")
         if not self.args.dry_run:
             # Explicit surfacing (not just a cosmetic HTML placeholder) when a
-            # log collector produced nothing -- distinguishes "monitor failed
-            # to start/capture" from "monitor worked but this transfer had no
-            # matching PERF/Pending lines".
-            journal_raw = collector.perf_dir / "journal_raw.log"
-            if not journal_raw.is_file() or journal_raw.stat().st_size == 0:
+            # log collector produced nothing -- distinguishes "capture failed"
+            # from "wrong journal tag" from "transfer id mismatch".
+            diag = perf_data.get("log_diag") or {}
+            diagnosis = diag.get("diagnosis", "ok")
+            counts = diag.get("counts", {})
+            if diagnosis == "capture_empty":
                 result.notes.append(
                     "LOG COLLECTION FAILURE: journalctl captured nothing (journal_raw.log is empty) -- "
                     "check sudo permissions / journal_tag on the Bryck host."
+                )
+            elif diagnosis == "no_scheduler_lines":
+                result.notes.append(
+                    "LOG COLLECTION FAILURE: journal captured but no Pending-/Running with workers/free workers "
+                    f"lines were found (tags={self.cfg.get('journal_tag')}) -- the broker likely logs the scheduler "
+                    "under a different journal tag; adjust --journal-tag."
+                )
+            elif diagnosis == "id_mismatch":
+                dom = diag.get("dominant_other_id")
+                hint = f" the capture window is dominated by transfer_{dom} -- resolved transfer id is likely wrong." if dom else ""
+                result.notes.append(
+                    f"LOG/ID MISMATCH: worker/PERF lines captured but none match transfer_{transfer_id}"
+                    f" (pending={counts.get('pending', 0)} perf={counts.get('perf', 0)});{hint}"
                 )
             cloudcp_raw = collector.perf_dir / "cloudcplogs.txt"
             if not cloudcp_raw.is_file() or cloudcp_raw.stat().st_size == 0:
