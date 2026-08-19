@@ -41,7 +41,7 @@ import tempfile
 import time
 import types
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Union
 
 HERE = pathlib.Path(__file__).resolve().parent
 REPO_ROOT = HERE.parent
@@ -251,9 +251,19 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--keep", "--no-cleanup", dest="keep", action="store_true",
                          help="Skip auto-cleanup of datasets/cloud objects (debugging).")
     parser.add_argument("--aws-cli", default="aws", help="aws CLI binary used for S3 cleanup.")
+    parser.add_argument("--aws-endpoint-url", default="https://10.10.10.103:9000",
+                         help="S3 endpoint used for cleanup (aws s3 rm). Defaults to this test lab's MinIO "
+                              "endpoint -- without it, the aws CLI targets real AWS and cleanup fails with "
+                              "InvalidAccessKeyId. Pass an empty string to omit --endpoint-url entirely.")
+    parser.add_argument("--aws-no-verify-ssl", dest="aws_verify_ssl", action="store_false", default=False,
+                         help="Verify TLS certs for the S3 endpoint (default: skip verification, since the "
+                              "lab MinIO endpoint uses a self-signed cert).")
+    parser.add_argument("--aws-verify-ssl", dest="aws_verify_ssl", action="store_true",
+                         help="Force TLS cert verification for the S3 endpoint (use against real AWS).")
 
-    parser.add_argument("--journal-tag", default="bryckcloud",
-                         help="journalctl syslog tag for broker log capture (default: bryckcloud).")
+    parser.add_argument("--journal-tag", nargs="+", default=["bcloud", "bryckcloud"],
+                         help="journalctl syslog tag(s) for broker log capture (default: bcloud bryckcloud -- "
+                              "both the transfer service and the CLI/broker wrapper).")
     parser.add_argument("--cloudcp-log",
                          default="/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloudcp.log",
                          help="Path to cloudcp.log for per-batch throughput capture.")
@@ -494,16 +504,39 @@ def read_local_transfer_status(transfer_logs_dir: pathlib.Path, transfer_id: str
     return match.group(1).strip().upper() if match else "UNKNOWN"
 
 
-def read_journalctl_transfer_status(transfer_id: str, journal_tag: str = "bryckcloud", lines: int = 1000) -> str:
+def read_live_journal_transfer_status(raw_path: pathlib.Path, transfer_id: str) -> str:
+    """Fastest/most direct fallback for get_transfer_status(): tail the
+    journal_raw.log that cli_perf_capture.py's JournalCapture is already
+    writing live (sudo journalctl -f -t bcloud -t bryckcloud, started before
+    this transfer began). Avoids spawning a separate journalctl query per poll."""
+    if not raw_path.is_file():
+        return "UNKNOWN"
+    try:
+        text = raw_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return "UNKNOWN"
+    matches = re.findall(
+        rf"transfer id:\s*{re.escape(str(transfer_id))}\b.*?-\s*([A-Z_]+)\s*$", text, re.IGNORECASE | re.MULTILINE,
+    )
+    return matches[-1].upper() if matches else "UNKNOWN"
+
+
+def read_journalctl_transfer_status(transfer_id: str, journal_tags: Optional[Union[str, List[str]]] = None,
+                                     lines: int = 1000) -> str:
     """Second fallback for get_transfer_status(): grep recent `journalctl -t
-    <tag>` history for this transfer's own completion line, e.g.
+    <tag>` history (across all configured tags, e.g. bcloud + bryckcloud) for
+    this transfer's own completion line, e.g.
     "aws transfer id:384 src:... dst:... - COMPLETED". This is the same log
     source cli_perf_capture.py already tails for performance data, and is
     authoritative straight from the broker regardless of REST API/registry
     state. Uses `sudo journalctl ... --no-pager` (non-following, bounded)."""
+    if journal_tags is None:
+        journal_tags = ["bcloud", "bryckcloud"]
+    tags = [journal_tags] if isinstance(journal_tags, str) else list(journal_tags)
+    tag_flags = [flag for tag in tags for flag in ("-t", tag)]
     try:
         proc = subprocess.run(
-            ["sudo", "journalctl", "-t", journal_tag, "-n", str(lines), "--no-pager"],
+            ["sudo", "journalctl", *tag_flags, "-n", str(lines), "--no-pager"],
             capture_output=True, text=True, timeout=30,
         )
     except (OSError, subprocess.TimeoutExpired):
@@ -804,6 +837,8 @@ def build_plan(args: argparse.Namespace, logger: logging.Logger) -> dict:
             "action_timeout": args.action_timeout,
             "keep": args.keep,
             "aws_cli": args.aws_cli,
+            "aws_endpoint_url": args.aws_endpoint_url,
+            "aws_verify_ssl": args.aws_verify_ssl,
             "results_dir": os.path.abspath(args.results_dir),
             "report_save_dir": args.report_save_dir,
             "diagnostic_report": args.diagnostic_report,
@@ -953,6 +988,7 @@ class Executor:
             with backup_path.open("w", encoding="utf-8") as handle:
                 json.dump(self.base_cloud_ops, handle, indent=2)
         self._cloud_ops_backup_path = backup_path
+        self._active_journal_raw: Optional[pathlib.Path] = None
 
     # -- helpers -------------------------------------------------------
 
@@ -1075,19 +1111,30 @@ class Executor:
         # REST API status unavailable (transfer purged from the active
         # registry, or the API itself being unreliable) -- fall back to
         # authoritative sources straight from the broker, in order:
-        # 1) transfer_summary.txt (written once the transfer fully finishes)
-        # 2) journalctl -t bryckcloud (the same log cli_perf_capture.py tails)
+        # 1) journal_raw.log -- already live-tailing (sudo journalctl -f) for
+        #    this test case since before the transfer started; no extra subprocess.
+        # 2) transfer_summary.txt (written once the transfer fully finishes)
+        # 3) a fresh bounded `journalctl -n 1000` query, in case perf capture
+        #    wasn't running (e.g. --no-perf, or non-POSIX host)
+        if self._active_journal_raw is not None:
+            live_state = read_live_journal_transfer_status(self._active_journal_raw, transfer_id)
+            if live_state != "UNKNOWN":
+                result.notes.append(
+                    f"transfer {transfer_id}: API status unavailable; using the live journalctl -f capture instead: {live_state}"
+                )
+                return live_state
         local_state = read_local_transfer_status(pathlib.Path(self.cfg["transfer_logs_dir"]), transfer_id)
         if local_state != "UNKNOWN":
             result.notes.append(
                 f"transfer {transfer_id}: API status unavailable; using transfer_summary.txt on disk instead: {local_state}"
             )
             return local_state
-        journal_state = read_journalctl_transfer_status(transfer_id, self.cfg.get("journal_tag", "bryckcloud"))
+        tags = self.cfg.get("journal_tag") or ["bcloud", "bryckcloud"]
+        journal_state = read_journalctl_transfer_status(transfer_id, tags)
         if journal_state != "UNKNOWN":
             result.notes.append(
                 f"transfer {transfer_id}: API status unavailable and no transfer_summary.txt yet; "
-                f"using journalctl -t {self.cfg.get('journal_tag', 'bryckcloud')} instead: {journal_state}"
+                f"using journalctl -t {' -t '.join(tags)} instead: {journal_state}"
             )
             return journal_state
         return state
@@ -1182,10 +1229,36 @@ class Executor:
                           dataset_root: Optional[pathlib.Path] = None) -> Optional[str]:
         """Dispatch to the selected transfer-initiation adapter (--cli / --restapi).
         Only this step differs between adapters -- generation, monitoring,
-        polling, validation, and cleanup are identical either way."""
+        polling, validation, and cleanup are identical either way.
+
+        A standalone "download" test case has no source data in the cloud yet
+        (unlike "both", which uploads first within the same call) -- and any
+        data a prior "upload" test case put there is already wiped by that
+        test's own cleanup_tier(). So download first seeds S3 with an
+        untracked setup upload, then does the real, measured download."""
+        if mode == "download":
+            if not self._seed_upload_for_download(result, tier, dataset_root):
+                result.notes.append("could not seed S3 with source data for the download test; download not attempted")
+                return None
         if self.cfg.get("transfer_method", "cli") == "restapi":
             return self._initiate_transfer_restapi(result, mode)
         return self._initiate_transfer_cli(result, mode, tier, dataset_root)
+
+    def _seed_upload_for_download(self, result: TestCaseResult, tier: str,
+                                  dataset_root: Optional[pathlib.Path]) -> bool:
+        """Untracked precondition upload so a standalone download test has
+        real source data in the cloud to pull from. Not the "tested"
+        transfer -- just setup, polled to completion before proceeding."""
+        result.notes.append("seeding S3 with an upload before the download test (download needs pre-existing cloud data)")
+        if self.cfg.get("transfer_method", "cli") == "restapi":
+            setup_id = self._initiate_transfer_restapi(result, "upload")
+        else:
+            setup_id = self._initiate_transfer_cli(result, "upload", tier, dataset_root)
+        if not setup_id:
+            return False
+        final_state = self.poll_until_terminal(result, setup_id)
+        result.notes.append(f"setup_upload_transfer_id={setup_id} setup_upload_final_state={final_state}")
+        return self.args.dry_run or final_state == "COMPLETED"
 
     def _initiate_transfer_restapi(self, result: TestCaseResult, mode: str) -> Optional[str]:
         """REST-API adapter: bryck_cloud_transfer_initiate.py --mode {upload,download,both}.
@@ -1280,10 +1353,13 @@ class Executor:
                 except OSError as exc:
                     result.notes.append(f"cleanup: could not remove {target}: {exc}")
         bucket_prefix = f"{self.cfg['bucket']}/{tier}"
-        cmd = run_argv(
-            "aws s3 cleanup", [self.cfg.get("aws_cli", "aws"), "s3", "rm", bucket_prefix, "--recursive"],
-            self.logger, self.args.dry_run, self.redact,
-        )
+        argv = [self.cfg.get("aws_cli", "aws"), "s3", "rm", bucket_prefix, "--recursive"]
+        endpoint_url = self.cfg.get("aws_endpoint_url")
+        if endpoint_url:
+            argv += ["--endpoint-url", endpoint_url]
+        if not self.cfg.get("aws_verify_ssl", False):
+            argv += ["--no-verify-ssl"]
+        cmd = run_argv("aws s3 cleanup", argv, self.logger, self.args.dry_run, self.redact)
         result.commands.append(cmd.as_dict())
 
     def restore_cloud_ops(self) -> None:
@@ -1303,6 +1379,10 @@ class Executor:
         collector = perf_mod.TransferPerfCollector(
             self.case_dir(test_id), self.cfg, self.args.dry_run)
         collector.start()
+        # journal_raw.log is being written to live (sudo journalctl -f ...,
+        # started above) for this test case's whole duration -- transfer_status()
+        # tails it directly instead of spawning a separate bounded journalctl query.
+        self._active_journal_raw = collector.perf_dir / "journal_raw.log"
         return collector
 
     def _finish_perf(self, collector: Optional[perf_mod.TransferPerfCollector],
@@ -1311,6 +1391,7 @@ class Executor:
                      gen_summary: Optional[dict] = None) -> Optional[dict]:
         if collector is None:
             return None
+        self._active_journal_raw = None
         csv_path = None
         if not self.args.dry_run and transfer_id and transfer_id != "DRYRUN-ID":
             candidate = (pathlib.Path(self.cfg["transfer_logs_dir"])
@@ -1864,6 +1945,28 @@ class Executor:
         return results, interrupted
 
 
+def write_combined_commands_log(run_dir: pathlib.Path, results: List[TestCaseResult]) -> pathlib.Path:
+    """Aggregate every command from every test case (in execution order) into
+    one run-level commands.log, in addition to the existing per-case logs --
+    a single file with everything actually executed during the run."""
+    lines: List[str] = []
+    for r in results:
+        lines.append("=" * 80)
+        lines.append(f"{r.test_id} ({r.kind}) -- {r.status}")
+        lines.append("=" * 80)
+        for cmd in r.commands:
+            lines.append(f"[{cmd['started_at']} -> {cmd['ended_at']}] rc={cmd['returncode']}")
+            lines.append(f"$ {' '.join(cmd['argv'])}")
+            if cmd["stdout"]:
+                lines.append(f"stdout:\n{cmd['stdout']}")
+            if cmd["stderr"]:
+                lines.append(f"stderr:\n{cmd['stderr']}")
+            lines.append("")
+    path = run_dir / "commands.log"
+    path.write_text("\n".join(lines), encoding="utf-8")
+    return path
+
+
 def write_summary(run_dir: pathlib.Path, plan: dict, results: List[TestCaseResult]) -> None:
     counts = {"PASS": 0, "FAIL": 0, "BLOCKED": 0, "PENDING": 0}
     for r in results:
@@ -1912,6 +2015,61 @@ def write_summary(run_dir: pathlib.Path, plan: dict, results: List[TestCaseResul
                 return f"<a href='{rel_path}'>perf</a>"
         return ""
 
+    def _perf_data_for(r: TestCaseResult) -> Optional[dict]:
+        """Load perf_data.json (written alongside perf_report.html) for one
+        test case, so its key numbers can be shown inline in the report."""
+        for note in r.notes:
+            if note.startswith("perf_report=") and note != "perf_report=":
+                html_path = pathlib.Path(note.split("=", 1)[1])
+                json_path = html_path.with_name("perf_data.json")
+                if json_path.is_file():
+                    try:
+                        return json.loads(json_path.read_text(encoding="utf-8"))
+                    except (OSError, json.JSONDecodeError):
+                        return None
+        return None
+
+    def _fmt_bytes(n: Any) -> str:
+        try:
+            n = float(n)
+        except (TypeError, ValueError):
+            return "-"
+        for unit in ("B", "KB", "MB", "GB", "TB"):
+            if n < 1024 or unit == "TB":
+                return f"{n:.1f} {unit}"
+            n /= 1024
+        return f"{n:.1f} TB"
+
+    def _perf_section_for(r: TestCaseResult) -> str:
+        payload = _perf_data_for(r)
+        if not payload:
+            return ""
+        meta = payload.get("meta", {})
+        csv_summary = payload.get("csv_summary", {})
+        log_counts = payload.get("log_counts", {})
+        rel_html = ""
+        for note in r.notes:
+            if note.startswith("perf_report=") and note != "perf_report=":
+                try:
+                    rel_html = str(pathlib.Path(note.split("=", 1)[1]).relative_to(run_dir))
+                except (ValueError, TypeError):
+                    rel_html = pathlib.Path(note.split("=", 1)[1]).name
+        return f"""
+<div class="perf-card">
+  <h3>{r.test_id} <span class="muted">({r.status})</span></h3>
+  <table class="perf-table">
+    <tr><th>Transfer ID</th><td>{meta.get('transfer_id', '-')}</td>
+        <th>Duration</th><td>{meta.get('duration_sec', '-')} s</td></tr>
+    <tr><th>Files (success/failed/total)</th>
+        <td>{csv_summary.get('success', 0)} / {csv_summary.get('failed', 0)} / {csv_summary.get('total', 0)}</td>
+        <th>Bytes transferred</th><td>{_fmt_bytes(csv_summary.get('total_bytes', 0))}</td></tr>
+    <tr><th>Journal log lines parsed</th><td colspan="3">{sum(v for v in log_counts.values() if isinstance(v, (int, float)))}</td></tr>
+  </table>
+  {"<a href='" + rel_html + "'>Full perf report &rarr;</a>" if rel_html else ""}
+</div>"""
+
+    perf_sections = "".join(_perf_section_for(r) for r in results)
+
     html_rows = "".join(
         f"<tr class='{status_class(r.status)}'>"
         f"<td><span class='badge {status_class(r.status)}'>{r.status}</span></td>"
@@ -1943,6 +2101,12 @@ tr.interrupted td {{ background: #ede9fe; }}
 .badge.blocked {{ background: #fef3c7; color: #78350f; }}
 .badge.interrupted {{ background: #ede9fe; color: #4c1d95; }}
 a {{ color: #2563eb; }}
+h2 {{ margin-top: 32px; }}
+.perf-card {{ background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; }}
+.perf-card h3 {{ margin: 0 0 8px 0; font-size: 14px; }}
+.muted {{ color: #6b7280; font-weight: 400; }}
+.perf-table {{ width: auto; font-size: 12px; margin-bottom: 8px; }}
+.perf-table th {{ background: #f9fafb; font-weight: 600; }}
 </style></head>
 <body>
 <h1>CloudCP CLI Run {plan['run_id']}</h1>
@@ -1957,6 +2121,8 @@ a {{ color: #2563eb; }}
 <tr><th>Status</th><th>Test ID</th><th>Kind</th><th>Dataset</th><th>Mode</th><th>Description</th><th>Perf</th><th>Notes (first 3)</th></tr>
 {html_rows}
 </table>
+<h2>Performance Results</h2>
+{perf_sections or "<p class='muted'>No performance data captured for this run.</p>"}
 </body></html>"""
     (run_dir / "summary.html").write_text(html, encoding="utf-8")
 
@@ -1972,6 +2138,7 @@ def _execute_confirmed_plan(args: argparse.Namespace, plan: dict, logger: loggin
         logger.warning("Ctrl+C received again during final diagnostic report download; skipping it.")
         interrupted = True
     write_summary(executor.run_dir, plan, results)
+    combined_commands_log = write_combined_commands_log(executor.run_dir, results)
     try:
         executor.copy_logs_to_report_dir()
     except KeyboardInterrupt:
@@ -1991,6 +2158,7 @@ def _execute_confirmed_plan(args: argparse.Namespace, plan: dict, logger: loggin
                 counts.get("BLOCKED", 0), counts.get("INTERRUPTED", 0), len(results))
     print("")
     print(f"Results dir: {executor.run_dir.resolve()}")
+    print(f"All commands (every test case, in order): {combined_commands_log.resolve()}")
     print(f"JSON summary: {json_report.resolve()}")
     print(f"Markdown summary: {md_report.resolve()}")
     print(f"HTML report: {html_report.resolve().as_uri()}")
