@@ -1248,6 +1248,14 @@ class Runner:
                     t_src, t_dst = src, dst
                 else:
                     t_src, t_dst = dst, dl_dst
+                    # cloudcp skips objects whose original local copy still
+                    # exists, so clear the upload source and hand the download a
+                    # fresh, separate target dir (distinct from the upload src).
+                    src_rm = f"rm -rf {src}" if ds.tier_dir else "true"
+                    self.host.run(rec, "clear source before download",
+                                  src_rm, check=False)
+                    self.host.run(rec, "prep download target",
+                                  f"mkdir -p {dl_dst}", check=False)
                 try:
                     transfer_id = initiate_transfer(
                         self.api, rec, self.creds["cloud_type"], t_src, t_dst)
