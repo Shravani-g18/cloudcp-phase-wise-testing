@@ -109,7 +109,11 @@ def parse_args(argv: Optional[list] = None) -> argparse.Namespace:
     p.add_argument("--bryck-config-json", default=ccr.DEFAULT_BRYCK_CONFIG_JSON)
     p.add_argument("--transfer-logs-dir", default=ccr.DEFAULT_TRANSFER_LOGS)
 
-    p.add_argument("--keep", action="store_true", help="Skip cleanup (S3 objects + generated /bryck data).")
+    p.add_argument("--cleanup", action="store_true",
+                   help="Delete the generated /bryck data and S3 objects after the transfer. "
+                        "Off by default -- data is left in place for inspection.")
+    p.add_argument("--keep", action="store_true", help="No-op now that cleanup is opt-in by default "
+                                                        "(kept for backward compatibility).")
     p.add_argument("--force-cleanup", action="store_true",
                    help="Run cleanup even if the transfer_report CSV/logs could not be confirmed collected "
                         "(by default cleanup is skipped in that case, so evidence isn't destroyed before "
@@ -571,7 +575,11 @@ def main(argv: Optional[list] = None) -> int:
                             redact, tier, gen_summary, dataset_label))
 
     all_logs_collected = all(leg["logs_collected"] for leg in legs)
-    if not all_logs_collected and not args.dry_run and not args.keep and not args.force_cleanup:
+    if not args.cleanup:
+        LOG.info("cleanup skipped (default: pass --cleanup to delete /bryck data + S3 objects after the transfer)")
+        for leg in legs:
+            leg["tcr"].notes.append("cleanup skipped (opt-in only; pass --cleanup)")
+    elif not all_logs_collected and not args.dry_run and not args.force_cleanup:
         LOG.warning("cleanup skipped: not all legs collected logs -- pass --force-cleanup to clean up anyway")
         for leg in legs:
             leg["tcr"].notes.append("cleanup skipped: logs not collected (use --force-cleanup to override)")
