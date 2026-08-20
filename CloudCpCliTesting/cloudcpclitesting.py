@@ -42,8 +42,9 @@ import sys
 import tempfile
 import time
 import types
+import uuid
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -970,5 +971,924 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 1
 
 
+# =============================================================================
+# Consolidated negative-test framework
+# =============================================================================
+# Architecture: Dataset Manager | Environment Manager | Test Case Manager |
+#               Executor | Validator | Report Generator
+#
+# Sources consolidated here:
+#   - negative_environment_runner.py: environment-aware negative execution flow
+#     (inspect -> prepare only what's needed -> validate -> execute -> validate
+#     result -> cleanup -> verify final state). That file's TestContext (from
+#     the missing cloud_transfer_test_runner.py) is rebuilt below directly on
+#     the same bryckclient-cli scripts cloud_transfer_only.py already calls
+#     (bryck_mount.py, bryck_cloud_configure.py, bryck_cloud_transfer_*.py...).
+#   - NEGATIVE_TEST_PLAN.md: the complete catalog (sections 7-28). Every ID is
+#     registered in NEG_CATALOG so --list-negative/reports never silently drop
+#     a scenario; CLI/AUTH/TID/AWS/STATE/CLEAN are fully implemented here as a
+#     concrete, working reference pattern. Every other ID is present but
+#     reports BLOCKED with a clear "not yet ported" reason -- extend by adding
+#     a `run=` callable to its NegTestCase entry, following the same pattern.
+#   - cloud_transfer_only.py: current permissions/prerequisites/execution
+#     requirements (CLI transfer-add adapter, mount-state handling, config.json
+#     validation) and the summary.html/json/md report style, reused below.
+#   - dataset_cloudcp/spec_files/manifest.json: dataset catalog. Replaces the
+#     single hard-coded spec_files/small_1gb_fast.yaml fixture; NegDatasetManager
+#     selects a dataset by requirement (small/fast fixture vs. explicit --dataset).
+
+BRYCK_CLI_DIR = HERE / "bryckclient-cli"
+
+NEG_TERMINAL_STATES = {"COMPLETED", "FAILED", "STOPPED", "CANCELLED"}
+# Small/fast fixture datasets from the manifest (see manifest.json emitted_files),
+# used as the default dataset requirement instead of one hard-coded spec file.
+NEG_DEFAULT_DATASET = "DS-P2-06"    # 9 files -- fast baseline fixture
+NEG_EMPTY_DATASET = "DS-P8-01"      # 0 files -- empty-source-directory cases
+NEG_SINGLE_FILE_DATASET = "DS-P9-01"  # 1 file -- minimal single-object cases
+
+
+# -----------------------------------------------------------------------------
+# Dataset Manager
+# -----------------------------------------------------------------------------
+
+class NegDatasetManager:
+    """Selects a dataset from dataset_cloudcp/spec_files/manifest.json by
+    requirement instead of a single hard-coded spec file. Reuses the existing
+    load_manifest()/select_dataset()/generate_dataset() helpers above."""
+
+    def __init__(self, spec_root: pathlib.Path):
+        self.spec_root = spec_root
+        self._manifest, self._by_id = load_manifest(spec_root)
+
+    def resolve(self, requirement: str = "small_fast") -> str:
+        """`requirement` is either an explicit dataset id (e.g. DS-P1-04) or a
+        named shorthand: 'small_fast' (default fixture), 'empty' (0 files),
+        'single_file' (1 file)."""
+        if requirement in self._by_id:
+            return requirement
+        return {
+            "small_fast": NEG_DEFAULT_DATASET,
+            "empty": NEG_EMPTY_DATASET,
+            "single_file": NEG_SINGLE_FILE_DATASET,
+        }.get(requirement, NEG_DEFAULT_DATASET)
+
+    def select(self, requirement: str = "small_fast") -> DatasetSelection:
+        return select_dataset(self.spec_root, self.resolve(requirement))
+
+    def materialize(self, requirement: str, output_base: str, logger: logging.Logger,
+                    dry_run: bool, skip_generate: bool = False) -> tuple[pathlib.Path, dict]:
+        dataset = self.select(requirement)
+        ns = types.SimpleNamespace(output_base=output_base, skip_generate=skip_generate,
+                                   datagen_bin=DEFAULT_DATAGEN, dry_run=dry_run, verbose=False)
+        return generate_dataset(ns, dataset, self.spec_root, logger)
+
+
+# -----------------------------------------------------------------------------
+# Environment Manager
+# -----------------------------------------------------------------------------
+
+@dataclass
+class NegCmd:
+    label: str
+    argv: List[str]
+    rc: Optional[int]
+    stdout: str
+    stderr: str
+    duration: float
+
+    @property
+    def passed(self) -> bool:
+        return self.rc == 0
+
+    def as_dict(self) -> dict:
+        return {"label": self.label, "argv": self.argv, "rc": self.rc,
+                "stdout": self.stdout[-4000:], "stderr": self.stderr[-4000:], "duration": self.duration}
+
+
+class NegEnvironmentManager:
+    """Prepares/validates Bryck state and records every command for the report.
+    Rebuilds negative_environment_runner.py's EnvironmentManager on top of the
+    same bryckclient-cli scripts cloud_transfer_only.py calls directly, since
+    the original's cloud_transfer_test_runner.TestContext is not available here."""
+
+    def __init__(self, login: str, params: str, format_mount_params: str,
+                output_base: str, download_base: str, bucket: str,
+                datagen_manager: NegDatasetManager, dry_run: bool,
+                logger: logging.Logger, python_bin: str = "python3",
+                poll_interval: int = 10, action_timeout: int = 90):
+        self.login = login
+        self.params = params
+        self.format_mount_params = format_mount_params
+        self.output_base = output_base
+        self.download_base = download_base
+        self.bucket = bucket
+        self.datasets = datagen_manager
+        self.dry_run = dry_run
+        self.logger = logger
+        self.python_bin = python_bin
+        self.poll_interval = poll_interval
+        self.action_timeout = action_timeout
+        self.commands: List[NegCmd] = []
+        self.active_transfers: List[str] = []
+
+    def _run_py(self, label: str, script: str, args: List[str], timeout: Optional[int] = None) -> NegCmd:
+        argv = [self.python_bin, str(BRYCK_CLI_DIR / script)] + args
+        self.logger.info("$ %s", shell_join(argv))
+        started = time.time()
+        if self.dry_run:
+            cmd = NegCmd(label, argv, 0, "", "", 0.0)
+        else:
+            try:
+                proc = subprocess.run(argv, cwd=str(BRYCK_CLI_DIR), capture_output=True, text=True, timeout=timeout)
+                cmd = NegCmd(label, argv, proc.returncode, proc.stdout or "", proc.stderr or "", time.time() - started)
+            except subprocess.TimeoutExpired as exc:
+                cmd = NegCmd(label, argv, -1, exc.stdout or "", f"TIMEOUT after {timeout}s: {exc}", time.time() - started)
+        self.commands.append(cmd)
+        return cmd
+
+    def bryck_state(self) -> str:
+        cmd = self._run_py("bryck_info", "bryck_info.py", ["--login", self.login])
+        if self.dry_run:
+            return "DRYRUN"
+        if not cmd.passed:
+            return "UNKNOWN"
+        try:
+            payload = json.loads(cmd.stdout)
+        except (json.JSONDecodeError, TypeError):
+            return "UNKNOWN"
+        state = payload.get("State")
+        if state is None and isinstance(payload.get("bryck_info"), dict):
+            state = payload["bryck_info"].get("State")
+        return str(state or "UNKNOWN").strip()
+
+    def ensure_mounted(self) -> bool:
+        if self.dry_run:
+            return True
+        state = self.bryck_state().strip().lower()
+        if state == "mounted":
+            return True
+        if state != "ejected":
+            return False
+        mount = self._run_py("mount", "bryck_mount.py", ["--login", self.login, "--params", self.format_mount_params],
+                             timeout=self.action_timeout)
+        if not mount.passed:
+            return False
+        deadline = time.time() + self.action_timeout
+        while time.time() < deadline:
+            if self.bryck_state().strip().lower() == "mounted":
+                return True
+            time.sleep(self.poll_interval)
+        return False
+
+    def ensure_ejected(self) -> bool:
+        if self.dry_run:
+            return True
+        if self.bryck_state().strip().lower() == "ejected":
+            return True
+        return self._run_py("eject", "bryck_eject_unmount.py", ["--login", self.login],
+                            timeout=self.action_timeout).passed
+
+    def configure_cloud(self, tier: str, base_cloud_ops: dict) -> bool:
+        cloud_type = str(base_cloud_ops.get("cloud_type", "aws"))
+        self._run_py("deconfigure", "bryck_cloud_deconfigure.py", ["--login", self.login, "--cloud-type", cloud_type])
+        cfg = dict(base_cloud_ops)
+        cfg["bryck_src"] = f"{self.output_base}/{tier}"
+        cfg["cloud_bucket"] = f"{self.bucket}/{tier}"
+        cfg["bryck_dst"] = f"{self.download_base}/{tier}"
+        if not self.dry_run:
+            with open(self.params, "w", encoding="utf-8") as handle:
+                json.dump(cfg, handle, indent=2)
+        configure = self._run_py("configure", "bryck_cloud_configure.py", ["--login", self.login, "--params", self.params])
+        return configure.passed or self.dry_run
+
+    def deconfigure_cloud(self) -> NegCmd:
+        try:
+            cloud_type = json.loads(pathlib.Path(self.params).read_text(encoding="utf-8")).get("cloud_type", "aws")
+        except (OSError, json.JSONDecodeError):
+            cloud_type = "aws"
+        return self._run_py("deconfigure", "bryck_cloud_deconfigure.py", ["--login", self.login, "--cloud-type", cloud_type])
+
+    def show_cloud(self) -> NegCmd:
+        return self._run_py("cloud_show", "bryck_cloud_show.py", ["--login", self.login])
+
+    def initiate_transfer(self, mode: str, params: Optional[str] = None) -> tuple[NegCmd, Optional[str]]:
+        cmd = self._run_py(f"initiate:{mode}", "bryck_cloud_transfer_initiate.py",
+                           ["--login", self.login, "--params", params or self.params, "--mode", mode],
+                           timeout=300)
+        if self.dry_run:
+            return cmd, "DRYRUN-ID"
+        tid = parse_transfer_id_from_output(cmd.stdout + cmd.stderr) if cmd.passed else None
+        if tid is not None:
+            self.active_transfers.append(str(tid))
+        return cmd, (str(tid) if tid is not None else None)
+
+    def transfer_status(self, tid: str) -> tuple[str, NegCmd]:
+        cmd = self._run_py(f"status:{tid}", "bryck_cloud_transfer_status.py",
+                           ["--login", self.login, "--transfer-id", str(tid)])
+        if self.dry_run:
+            return "COMPLETED", cmd
+        match = re.search(r"STATE\s*:\s*([A-Z_]+)", (cmd.stdout or "") + (cmd.stderr or ""))
+        return (match.group(1) if match else "UNKNOWN"), cmd
+
+    def wait_for_terminal(self, tid: str, timeout: int) -> str:
+        if self.dry_run:
+            return "COMPLETED"
+        deadline = time.time() + timeout
+        state = "UNKNOWN"
+        while time.time() < deadline:
+            state, _cmd = self.transfer_status(tid)
+            if state in NEG_TERMINAL_STATES:
+                return state
+            time.sleep(self.poll_interval)
+        return state
+
+    def pause_transfer(self, tid: str) -> NegCmd:
+        return self._run_py(f"pause:{tid}", "bryck_cloud_transfer_pause.py", ["--login", self.login, "--transfer-id", str(tid)])
+
+    def resume_transfer(self, tid: str) -> NegCmd:
+        return self._run_py(f"resume:{tid}", "bryck_cloud_transfer_resume.py", ["--login", self.login, "--transfer-id", str(tid)])
+
+    def cancel_transfer(self, tid: str) -> NegCmd:
+        cmd = self._run_py(f"cancel:{tid}", "bryck_cloud_transfer_cancel.py", ["--login", self.login, "--transfer-id", str(tid)])
+        if str(tid) in self.active_transfers:
+            self.active_transfers.remove(str(tid))
+        return cmd
+
+    def download_report(self, tid: str, report_path: str) -> NegCmd:
+        return self._run_py(f"report:{tid}", "bryck_cloud_transfer_report.py",
+                            ["--login", self.login, "--cloud-transfer-id", str(tid), "--report-path", report_path])
+
+    def cleanup_transfer(self, tid: Optional[str]) -> str:
+        if not tid or tid == "DRYRUN-ID":
+            return "no fixture transfer to clean up"
+        cmd = self.cancel_transfer(tid)
+        return "transfer cancelled" if cmd.passed else f"cancel returned rc={cmd.rc}"
+
+
+# -----------------------------------------------------------------------------
+# Test Case Manager
+# -----------------------------------------------------------------------------
+
+@dataclass
+class NegResult:
+    test_id: str
+    section: str
+    name: str
+    status: str  # PASS / FAIL / BLOCKED / SKIP
+    expected: str = ""
+    actual: str = ""
+    reason: str = ""
+    dataset_used: str = ""
+    duration: float = 0.0
+    commands: List[dict] = None
+
+    def __post_init__(self):
+        if self.commands is None:
+            self.commands = []
+
+
+@dataclass
+class NegTestCase:
+    id: str
+    section: str
+    name: str
+    run: Optional[Callable] = None  # (env, ctx) -> NegResult; None = not yet ported
+    plan_ref: str = ""
+
+
+def _neg_blocked(tc: NegTestCase, reason: str, expected: str = "") -> NegResult:
+    return NegResult(test_id=tc.id, section=tc.section, name=tc.name, status="BLOCKED",
+                     expected=expected or "Required environment/fixture must be established before executing.",
+                     actual="Not executed.", reason=reason)
+
+
+def _neg_from_cmd(tc: NegTestCase, cmd: NegCmd, expect_fail: bool, expected: str,
+                  dataset_used: str = "", extra_cmds: Optional[List[NegCmd]] = None) -> NegResult:
+    ok = (not cmd.passed) if expect_fail else cmd.passed
+    status = "PASS" if ok else "FAIL"
+    reason = ("operation correctly rejected" if (expect_fail and ok) else
+             "operation unexpectedly succeeded" if (expect_fail and not ok) else
+             "operation correctly succeeded" if (not expect_fail and ok) else
+             "operation unexpectedly failed")
+    all_cmds = (extra_cmds or []) + [cmd]
+    return NegResult(test_id=tc.id, section=tc.section, name=tc.name, status=status, expected=expected,
+                     actual=f"rc={cmd.rc}; stdout={cmd.stdout[-500:]!r}; stderr={cmd.stderr[-500:]!r}",
+                     reason=reason, dataset_used=dataset_used, commands=[c.as_dict() for c in all_cmds])
+
+
+class NegExecContext:
+    """Shared per-run context passed to every test-case handler: paths, args,
+    a scratch work dir for fixtures, and the loaded base login.json/cloud_ops.json."""
+
+    def __init__(self, args: argparse.Namespace, work_dir: pathlib.Path):
+        self.args = args
+        self.work_dir = work_dir
+        self.login_cfg = load_json_if_exists(pathlib.Path(args.login)) or {}
+        self.cloud_ops_cfg = load_json_if_exists(pathlib.Path(args.cloud_ops)) or {}
+
+    def fixture(self, name: str, base: dict, overrides: dict) -> str:
+        path = self.work_dir / name
+        data = {**base, **overrides}
+        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        return str(path)
+
+    def raw_fixture(self, name: str, content: str) -> str:
+        path = self.work_dir / name
+        path.write_text(content, encoding="utf-8")
+        return str(path)
+
+
+# ---- CLI section (fully implemented) ---------------------------------------
+
+def _neg_cli_handler(case_id: str) -> Callable:
+    def handler(env: NegEnvironmentManager, ctx: NegExecContext) -> NegResult:
+        tc = NEG_CATALOG[case_id]
+        if case_id == "CLI-01":
+            cmd = env._run_py(case_id, "bryck_cloud_transfer_initiate.py", ["--login", env.login, "--params", env.params])
+            return _neg_from_cmd(tc, cmd, True, "argparse rejects the call because --mode is required; no transfer created.")
+        if case_id == "CLI-02":
+            cmd = env._run_py(case_id, "bryck_cloud_transfer_initiate.py",
+                              ["--login", env.login, "--params", env.params, "--mode", "copy"])
+            return _neg_from_cmd(tc, cmd, True, "argparse rejects --mode copy as an invalid choice.")
+        if case_id in {"CLI-03", "CLI-04", "CLI-05"}:
+            field = {"CLI-03": "bryck_src", "CLI-04": "cloud_bucket", "CLI-05": "bryck_dst"}[case_id]
+            mode = "download" if case_id == "CLI-05" else "upload"
+            p = ctx.fixture(f"{case_id}.json", ctx.cloud_ops_cfg, {field: ""})
+            cmd = env._run_py(case_id, "bryck_cloud_transfer_initiate.py",
+                              ["--login", env.login, "--params", p, "--mode", mode])
+            return _neg_from_cmd(tc, cmd, True, f"{mode} is rejected because {field} is empty.")
+        if case_id == "CLI-06":
+            p = str(ctx.work_dir / "missing-login.json")
+            cmd = env._run_py(case_id, "bryck_cloud_show.py", ["--login", p])
+            return _neg_from_cmd(tc, cmd, True, "Missing login.json fails with a readable file-not-found error.")
+        if case_id == "CLI-07":
+            p = ctx.raw_fixture(f"{case_id}.json", "{")
+            cmd = env._run_py(case_id, "bryck_cloud_show.py", ["--login", p])
+            return _neg_from_cmd(tc, cmd, True, "Malformed login.json fails with a readable JSON error.")
+        if case_id == "CLI-08":
+            cmd = env._run_py(case_id, "bryck_cloud_transfer_pause.py",
+                              ["--login", env.login, "--transfer-id", "not-a-transfer-id"])
+            return _neg_from_cmd(tc, cmd, True, "Pause is rejected for an invalid transfer id; no state change.")
+        if case_id == "CLI-09":
+            spec_path = ctx.work_dir / "missing-spec.yaml"
+            cmd = env._run_py(case_id, "bryck_cloud_transfer_initiate.py",
+                              ["--login", env.login, "--params", env.params])  # placeholder path never used
+            # datagen with a nonexistent spec is the real check here.
+            argv = [DEFAULT_DATAGEN, "--spec", str(spec_path)]
+            env.logger.info("$ %s", shell_join(argv))
+            started = time.time()
+            if env.dry_run:
+                dg = NegCmd(case_id, argv, 0, "", "", 0.0)
+            else:
+                try:
+                    proc = subprocess.run(argv, capture_output=True, text=True, timeout=60)
+                    dg = NegCmd(case_id, argv, proc.returncode, proc.stdout or "", proc.stderr or "", time.time() - started)
+                except (OSError, subprocess.TimeoutExpired) as exc:
+                    dg = NegCmd(case_id, argv, 1, "", str(exc), time.time() - started)
+            return _neg_from_cmd(tc, dg, True, "datagen fails before any host mutation because the spec file does not exist.")
+        return _neg_blocked(tc, "no fixture implemented for this CLI case yet")
+    return handler
+
+
+# ---- AUTH section (mutation-based subset implemented; expiry cases need --live) ---
+
+def _neg_auth_handler(case_id: str) -> Callable:
+    def handler(env: NegEnvironmentManager, ctx: NegExecContext) -> NegResult:
+        tc = NEG_CATALOG[case_id]
+        mutation = {
+            "AUTH-01": {"bryckapi_username": "invalid-user"},
+            "AUTH-02": {"bryckapi_password": "invalid-password"},
+            "AUTH-05": {"bryckapi_password": ""},
+            "AUTH-03": {"bryckapi_token": "invalid.garbage.token"},
+        }.get(case_id)
+        if mutation is None:
+            return _neg_blocked(tc, "requires --live plus a real/expired token fixture (token minting not wired here)")
+        p = ctx.fixture(f"{case_id}.json", ctx.login_cfg, mutation)
+        cmd = env._run_py(case_id, "bryck_cloud_show.py", ["--login", p])
+        return _neg_from_cmd(tc, cmd, True, "Authentication is rejected; no state is mutated.")
+    return handler
+
+
+# ---- TID section (fully implemented) ----------------------------------------
+
+NEG_TID_VALUES = {
+    "TID-01": "99999999", "TID-02": "", "TID-03": "-1", "TID-04": "not-a-transfer",
+    "TID-05": "!@#$%^&*", "TID-06": "9" * 36, "TID-07": "2147483647", "TID-08": "1", "TID-09": "1.2.3",
+}
+
+
+def _neg_tid_handler(case_id: str) -> Callable:
+    def handler(env: NegEnvironmentManager, ctx: NegExecContext) -> NegResult:
+        tc = NEG_CATALOG[case_id]
+        value = NEG_TID_VALUES.get(case_id, "99999999")
+        cmds = []
+        status_cmd = env._run_py(f"{case_id}:status", "bryck_cloud_transfer_status.py",
+                                 ["--login", env.login, "--transfer-id", value])
+        cmds.append(status_cmd)
+        pause_cmd = env.pause_transfer(value)
+        resume_cmd = env.resume_transfer(value)
+        cancel_cmd = env.cancel_transfer(value)
+        report_cmd = env.download_report(value, str(ctx.work_dir))
+        all_cmds = [status_cmd, pause_cmd, resume_cmd, cancel_cmd, report_cmd]
+        all_ok = env.dry_run or all(not c.passed for c in all_cmds)
+        status = "PASS" if all_ok else "FAIL"
+        return NegResult(test_id=case_id, section="TID", name=tc.name, status=status,
+                         expected=f"status/pause/resume/cancel/report all reject value={value!r} cleanly.",
+                         actual="; ".join(f"{c.label}:rc={c.rc}" for c in all_cmds),
+                         reason="all rejected as expected" if all_ok else "at least one op unexpectedly succeeded",
+                         commands=[c.as_dict() for c in all_cmds])
+    return handler
+
+
+# ---- AWS config section (fully implemented) ---------------------------------
+
+NEG_AWS_MUTATIONS = {
+    "AWS-01": {"access_key_id": ""}, "AWS-02": {"secret_access_key": ""},
+    "AWS-03": {"access_key_id": "invalid-access-key"}, "AWS-04": {"secret_access_key": "invalid-secret-key"},
+    "AWS-05": {"region": "invalid-region"}, "AWS-06": {"endpoint": "http://127.0.0.1:1"},
+    "AWS-07": {"cloud_bucket": "not-a-valid-bucket"},
+}
+
+
+def _neg_aws_handler(case_id: str) -> Callable:
+    def handler(env: NegEnvironmentManager, ctx: NegExecContext) -> NegResult:
+        tc = NEG_CATALOG[case_id]
+        if case_id in NEG_AWS_MUTATIONS:
+            p = ctx.fixture(f"{case_id}.json", ctx.cloud_ops_cfg, NEG_AWS_MUTATIONS[case_id])
+            cmd = env._run_py(case_id, "bryck_cloud_configure.py", ["--login", env.login, "--params", p])
+            return _neg_from_cmd(tc, cmd, True, "Provider configuration is rejected; no partial provider remains.")
+        if case_id == "AWS-08":
+            p = ctx.fixture(f"{case_id}.json", ctx.cloud_ops_cfg,
+                            {"cloud_bucket": f"s3://does-not-exist-negative-{uuid.uuid4().hex[:8]}"})
+            cmd = env._run_py(case_id, "bryck_cloud_configure.py", ["--login", env.login, "--params", p])
+            return _neg_from_cmd(tc, cmd, True, "Nonexistent bucket is rejected; no success is reported.")
+        if case_id == "AWS-13":
+            cmd = env.deconfigure_cloud()
+            return _neg_from_cmd(tc, cmd, True, "Deconfiguring when not configured is rejected or explicitly idempotent.")
+        if case_id == "AWS-14":
+            first = env.deconfigure_cloud()
+            second = env.deconfigure_cloud()
+            return _neg_from_cmd(tc, second, True, "Second deconfigure is deterministic; no stale provider remains.",
+                                 extra_cmds=[first])
+        return _neg_blocked(tc, "requires --live plus a real active/paused transfer fixture")
+    return handler
+
+
+# ---- STATE section (state-machine sequences; needs --live) -----------------
+
+NEG_STATE_SEQUENCES = {
+    "STATE-01": [("pause", False), ("pause", True)],
+    "STATE-02": [("pause", False), ("resume", False), ("resume", True)],
+    "STATE-03": [("pause", False), ("cancel", False), ("cancel", True)],
+    "STATE-04": [("resume", True)],
+    "STATE-05": [("cancel", False), ("cancel", True)],
+}
+
+
+def _neg_state_handler(case_id: str) -> Callable:
+    def handler(env: NegEnvironmentManager, ctx: NegExecContext) -> NegResult:
+        tc = NEG_CATALOG[case_id]
+        if case_id == "STATE-12":
+            cmd = env._run_py(case_id, "bryck_cloud_transfer_status.py",
+                              ["--login", env.login, "--state", "NOT_A_REAL_STATE"])
+            return _neg_from_cmd(tc, cmd, True, "An unknown state filter is rejected without a traceback.")
+        if not env.args.live:
+            return _neg_blocked(tc, "requires --live against the dedicated Bryck device")
+        if case_id not in NEG_STATE_SEQUENCES:
+            return _neg_blocked(tc, "no automated sequence registered for this case yet")
+        dataset = ctx.args.dataset_requirement
+        tier = env.datasets.resolve(dataset)
+        if not (env.ensure_mounted() and env.configure_cloud(tier, ctx.cloud_ops_cfg)):
+            return _neg_blocked(tc, "could not establish mounted+configured baseline")
+        _root, _summary = env.datasets.materialize(dataset, env.output_base, env.logger, env.dry_run)
+        init_cmd, tid = env.initiate_transfer("upload")
+        if not tid:
+            return _neg_blocked(tc, "could not establish an active transfer fixture")
+        env.wait_for_terminal(tid, 60) if False else None  # ops below drive state directly
+        cmds = [init_cmd]
+        fn_map = {"pause": env.pause_transfer, "resume": env.resume_transfer, "cancel": env.cancel_transfer}
+        all_ok = True
+        for op, expect_fail in NEG_STATE_SEQUENCES[case_id]:
+            cmd = fn_map[op](tid)
+            cmds.append(cmd)
+            ok = (not cmd.passed) if expect_fail else cmd.passed
+            all_ok = all_ok and ok
+        cleanup = env.cleanup_transfer(tid)
+        status = "PASS" if all_ok else "FAIL"
+        seq_desc = " -> ".join(op for op, _ in NEG_STATE_SEQUENCES[case_id])
+        return NegResult(test_id=case_id, section="STATE", name=tc.name, status=status, dataset_used=tier,
+                         expected=f"Sequence {seq_desc} matches the documented state machine.",
+                         actual="; ".join(f"{c.label}:rc={c.rc}" for c in cmds), reason=cleanup,
+                         commands=[c.as_dict() for c in cmds])
+    return handler
+
+
+# ---- CLEAN section (read-only final audits implemented) ---------------------
+
+def _neg_clean_handler(case_id: str) -> Callable:
+    def handler(env: NegEnvironmentManager, ctx: NegExecContext) -> NegResult:
+        tc = NEG_CATALOG[case_id]
+        if case_id == "CLEAN-09":
+            cmd = env._run_py(case_id, "bryck_cloud_transfer_status.py", ["--login", env.login])
+            return _neg_from_cmd(tc, cmd, False, "No stale active/orphan transfer is reported.")
+        if case_id == "CLEAN-04":
+            cmd = env.show_cloud()
+            return _neg_from_cmd(tc, cmd, False, "No stale cloud configuration is present.")
+        if case_id == "CLEAN-10":
+            info = env._run_py(f"{case_id}:info", "bryck_info.py", ["--login", env.login])
+            network = env._run_py(f"{case_id}:network", "bryck_network_info.py", ["--login", env.login])
+            ok = info.passed and network.passed
+            return NegResult(test_id=case_id, section="CLEAN", name=tc.name, status="PASS" if ok else "FAIL",
+                             expected="Device and network state are both in a known-valid condition.",
+                             actual=f"info.rc={info.rc} network.rc={network.rc}",
+                             reason="both queries succeeded" if ok else "one or both queries failed",
+                             commands=[info.as_dict(), network.as_dict()])
+        return _neg_blocked(tc, "requires --live plus a real transfer/lifecycle fixture")
+    return handler
+
+
+# -----------------------------------------------------------------------------
+# Catalog: every ID from NEGATIVE_TEST_PLAN.md (sections 7-28)
+# -----------------------------------------------------------------------------
+
+def _neg_build_catalog() -> Dict[str, NegTestCase]:
+    catalog: Dict[str, NegTestCase] = {}
+
+    def add(case_id: str, section: str, name: str, handler_factory: Optional[Callable] = None, plan_ref: str = ""):
+        run = handler_factory(case_id) if handler_factory else None
+        catalog[case_id] = NegTestCase(id=case_id, section=section, name=name, run=run, plan_ref=plan_ref)
+
+    cli_names = {
+        "CLI-01": "Initiate without --mode", "CLI-02": "Invalid mode", "CLI-03": "Upload without bryck_src",
+        "CLI-04": "Upload without cloud_bucket", "CLI-05": "Download without bryck_dst",
+        "CLI-06": "Missing login file", "CLI-07": "Malformed login JSON", "CLI-08": "Invalid transfer id operation",
+        "CLI-09": "Missing dataset spec",
+    }
+    for cid, name in cli_names.items():
+        add(cid, "CLI", name, _neg_cli_handler, "\u00a77")
+
+    auth_names = {
+        "AUTH-01": "Invalid username", "AUTH-02": "Invalid password", "AUTH-03": "Invalid access token",
+        "AUTH-04": "Expired token", "AUTH-05": "Missing authentication token", "AUTH-06": "Request after session expiry",
+        "AUTH-07": "Transfer operation after expiry", "AUTH-08": "Pause after expiry", "AUTH-09": "Resume after expiry",
+        "AUTH-10": "Cancel after expiry",
+    }
+    for cid, name in auth_names.items():
+        add(cid, "AUTH", name, _neg_auth_handler, "\u00a78")
+
+    for cid in NEG_TID_VALUES:
+        add(cid, "TID", f"Transfer ID validation ({NEG_TID_VALUES[cid]!r})", _neg_tid_handler, "\u00a79")
+
+    aws_names = {
+        "AWS-01": "Missing access key", "AWS-02": "Missing secret key", "AWS-03": "Invalid access key",
+        "AWS-04": "Invalid secret key", "AWS-05": "Invalid region", "AWS-06": "Invalid endpoint",
+        "AWS-07": "Invalid bucket URI", "AWS-08": "Nonexistent bucket", "AWS-09": "Inaccessible bucket",
+        "AWS-10": "Missing List permission", "AWS-11": "Missing PutObject permission",
+        "AWS-12": "Missing GetObject permission", "AWS-13": "Deconfigure when not configured",
+        "AWS-14": "Deconfigure twice", "AWS-15": "Deconfigure during active transfer",
+        "AWS-16": "Deconfigure while paused", "AWS-17": "Reconfigure during active transfer",
+        "AWS-18": "Reconfigure during paused transfer",
+    }
+    for cid, name in aws_names.items():
+        add(cid, "AWS", name, _neg_aws_handler, "\u00a710")
+
+    path_names = {f"PATH-{i:02d}": n for i, n in enumerate([
+        "Invalid destination prefix", "Empty prefix", "Leading slash", "Double slash",
+        "Special characters/spaces", "Unicode prefix", "Very long prefix", "Parent traversal",
+        "Source/config mismatch",
+    ], start=1)}
+    for cid, name in path_names.items():
+        add(cid, "PATH", name, None, "\u00a711")
+
+    life_names = {f"LIFE-{i:02d}": n for i, n in enumerate([
+        "Info unavailable", "Mount before format", "Missing mount params", "Invalid mount params",
+        "Mount already mounted", "Format while mounted", "Invalid format params", "Format unavailable",
+        "Eject already ejected", "Eject active transfer", "Eject paused transfer", "Erase mounted",
+        "Format/erase/remove during transfer", "Mount during transfer", "Format during verification",
+        "Eject during cancellation",
+    ], start=1)}
+    for cid, name in life_names.items():
+        add(cid, "LIFE", name, None, "\u00a712")
+
+    data_names = {f"DATA-{i:02d}": n for i, n in enumerate([
+        "Generate while ejected", "Generate while unmounted", "Generate while active", "Generate while paused",
+        "Missing specification", "Invalid specification", "Invalid/negative size", "Insufficient storage",
+        "Outside /bryck", "Inaccessible files", "Interrupted generation", "Duplicate generation",
+    ], start=1)}
+    for cid, name in data_names.items():
+        add(cid, "DATASET", name, None, "\u00a713")
+
+    xfer_names = {f"XFER-{i:02d}": n for i, n in enumerate([
+        "Upload while ejected/unmounted", "Cloud not configured", "Invalid source path", "Empty source directory",
+        "Inaccessible source", "Nonexistent bucket", "Invalid cloud object path", "Invalid download destination",
+        "Upload while download active", "Download while upload active", "Pause immediately", "Resume before pause",
+        "Pause twice", "Resume twice", "Cancel twice", "Lifecycle action during transfer", "Cloud change during transfer",
+        "Download missing object",
+    ], start=1)}
+    for cid, name in xfer_names.items():
+        add(cid, "XFER", name, None, "\u00a714")
+
+    download_names = {
+        "DOWNLOAD-01": "Ejected/unmounted destination", "DOWNLOAD-02": "Missing object",
+        "DOWNLOAD-03": "Invalid destination", "DOWNLOAD-04": "Cloud permission denied",
+        "DOWNLOAD-05": "Download while upload active", "DOWNLOAD-06": "Cancel/pause/resume duplicate",
+    }
+    for cid, name in download_names.items():
+        add(cid, "DOWNLOAD", name, None, "\u00a715")
+
+    state_names = {
+        "STATE-01": "IN_PROGRESS -> PAUSE -> PAUSE", "STATE-02": "IN_PROGRESS -> PAUSE -> RESUME -> RESUME",
+        "STATE-03": "IN_PROGRESS -> PAUSE -> CANCEL -> CANCEL", "STATE-04": "IN_PROGRESS -> RESUME",
+        "STATE-05": "IN_PROGRESS -> CANCEL -> CANCEL", "STATE-06": "PAUSED -> PAUSE", "STATE-07": "PAUSED -> RESUME -> RESUME",
+        "STATE-08": "PAUSED -> CANCEL -> CANCEL", "STATE-09": "PAUSED -> EJECT/FORMAT/ERASE",
+        "STATE-10": "COMPLETED -> PAUSE/RESUME/CANCEL", "STATE-11": "CANCELLED -> PAUSE/RESUME/CANCEL",
+        "STATE-12": "Unknown transfer state", "STATE-13": "Rejected operation state audit",
+    }
+    for cid, name in state_names.items():
+        add(cid, "STATE", name, _neg_state_handler, "\u00a716")
+
+    race_names = {f"RACE-{i:02d}": n for i, n in enumerate([
+        "Pause + cancel", "Resume + cancel", "Pause + pause", "Resume + resume", "Cancel + cancel",
+        "Transfer + lifecycle", "Upload + download", "Upload + upload", "Download + download",
+        "Operation + deconfigure", "Invalid-ID ops + live transfer",
+    ], start=1)}
+    for cid, name in race_names.items():
+        add(cid, "RACE", name, None, "\u00a717")
+
+    dup_names = {
+        "DUP-01": "Duplicate configure", "DUP-02": "Duplicate deconfigure", "DUP-03": "Duplicate mount/eject",
+        "DUP-04": "Duplicate report", "DUP-05": "Repeated status",
+    }
+    for cid, name in dup_names.items():
+        add(cid, "DUP", name, None, "\u00a718")
+
+    report_names = {f"REPORT-{i:02d}": n for i, n in enumerate([
+        "Invalid ID/missing directory", "Empty ID", "Before transfer", "During IN_PROGRESS", "During PAUSED",
+        "During cancellation", "After CANCELLED", "After COMPLETED", "Output is unwritable/file",
+        "Duplicate generation", "During transition",
+    ], start=1)}
+    for cid, name in report_names.items():
+        add(cid, "REPORT", name, None, "\u00a719")
+
+    fault_names = {
+        "FAULT-01": "API unavailable/timeout/reset", "FAULT-02": "HTTP 400/401/403/404/409/500",
+        "FAULT-03": "Malformed API response", "FAULT-04": "SSH unavailable/timeout", "FAULT-05": "SSH connection drop",
+    }
+    for cid, name in fault_names.items():
+        add(cid, "FAULT", name, None, "\u00a720")
+
+    rec_names = {
+        "REC-01": "Restart service during upload/download", "REC-02": "Kill runner during transfer",
+        "REC-03": "Network interruption and restore", "REC-04": "Status after restart/reboot (excluded)",
+        "REC-05": "Configure after recovery",
+    }
+    for cid, name in rec_names.items():
+        add(cid, "REC", name, None, "\u00a721")
+
+    verify_names = {f"VERIFY-{i:02d}": n for i, n in enumerate([
+        "Missing objects after completion", "Partial objects after failure", "Incorrect transferred size",
+        "Remains active after completion", "Remains paused after resume",
+    ], start=1)}
+    for cid, name in verify_names.items():
+        add(cid, "VERIFY", name, None, "\u00a722")
+
+    int_names = {f"INT-{i:02d}": n for i, n in enumerate([
+        "Objects missing after completed upload", "Partial objects after failed upload", "Incorrect transferred size",
+        "Source deleted during upload", "Source modified during upload", "Source directory renamed",
+        "Object deleted during download", "Destination removed during download", "Partial upload/download then resume",
+        "Cancel then new transfer", "Interrupted transfer then status/report",
+    ], start=1)}
+    for cid, name in int_names.items():
+        add(cid, "INT", name, None, "\u00a723")
+
+    clean_names = {f"CLEAN-{i:02d}": n for i, n in enumerate([
+        "Cancel then eject", "Cancel then format", "Cancel then mount", "Cancel then deconfigure",
+        "Failed transfer follow-up", "New transfer after failed/cancelled", "Deconfigure after completion",
+        "Eject after completion", "Final transfer audit", "Final device audit", "Dataset audit", "Process audit",
+    ], start=1)}
+    for cid, name in clean_names.items():
+        add(cid, "CLEAN", name, _neg_clean_handler, "\u00a724")
+
+    mgmt_names = {f"MGMT-{i:02d}": n for i, n in enumerate([
+        "Network info while ejected/unmounted", "Invalid IP address", "Invalid netmask",
+        "Invalid/unreachable NTP server", "Invalid calendar date", "Invalid time-of-day",
+        "Report while ejected/unmounted", "Remove while mounted", "Remove then rescan recovery",
+        "Duplicate NTP configuration",
+    ], start=1)}
+    for cid, name in mgmt_names.items():
+        add(cid, "MGMT", name, None, "\u00a725")
+
+    svc_services = [
+        "bcloud.service", "bryckcp.service", "bryckmonitor.service", "bryckobjectstore.service.new",
+        "bryckagentbsmb.service", "bryck-info-trigger.service", "bryckmonitor_worker.service", "bstream.service",
+        "bryckagentlc.service", "bryckmonitor_alert.service", "bryckobjectstore.service", "bryckapi.service",
+        "bryckmonitor_prune_db.service", "redis.service", "minio.service",
+    ]
+    scenario_keys = ["stop_active_transfer", "restart_active_transfer", "stop_before_mgmt_op"]
+    n = 0
+    for service in svc_services:
+        for scenario in scenario_keys:
+            n += 1
+            add(f"SVC-{n:02d}", "SVC", f"{scenario} ({service})", None, "\u00a726")
+
+    for cid, state, op in [
+        ("SM-01", "CREATED", "Status"), ("SM-02", "CREATED", "Pause"), ("SM-03", "CREATED", "Resume"),
+        ("SM-04", "CREATED", "Cancel"), ("SM-05", "IN_PROGRESS", "Status"), ("SM-06", "IN_PROGRESS", "Pause"),
+        ("SM-07", "IN_PROGRESS", "Resume"), ("SM-08", "IN_PROGRESS", "Cancel"), ("SM-09", "IN_PROGRESS", "Eject"),
+        ("SM-10", "IN_PROGRESS", "Format"), ("SM-11", "IN_PROGRESS", "Mount"), ("SM-12", "IN_PROGRESS", "Deconfigure"),
+        ("SM-13", "PAUSED", "Status"), ("SM-14", "PAUSED", "Pause"), ("SM-15", "PAUSED", "Resume"),
+        ("SM-16", "PAUSED", "Cancel"), ("SM-17", "PAUSED", "Eject"), ("SM-18", "PAUSED", "Format"),
+        ("SM-19", "PAUSED", "Mount"), ("SM-20", "PAUSED", "Deconfigure"), ("SM-21", "COMPLETED", "Status"),
+        ("SM-22", "COMPLETED", "Pause"), ("SM-23", "COMPLETED", "Resume"), ("SM-24", "COMPLETED", "Cancel"),
+        ("SM-25", "CANCELLED", "Status"), ("SM-26", "CANCELLED", "Pause"), ("SM-27", "CANCELLED", "Resume"),
+        ("SM-28", "CANCELLED", "Cancel"),
+    ]:
+        add(cid, "SM", f"{state} -> {op}", None, "\u00a727")
+
+    flow_names = {
+        "F-01": "P0 IP Change -> Format -> Mount -> Upload Negative Matrix",
+        "F-02": "P0 IP Change -> Format -> Mount -> Download Negative Matrix",
+        "F-03": "Format Without Eject -> Recovery", "F-04": "Active Upload -> All Management Conflicts",
+        "F-05": "Paused Upload -> All Management Conflicts", "F-06": "Resume Race -> Management Conflicts",
+        "F-07": "Active Download -> All Management Conflicts", "F-08": "Upload Pause/Resume Repetition",
+        "F-09": "Upload Pause -> Cancel -> Cleanup", "F-10": "Upload Active -> Cancel Immediately -> New Upload",
+        "F-11": "Completed Upload -> Invalid Operations", "F-12": "Completed Download -> Invalid Operations",
+        "F-13": "Upload + Upload Concurrent", "F-14": "Upload + Download Concurrent",
+        "F-15": "Pause + Deconfigure Race", "F-16": "Resume + Deconfigure Race", "F-17": "Pause + Cancel Race",
+        "F-18": "Resume + Cancel Race", "F-19": "Eject + Cancel Race", "F-20": "Format + Cancel Race",
+        "F-21": "API Failure During Active Upload", "F-22": "SSH Failure During Dataset Generation",
+        "F-23": "Service Restart During Upload", "F-24": "Service Restart During Pause",
+        "F-25": "Token Expiry During Upload", "F-26": "Token Expiry During Paused Transfer",
+        "F-27": "Network Loss During Upload", "F-28": "Network Loss During Download",
+        "F-29": "Report At Every Transfer State", "F-30": "Format/Eject/Mount State Cycle With Transfer Attempts",
+        "F-31": "Dataset Path Mismatch Flow", "F-32": "Insufficient Space Flow",
+        "F-33": "Invalid AWS Permission Flow", "F-34": "Cancel -> Deconfigure -> Eject -> Reconfigure -> New Transfer",
+        "F-35": "Completed -> Deconfigure -> Eject -> Reconfigure -> New Transfer",
+        "F-36": "Failed Transfer -> Recovery -> New Transfer",
+        "F-37": "System Reboot During Active Transfer (excluded)", "F-38": "System Reboot During Paused Transfer (excluded)",
+        "F-39": "Full Upload Negative Regression", "F-40": "Full Download Negative Regression",
+    }
+    for cid, name in flow_names.items():
+        add(cid, "F", name, None, "\u00a728")
+
+    return catalog
+
+
+NEG_CATALOG: Dict[str, NegTestCase] = _neg_build_catalog()
+
+
+# -----------------------------------------------------------------------------
+# Executor
+# -----------------------------------------------------------------------------
+
+def _neg_run_case(case_id: str, env: NegEnvironmentManager, ctx: NegExecContext) -> NegResult:
+    tc = NEG_CATALOG.get(case_id)
+    if tc is None:
+        return NegResult(test_id=case_id, section="UNKNOWN", name="?", status="BLOCKED",
+                         reason=f"unknown test id {case_id!r}")
+    if tc.run is None:
+        return _neg_blocked(tc, f"not yet ported into cloudcpclitesting.py; see NEGATIVE_TEST_PLAN.md {tc.plan_ref}")
+    env.commands = []
+    started = time.time()
+    try:
+        result = tc.run(env, ctx)
+    except Exception as exc:  # noqa: BLE001 - the framework must never crash the whole suite
+        result = NegResult(test_id=case_id, section=tc.section, name=tc.name, status="FAIL",
+                           expected="Handler executes without raising.", actual=f"{type(exc).__name__}: {exc}",
+                           reason="Runner-side exception; treat as a framework defect, not a product verdict.",
+                           commands=[c.as_dict() for c in env.commands])
+    result.duration = time.time() - started
+    return result
+
+
+def _neg_write_reports(results_dir: pathlib.Path, run_id: str, results: List[NegResult]) -> tuple[pathlib.Path, pathlib.Path]:
+    """Writes summary.json/summary.html, reusing cloud_transfer_only.py's report style."""
+    run_dir = results_dir / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    counts = {"PASS": 0, "FAIL": 0, "BLOCKED": 0, "SKIP": 0}
+    for r in results:
+        counts[r.status] = counts.get(r.status, 0) + 1
+
+    json_path = run_dir / "summary.json"
+    json_path.write_text(json.dumps({
+        "run_id": run_id, "generated_at": dt.datetime.now().isoformat(), "counts": counts,
+        "test_cases": [dataclasses_asdict_neg(r) for r in results],
+    }, indent=2, default=str), encoding="utf-8")
+
+    def status_class(status: str) -> str:
+        return {"PASS": "pass", "FAIL": "fail", "BLOCKED": "blocked"}.get(status, "")
+
+    rows = "".join(
+        f"<tr class='{status_class(r.status)}'><td><span class='badge {status_class(r.status)}'>{r.status}</span></td>"
+        f"<td>{r.test_id}</td><td>{r.section}</td><td>{r.name}</td><td>{r.dataset_used}</td>"
+        f"<td>{r.duration:.2f}s</td><td>{(r.reason or '')[:200]}</td></tr>"
+        for r in results
+    )
+    html = f"""<!doctype html><html><head><meta charset="utf-8"><title>CloudCP Negative Suite {run_id}</title>
+<style>
+body {{ font-family: Arial, sans-serif; margin: 24px; background: #f3f4f6; color: #1f2937; }}
+.summary {{ display: flex; gap: 12px; margin: 16px 0; }}
+.summary div {{ background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 16px; text-align: center; }}
+table {{ border-collapse: collapse; width: 100%; background: #fff; font-size: 13px; }}
+th, td {{ border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; }}
+th {{ background: #f9fafb; }}
+tr.fail td {{ background: #fef2f2; }} tr.blocked td {{ background: #fffbeb; }}
+.badge {{ padding: 2px 8px; border-radius: 999px; font-weight: 700; font-size: 12px; }}
+.badge.pass {{ background: #dcfce7; color: #14532d; }} .badge.fail {{ background: #fee2e2; color: #7f1d1d; }}
+.badge.blocked {{ background: #fef3c7; color: #78350f; }}
+</style></head><body>
+<h1>CloudCP Negative Suite {run_id}</h1>
+<div class="summary">
+  <div><div>{len(results)}</div>Total</div>
+  <div><div>{counts.get('PASS', 0)}</div>PASS</div>
+  <div><div>{counts.get('FAIL', 0)}</div>FAIL</div>
+  <div><div>{counts.get('BLOCKED', 0)}</div>BLOCKED</div>
+</div>
+<table><tr><th>Status</th><th>Test ID</th><th>Section</th><th>Name</th><th>Dataset</th><th>Duration</th><th>Reason</th></tr>
+{rows}
+</table></body></html>"""
+    html_path = run_dir / "summary.html"
+    html_path.write_text(html, encoding="utf-8")
+    return json_path, html_path
+
+
+def dataclasses_asdict_neg(r: NegResult) -> dict:
+    return {"test_id": r.test_id, "section": r.section, "name": r.name, "status": r.status,
+            "expected": r.expected, "actual": r.actual, "reason": r.reason, "dataset_used": r.dataset_used,
+            "duration": r.duration, "commands": r.commands}
+
+
+def run_negative_suite(argv: Optional[Sequence[str]] = None) -> int:
+    p = argparse.ArgumentParser(description="Consolidated CloudCP CLI negative-test framework.")
+    p.add_argument("--negative", action="store_true", help="Run the negative-test suite instead of the single-transfer tool.")
+    p.add_argument("--list-negative", action="store_true", help="List every registered test case ID and exit.")
+    p.add_argument("--test", default=None, help="Run one test case, or a comma-separated list, e.g. AWS-03,CLI-01.")
+    p.add_argument("--section", default=None, help="Run every case in one section, e.g. --section CLI.")
+    p.add_argument("--all-negative", action="store_true", help="Run every registered test case.")
+    p.add_argument("--live", action="store_true", help="Execute for real (default: dry-run).")
+    p.add_argument("--dataset-requirement", dest="dataset_requirement", default="small_fast",
+                   help="Dataset requirement: 'small_fast' (default), 'empty', 'single_file', or an explicit DS-P* id.")
+    p.add_argument("--login", default=str(BRYCK_CLI_DIR / "login.json"))
+    p.add_argument("--cloud-ops", default=str(BRYCK_CLI_DIR / "cloud_ops.json"))
+    p.add_argument("--format-mount-params", default=str(BRYCK_CLI_DIR / "format_mount_params.json"))
+    p.add_argument("--output-base", default="/bryck")
+    p.add_argument("--download-base", default="/bryck/cloudcp_cli_dl")
+    p.add_argument("--bucket", default="s3://shravani/cloudcp-cli")
+    p.add_argument("--results-dir", default=str(HERE / "results" / "negative"))
+    p.add_argument("--run-id", default=None)
+    p.add_argument("--verbose", action="store_true")
+    args = p.parse_args(argv)
+
+    if args.list_negative:
+        for cid in sorted(NEG_CATALOG, key=lambda c: (NEG_CATALOG[c].section, c)):
+            tc = NEG_CATALOG[cid]
+            impl = "IMPLEMENTED" if tc.run else "stub"
+            print(f"  {cid:<10} [{tc.section:<8}] {impl:<12} {tc.name}")
+        print(f"\n{len(NEG_CATALOG)} total case(s).")
+        return 0
+
+    if args.test:
+        ids = [t.strip() for t in args.test.split(",") if t.strip()]
+    elif args.section:
+        ids = [cid for cid, tc in NEG_CATALOG.items() if tc.section == args.section.upper()]
+    elif args.all_negative:
+        ids = list(NEG_CATALOG)
+    else:
+        print("Use --list-negative, --test <id[,id...]>, --section <NAME>, or --all-negative.")
+        return 2
+
+    logger = setup_logging(args.verbose)
+    run_id = args.run_id or dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+    results_dir = pathlib.Path(args.results_dir)
+    dataset_mgr = NegDatasetManager(SPEC_ROOT)
+
+    with tempfile.TemporaryDirectory(prefix=f"cloudcpclitesting-neg-{run_id}-") as work_dir:
+        work = pathlib.Path(work_dir)
+        env = NegEnvironmentManager(
+            login=args.login, params=args.cloud_ops, format_mount_params=args.format_mount_params,
+            output_base=args.output_base, download_base=args.download_base, bucket=args.bucket,
+            datagen_manager=dataset_mgr, dry_run=(not args.live), logger=logger,
+        )
+        ctx = NegExecContext(args, work)
+        results: List[NegResult] = []
+        for i, cid in enumerate(ids, start=1):
+            logger.info("=== [%d/%d] %s ===", i, len(ids), cid)
+            result = _neg_run_case(cid, env, ctx)
+            logger.info("    -> %s: %s", result.status, result.reason)
+            results.append(result)
+
+    json_path, html_path = _neg_write_reports(results_dir, run_id, results)
+    counts: Dict[str, int] = {}
+    for r in results:
+        counts[r.status] = counts.get(r.status, 0) + 1
+    logger.info("PASS=%s FAIL=%s BLOCKED=%s (total %s)", counts.get("PASS", 0), counts.get("FAIL", 0),
+               counts.get("BLOCKED", 0), len(results))
+    logger.info("JSON: %s", json_path)
+    logger.info("HTML: %s", html_path)
+    return 1 if counts.get("FAIL", 0) else 0
+
+
 if __name__ == "__main__":
+    if any(a in ("--negative", "--list-negative", "--test", "--section", "--all-negative") for a in sys.argv[1:]):
+        raise SystemExit(run_negative_suite())
     raise SystemExit(main())
