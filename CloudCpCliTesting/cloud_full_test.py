@@ -1155,67 +1155,80 @@ def main(argv: Optional[list] = None) -> int:
 
     results: List[dict] = []
     total = len(selected)
-    for i, entry in enumerate(selected, start=1):
-        if args.manual:
-            action = manual_confirm(i, total, entry)
-            if action == "quit":
-                LOG.info("Stopped by user after %d/%d case(s).", i - 1, total)
-                break
-            if action == "skip":
-                results.append({"case_id": entry["id"], "status": "SKIP"})
-                continue
+    interrupted = False
+    try:
+        for i, entry in enumerate(selected, start=1):
+            if args.manual:
+                action = manual_confirm(i, total, entry)
+                if action == "quit":
+                    LOG.info("Stopped by user after %d/%d case(s).", i - 1, total)
+                    break
+                if action == "skip":
+                    results.append({"case_id": entry["id"], "status": "SKIP"})
+                    continue
 
-        LOG.info("=== [%d/%d] %s (%s) ===", i, total, entry["id"], entry["kind"])
-        try:
-            if entry["kind"] == "transfer":
-                result = run_transfer_case(args, entry, run_dir, base_cloud_ops, redact)
-            else:
-                # Environment prep first (see prepare_environment()'s docstring) --
-                # a lightweight baseline check before handing off to ner.dispatch(),
-                # whose own handlers do further fixture-specific setup as needed.
-                neg_dir = run_dir / "negative" / entry["id"].replace("/", "_")
-                neg_dir.mkdir(parents=True, exist_ok=True)
-                env_tcr = ccr.TestCaseResult(test_id=f"{entry['id']}_env_prep", kind="env_prep",
-                                             description=f"environment prep before {entry['id']}")
-                env_snapshot = prepare_environment(args, redact, env_tcr, entry["id"])
-                (neg_dir / "env_prep.json").write_text(
-                    json.dumps({"snapshot": env_snapshot, "notes": env_tcr.notes,
-                               "commands": env_tcr.commands}, indent=2, default=str), encoding="utf-8")
+            LOG.info("=== [%d/%d] %s (%s) ===", i, total, entry["id"], entry["kind"])
+            try:
+                if entry["kind"] == "transfer":
+                    result = run_transfer_case(args, entry, run_dir, base_cloud_ops, redact)
+                else:
+                    # Environment prep first (see prepare_environment()'s docstring) --
+                    # a lightweight baseline check before handing off to ner.dispatch(),
+                    # whose own handlers do further fixture-specific setup as needed.
+                    neg_dir = run_dir / "negative" / entry["id"].replace("/", "_")
+                    neg_dir.mkdir(parents=True, exist_ok=True)
+                    env_tcr = ccr.TestCaseResult(test_id=f"{entry['id']}_env_prep", kind="env_prep",
+                                                 description=f"environment prep before {entry['id']}")
+                    env_snapshot = prepare_environment(args, redact, env_tcr, entry["id"])
+                    (neg_dir / "env_prep.json").write_text(
+                        json.dumps({"snapshot": env_snapshot, "notes": env_tcr.notes,
+                                   "commands": env_tcr.commands}, indent=2, default=str), encoding="utf-8")
 
-                # Delegate to negative_environment_runner.py's dispatch()/EnvironmentManager
-                # -- the actual, comprehensive environment-aware implementation (LIFE/DATA/
-                # XFER/DOWNLOAD/RACE/DUP/REPORT/FAULT/REC/VERIFY/INT/MGMT/SVC/SM/F included),
-                # not a reimplementation.
-                if ner_mgr is None:
-                    ner_ctx = build_ner_context(args)
-                    ner_mgr = ner.EnvironmentManager(ner_ctx)
-                    ner_work_dir.mkdir(parents=True, exist_ok=True)
-                # Same journalctl/cloudcp.log perf capture as transfer cases (see run_leg()),
-                # wrapped around the whole case so every negative case -- not just transfers --
-                # gets a perf report.
-                perf_cfg = {
-                    "journal_tag": args.journal_tag, "cloudcp_log": args.cloudcp_log,
-                    "capture_lead": args.capture_lead, "capture_drain": args.capture_drain,
-                    "transfer_logs_dir": args.transfer_logs_dir, "bryck_config_json": args.bryck_config_json,
-                }
-                collector = perf_mod.TransferPerfCollector(neg_dir, perf_cfg, args.dry_run) if args.perf_capture else None
-                if collector is not None:
-                    collector.start()
-                ner_result = run_negative_case_via_ner(ner_mgr, args, ner_work_dir, entry["id"])
-                if collector is not None:
-                    perf_data = collector.finish(
-                        entry["id"], csv_path=None, test_id=entry["id"], tier=entry.get("section", ""),
-                        mode="negative", description=entry["name"], gen_summary=None,
-                    )
-                    LOG.info("[%s] perf report: %s", entry["id"], perf_data.get("html_report"))
-                ner_results.append(ner_result)
-                ner_case_ids.append(entry["id"])
-                result = {"case_id": entry["id"], "status": ner_result.status}
-        except Exception as exc:  # noqa: BLE001 -- one case's crash must never abort the whole run
-            LOG.exception("[%s] crashed unexpectedly: %s", entry["id"], exc)
-            result = {"case_id": entry["id"], "status": "CRASH", "error": str(exc)}
-        results.append(result)
-        LOG.info("    -> %s", result.get("status"))
+                    # Delegate to negative_environment_runner.py's dispatch()/EnvironmentManager
+                    # -- the actual, comprehensive environment-aware implementation (LIFE/DATA/
+                    # XFER/DOWNLOAD/RACE/DUP/REPORT/FAULT/REC/VERIFY/INT/MGMT/SVC/SM/F included),
+                    # not a reimplementation.
+                    if ner_mgr is None:
+                        ner_ctx = build_ner_context(args)
+                        ner_mgr = ner.EnvironmentManager(ner_ctx)
+                        ner_work_dir.mkdir(parents=True, exist_ok=True)
+                    # Same journalctl/cloudcp.log perf capture as transfer cases (see run_leg()),
+                    # wrapped around the whole case so every negative case -- not just transfers --
+                    # gets a perf report.
+                    perf_cfg = {
+                        "journal_tag": args.journal_tag, "cloudcp_log": args.cloudcp_log,
+                        "capture_lead": args.capture_lead, "capture_drain": args.capture_drain,
+                        "transfer_logs_dir": args.transfer_logs_dir, "bryck_config_json": args.bryck_config_json,
+                    }
+                    collector = perf_mod.TransferPerfCollector(neg_dir, perf_cfg, args.dry_run) if args.perf_capture else None
+                    if collector is not None:
+                        collector.start()
+                    ner_result = run_negative_case_via_ner(ner_mgr, args, ner_work_dir, entry["id"])
+                    if collector is not None:
+                        perf_data = collector.finish(
+                            entry["id"], csv_path=None, test_id=entry["id"], tier=entry.get("section", ""),
+                            mode="negative", description=entry["name"], gen_summary=None,
+                        )
+                        LOG.info("[%s] perf report: %s", entry["id"], perf_data.get("html_report"))
+                    ner_results.append(ner_result)
+                    ner_case_ids.append(entry["id"])
+                    result = {"case_id": entry["id"], "status": ner_result.status}
+            except KeyboardInterrupt:
+                # Ctrl+C mid-case: record exactly where execution stopped, then re-raise so the
+                # outer handler below still writes every report for cases that DID run --
+                # never silently lose logs/results just because the run was interrupted.
+                LOG.warning("[%s] interrupted (Ctrl+C) while this case was in progress", entry["id"])
+                results.append({"case_id": entry["id"], "status": "INTERRUPTED"})
+                raise
+            except Exception as exc:  # noqa: BLE001 -- one case's crash must never abort the whole run
+                LOG.exception("[%s] crashed unexpectedly: %s", entry["id"], exc)
+                result = {"case_id": entry["id"], "status": "CRASH", "error": str(exc)}
+            results.append(result)
+            LOG.info("    -> %s", result.get("status"))
+    except KeyboardInterrupt:
+        interrupted = True
+        LOG.warning("Interrupted by user (Ctrl+C) after %d/%d case(s) -- writing logs/reports for "
+                   "everything that ran so far.", len(results), total)
 
     if not args.keep_config and backup_path.exists() and not args.dry_run:
         try:
@@ -1246,7 +1259,8 @@ def main(argv: Optional[list] = None) -> int:
     for r in results:
         counts[r.get("status", "UNKNOWN")] = counts.get(r.get("status", "UNKNOWN"), 0) + 1
     print("\n" + "=" * 60)
-    print(f"cloud_full_test.py run {run_id} complete -- {len(results)} case(s)")
+    print(f"cloud_full_test.py run {run_id} " + ("INTERRUPTED" if interrupted else "complete")
+         + f" -- {len(results)}/{total} case(s) ran")
     for status, count in counts.items():
         print(f"  {status}: {count}")
     print(f"Results directory: {run_dir}")
@@ -1254,6 +1268,8 @@ def main(argv: Optional[list] = None) -> int:
     if ner_results:
         print(f"  negative combined report: {run_dir / 'negative' / 'combined_report.html'}")
     print("=" * 60 + "\n")
+    if interrupted:
+        return 130  # conventional 128+SIGINT exit code
     return 1 if (counts.get("FAIL", 0) or counts.get("CRASH", 0)) else 0
 
 
