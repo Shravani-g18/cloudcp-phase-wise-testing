@@ -452,10 +452,12 @@ def discover_datasets(args: argparse.Namespace) -> list[str]:
     spec_dir = Path(args.spec_dir)
 
     # Manifest can be next to the spec directory or under its parent.
+    # dataset_cloudcp/ is a SIBLING of CloudCpCliTesting/ (i.e. HERE.parent), not
+    # nested inside it -- HERE / "dataset_cloudcp" never resolves on this repo layout.
     candidates = [
         spec_dir / "manifest.json",
         spec_dir.parent / "manifest.json",
-        HERE / "dataset_cloudcp" / "spec_files" / "manifest.json",
+        HERE.parent / "dataset_cloudcp" / "spec_files" / "manifest.json",
     ]
 
     manifest = next((p for p in candidates if p.is_file()), None)
@@ -490,7 +492,7 @@ def discover_datasets(args: argparse.Namespace) -> list[str]:
     # Last-resort filesystem fallback.
     roots = [
         spec_dir,
-        HERE / "dataset_cloudcp" / "spec_files",
+        HERE.parent / "dataset_cloudcp" / "spec_files",
     ]
 
     found: set[str] = set()
@@ -1216,7 +1218,9 @@ def main(argv: list[str] | None = None) -> int:
     started = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
 
     try:
-        datasets = discover_datasets(args)
+        # --negative-only never touches the dataset catalog, so don't fail the
+        # whole run over an unresolved/missing manifest that isn't needed.
+        datasets = [] if args.skip_transfers else discover_datasets(args)
     except Exception as exc:
         print(f"DATASET CATALOG ERROR: {exc}")
         return 2
