@@ -1182,6 +1182,32 @@ class NegEnvironmentManager:
             state = self.bryck_state()
         return state
 
+    def state_bucket(self, timeout: int = 0) -> str:
+        """Classifies the CURRENT bryck_state() into 'mounted', 'ejected'
+        (covers Ejected/Removed), or 'other' -- callers branch on this instead
+        of blindly issuing eject/mount/format regardless of what the device is
+        already doing. If `timeout` > 0, polls until the state resolves to a
+        known bucket or the timeout elapses (for a device mid-transition)."""
+        if self.dry_run:
+            return "other"
+
+        def _bucket_of(raw: str) -> str:
+            s = raw.strip().lower()
+            if s == "mounted":
+                return "mounted"
+            if s in {"ejected", "removed"}:
+                return "ejected"
+            return "other"
+
+        bucket = _bucket_of(self.bryck_state())
+        if bucket != "other" or timeout <= 0:
+            return bucket
+        deadline = time.time() + timeout
+        while bucket == "other" and time.time() < deadline:
+            time.sleep(self.poll_interval)
+            bucket = _bucket_of(self.bryck_state())
+        return bucket
+
     def ensure_mounted(self) -> bool:
         if self.dry_run:
             return True
@@ -1717,20 +1743,30 @@ def _neg_master_handler(direction: str) -> Callable:
                                      "(no operation is issued against an unconfirmed/transitional state).",
                              actual="; ".join(notes), reason=reason, commands=[c.as_dict() for c in env.commands])
 
-        # 1. Baseline state.
+        # 1. Baseline state -- classify it before deciding what (if anything) to do.
         baseline_state = env.bryck_state()
-        notes.append(f"baseline bryck_state={baseline_state!r}")
+        bucket = env.state_bucket()
+        notes.append(f"baseline bryck_state={baseline_state!r} (bucket={bucket!r})")
 
-        # 2. Eject if mounted, then VERIFY the eject actually completed before
-        # doing anything else (format on top of a still-'Ejecting' device is the
-        # #1 cause of spurious format failures -- never assume, always confirm).
-        if baseline_state.strip().lower() == "mounted":
+        # 2. Only eject if currently Mounted; if already Ejected/Removed, skip the
+        # eject step entirely instead of issuing it blindly. If the state is
+        # neither (e.g. mid-transition), poll until it resolves before deciding.
+        if bucket == "other":
+            notes.append(f"state {baseline_state!r} is neither Mounted nor Ejected/Removed; polling for it to settle")
+            bucket = env.state_bucket(timeout=env.action_timeout)
+            notes.append(f"state resolved to bucket={bucket!r}")
+
+        if bucket == "mounted":
             eject_cmd = env.eject_bryck()
-            notes.append(f"eject (baseline): rc={eject_cmd.rc}")
+            notes.append(f"eject (currently Mounted): rc={eject_cmd.rc}")
             ejected_state = env.wait_for_bryck_state({"ejected", "removed"}, timeout=env.action_timeout)
             notes.append(f"verify NOT mounted after eject: bryck_state={ejected_state!r}")
             if ejected_state.strip().lower() not in {"ejected", "removed"}:
                 return fail(f"device never reached Ejected/Removed after eject (stuck at {ejected_state!r})")
+        elif bucket == "ejected":
+            notes.append("already Ejected/Removed; skipping eject step")
+        else:
+            return fail(f"could not determine a known Bryck state before format (state={baseline_state!r})")
 
         # 3. Format, retried on a bounded deadline (a just-ejected device can stay
         # in 'Ejecting' well past action_timeout), then VERIFY it is not mounted
@@ -1744,14 +1780,21 @@ def _neg_master_handler(direction: str) -> Callable:
         if post_format_state.strip().lower() not in {"ejected", "removed"}:
             return fail(f"device not in Ejected/Removed immediately after format (state={post_format_state!r})")
 
-        # 4. Mount, retried on a bounded deadline, then VERIFY Mounted before
-        # configuring cloud or generating any dataset (never generate data
-        # against an unconfirmed mount state).
-        mount_cmd = env.mount_with_retry(deadline_sec=300)
-        notes.append(f"mount: {'OK' if mount_cmd.passed else 'FAIL'} (rc={mount_cmd.rc})")
-        if not mount_cmd.passed:
-            return fail("mount step failed (device never accepted mount within the 300s retry deadline)")
-        mounted_state = env.wait_for_bryck_state({"mounted"}, timeout=env.action_timeout)
+        # 4. Only mount if currently Ejected/Removed; if somehow already Mounted
+        # (unexpected right after format), skip the mount step instead of
+        # issuing it blindly, then VERIFY Mounted before configuring cloud or
+        # generating any dataset (never generate data against an unconfirmed
+        # mount state).
+        pre_mount_bucket = env.state_bucket()
+        if pre_mount_bucket == "mounted":
+            notes.append("already Mounted right after format (unexpected); skipping mount step")
+            mounted_state = "Mounted"
+        else:
+            mount_cmd = env.mount_with_retry(deadline_sec=300)
+            notes.append(f"mount: {'OK' if mount_cmd.passed else 'FAIL'} (rc={mount_cmd.rc})")
+            if not mount_cmd.passed:
+                return fail("mount step failed (device never accepted mount within the 300s retry deadline)")
+            mounted_state = env.wait_for_bryck_state({"mounted"}, timeout=env.action_timeout)
         notes.append(f"verify Mounted after mount: bryck_state={mounted_state!r}")
         if mounted_state.strip().lower() != "mounted":
             return fail(f"device never reached Mounted after mount (state={mounted_state!r})")
@@ -1779,13 +1822,16 @@ def _neg_master_handler(direction: str) -> Callable:
                 _neg_master_run_leg(env, ctx, "upload", notes, generate=True)
             download_tid = _neg_master_run_leg(env, ctx, "download", notes, generate=False)
 
-        # 7. Cleanup -- deconfigure/eject, each followed by its own state check
+        # 7. Cleanup -- deconfigure, then only eject if currently Mounted
         # (best-effort: recorded but never overrides the flow's own PASS/FAIL).
         env.deconfigure_cloud()
         notes.append("deconfigure (cleanup): done")
-        eject_cleanup = env.eject_bryck()
-        final_state = env.wait_for_bryck_state({"ejected", "removed"}, timeout=env.action_timeout)
-        notes.append(f"eject (cleanup): rc={eject_cleanup.rc}; final bryck_state={final_state!r}")
+        if env.state_bucket() == "mounted":
+            eject_cleanup = env.eject_bryck()
+            final_state = env.wait_for_bryck_state({"ejected", "removed"}, timeout=env.action_timeout)
+            notes.append(f"eject (cleanup): rc={eject_cleanup.rc}; final bryck_state={final_state!r}")
+        else:
+            notes.append("already not Mounted; skipping cleanup eject step")
         for t in (upload_tid, download_tid):
             if t:
                 env.cleanup_transfer(t)
