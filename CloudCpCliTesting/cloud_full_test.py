@@ -564,7 +564,8 @@ def run_leg(args: argparse.Namespace, mode_label: str, case_dir: pathlib.Path, r
 
         if args.pause_resume and args.verify_after_completion and not args.dry_run and transfer_id != "DRYRUN-ID":
             verify_pause_after_completion(args, transfer_id, final_state, redact, tcr)
-    except RuntimeError as exc:
+    except Exception as exc:  # noqa: BLE001 -- any failure (expected RuntimeError or a genuine bug)
+        # must still fall through to the perf-report block below, not just RuntimeError.
         error = str(exc)
         LOG.error("%s failed: %s", mode_label, error)
         tcr.notes.append(f"ERROR: {error}")
