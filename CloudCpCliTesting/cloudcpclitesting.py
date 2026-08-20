@@ -1148,7 +1148,8 @@ class NegEnvironmentManager:
                 proc = subprocess.run(argv, cwd=str(BRYCK_CLI_DIR), capture_output=True, text=True, timeout=timeout)
                 cmd = NegCmd(label, argv, proc.returncode, proc.stdout or "", proc.stderr or "", time.time() - started)
             except subprocess.TimeoutExpired as exc:
-                cmd = NegCmd(label, argv, -1, exc.stdout or "", f"TIMEOUT after {timeout}s: {exc}", time.time() - started)
+                timeout_stdout = exc.stdout if isinstance(exc.stdout, str) else (exc.stdout or b"").decode("utf-8", "replace")
+                cmd = NegCmd(label, argv, -1, timeout_stdout, f"TIMEOUT after {timeout}s: {exc}", time.time() - started)
         self.commands.append(cmd)
         return cmd
 
@@ -1396,7 +1397,7 @@ class NegResult:
     reason: str = ""
     dataset_used: str = ""
     duration: float = 0.0
-    commands: List[dict] = None
+    commands: Optional[List[dict]] = None
 
     def __post_init__(self):
         if self.commands is None:
