@@ -1207,6 +1207,22 @@ class NegEnvironmentManager:
         configure = self._run_py("configure", "bryck_cloud_configure.py", ["--login", self.login, "--params", self.params])
         return configure.passed or self.dry_run
 
+    def format_bryck(self) -> NegCmd:
+        """Unconditional format attempt (used by the MASTER flow's baseline setup
+        and as a during-active-transfer rejection probe -- unlike ensure_mounted/
+        ensure_ejected, this always issues the command."""
+        return self._run_py("format", "bryck_format.py", ["--login", self.login, "--params", self.format_mount_params],
+                            timeout=self.action_timeout)
+
+    def mount_bryck(self) -> NegCmd:
+        """Unconditional mount attempt (see format_bryck)."""
+        return self._run_py("mount", "bryck_mount.py", ["--login", self.login, "--params", self.format_mount_params],
+                            timeout=self.action_timeout)
+
+    def eject_bryck(self) -> NegCmd:
+        """Unconditional eject attempt (see format_bryck)."""
+        return self._run_py("eject", "bryck_eject_unmount.py", ["--login", self.login], timeout=self.action_timeout)
+
     def deconfigure_cloud(self) -> NegCmd:
         try:
             cloud_type = json.loads(pathlib.Path(self.params).read_text(encoding="utf-8")).get("cloud_type", "aws")
@@ -1244,6 +1260,19 @@ class NegEnvironmentManager:
         while time.time() < deadline:
             state, _cmd = self.transfer_status(tid)
             if state in NEG_TERMINAL_STATES:
+                return state
+            time.sleep(self.poll_interval)
+        return state
+
+    def wait_for_state(self, tid: str, states: set, timeout: int) -> str:
+        """Generic poll for any of `states` (e.g. {'IN_PROGRESS'}), not just terminal ones."""
+        if self.dry_run:
+            return next(iter(states))
+        deadline = time.time() + timeout
+        state = "UNKNOWN"
+        while time.time() < deadline:
+            state, _cmd = self.transfer_status(tid)
+            if state in states:
                 return state
             time.sleep(self.poll_interval)
         return state
@@ -1554,6 +1583,130 @@ def _neg_clean_handler(case_id: str) -> Callable:
     return handler
 
 
+# ---- MASTER section: P0 end-to-end upload/download/both flows --------------
+# Ported from cloud_transfer_negative_test_runner.py's run_master_flow()/
+# run_master_flow_both(): one continuous narrative (format -> mount ->
+# configure -> transfer -> pause/resume -> attempt destructive/lifecycle ops
+# mid-transfer -> completion -> report -> deconfigure -> eject -> cleanup)
+# instead of independent, isolated catalog cases. Not in NEGATIVE_TEST_PLAN.md's
+# section numbering; registered under its own "MASTER" section.
+
+def _neg_master_run_leg(env: NegEnvironmentManager, ctx: NegExecContext, mode: str,
+                        notes: List[str], generate: bool) -> Optional[str]:
+    """Runs one upload/download leg end-to-end and returns its transfer id, or
+    None if a required step failed (aborting just this leg, not the whole flow)."""
+    if generate:
+        try:
+            env.datasets.materialize(ctx.args.dataset_requirement, env.output_base, env.logger, env.dry_run,
+                                     spec_file=env.spec_file)
+            notes.append("datagen: OK")
+        except (RuntimeError, SystemExit) as exc:
+            notes.append(f"datagen: FAIL ({exc})")
+            return None
+
+    init_cmd, tid = env.initiate_transfer(mode)
+    notes.append(f"initiate {mode}: {'OK' if init_cmd.passed else 'FAIL'} (rc={init_cmd.rc})")
+    if not tid:
+        notes.append(f"initiate {mode}: no transfer id obtained; aborting this leg")
+        return None
+
+    state = env.wait_for_state(tid, {"IN_PROGRESS", "COMPLETED"}, timeout=120)
+    notes.append(f"wait for IN_PROGRESS: state={state}")
+    env.download_report(tid, str(ctx.work_dir / f"{mode}_in_progress_report"))
+
+    if state == "IN_PROGRESS":
+        pause_cmd = env.pause_transfer(tid)
+        notes.append(f"pause: {'OK' if pause_cmd.passed else 'FAIL'} (rc={pause_cmd.rc})")
+        paused_state, _ = env.transfer_status(tid)
+        notes.append(f"verify PAUSED: state={paused_state}")
+        env.download_report(tid, str(ctx.work_dir / f"{mode}_paused_report"))
+
+        pause_again = env.pause_transfer(tid)
+        notes.append(f"pause again (idempotence check): rc={pause_again.rc}")
+
+        resume_cmd = env.resume_transfer(tid)
+        notes.append(f"resume: {'OK' if resume_cmd.passed else 'FAIL'} (rc={resume_cmd.rc})")
+        env.wait_for_state(tid, {"IN_PROGRESS", "COMPLETED"}, timeout=120)
+        env.download_report(tid, str(ctx.work_dir / f"{mode}_resumed_report"))
+
+        # Destructive/lifecycle attempts while the transfer is active -- every one of
+        # these is expected to be rejected (or at least not silently corrupt state).
+        fmt_attempt = env.format_bryck()
+        notes.append(f"attempt FORMAT during active transfer: rejected={not fmt_attempt.passed} (rc={fmt_attempt.rc})")
+        eject_attempt = env.eject_bryck()
+        notes.append(f"attempt EJECT during active transfer: rejected={not eject_attempt.passed} (rc={eject_attempt.rc})")
+        mount_attempt = env.mount_bryck()
+        notes.append(f"attempt MOUNT during active transfer: rc={mount_attempt.rc}")
+        deconf_attempt = env.deconfigure_cloud()
+        notes.append(f"attempt AWS DECONFIGURE during active transfer: rejected={not deconf_attempt.passed} (rc={deconf_attempt.rc})")
+        notes.append(f"post-attempt integrity check: bryck_state={env.bryck_state()!r}")
+
+    final_state = env.wait_for_terminal(tid, timeout=7200)
+    notes.append(f"wait for completion: final_state={final_state}")
+    env.download_report(tid, str(ctx.work_dir / f"{mode}_completed_report"))
+    return tid
+
+
+def _neg_master_handler(direction: str) -> Callable:
+    def handler(env: NegEnvironmentManager, ctx: NegExecContext) -> NegResult:
+        tc = NEG_CATALOG[f"MASTER-{direction.upper()}"]
+        if not ctx.args.live:
+            return _neg_blocked(tc, "requires --live against the dedicated Bryck device")
+
+        notes: List[str] = []
+        env.commands = []
+
+        def fail(reason: str) -> NegResult:
+            return NegResult(test_id=tc.id, section="MASTER", name=tc.name, status="FAIL",
+                             expected="Format/mount/configure baseline is established before the transfer leg(s).",
+                             actual="; ".join(notes), reason=reason, commands=[c.as_dict() for c in env.commands])
+
+        if env.bryck_state().strip().lower() == "mounted":
+            notes.append(f"eject (baseline): rc={env.eject_bryck().rc}")
+
+        fmt_cmd = env.format_bryck()
+        notes.append(f"format: {'OK' if fmt_cmd.passed else 'FAIL'} (rc={fmt_cmd.rc})")
+        if not fmt_cmd.passed:
+            return fail("format step failed")
+
+        mount_cmd = env.mount_bryck()
+        notes.append(f"mount: {'OK' if mount_cmd.passed else 'FAIL'} (rc={mount_cmd.rc})")
+        if not mount_cmd.passed:
+            return fail("mount step failed")
+
+        tier = env.datasets.resolve(ctx.args.dataset_requirement)
+        configured = env.configure_cloud(tier, ctx.cloud_ops_cfg)
+        notes.append(f"configure AWS: {'OK' if configured else 'FAIL'}")
+        if not configured:
+            return fail("cloud configure step failed")
+
+        upload_tid = download_tid = None
+        if direction in ("upload", "both"):
+            upload_tid = _neg_master_run_leg(env, ctx, "upload", notes, generate=True)
+        if direction in ("download", "both"):
+            if direction == "download":
+                # Download leg needs source data already in the bucket -- seed it first.
+                _neg_master_run_leg(env, ctx, "upload", notes, generate=True)
+            download_tid = _neg_master_run_leg(env, ctx, "download", notes, generate=False)
+
+        env.deconfigure_cloud()
+        notes.append("deconfigure (cleanup): done")
+        env.eject_bryck()
+        notes.append("eject (cleanup): done")
+        for t in (upload_tid, download_tid):
+            if t:
+                env.cleanup_transfer(t)
+
+        needed = {"upload": upload_tid, "download": download_tid, "both": upload_tid and download_tid}[direction]
+        ok = bool(needed)
+        return NegResult(test_id=tc.id, section="MASTER", name=tc.name, status="PASS" if ok else "FAIL",
+                         expected=f"P0 master {direction} flow completes end-to-end: format/mount/configure -> "
+                                  f"transfer -> pause/resume -> blocked destructive attempts -> completion -> cleanup.",
+                         actual="; ".join(notes), reason="flow completed" if ok else "one or more required leg(s) failed",
+                         dataset_used=tier, commands=[c.as_dict() for c in env.commands])
+    return handler
+
+
 # -----------------------------------------------------------------------------
 # Catalog: every ID from NEGATIVE_TEST_PLAN.md (sections 7-28)
 # -----------------------------------------------------------------------------
@@ -1777,6 +1930,17 @@ def _neg_build_catalog() -> Dict[str, NegTestCase]:
     }
     for cid, name in flow_names.items():
         add(cid, "F", name, None, "\u00a728")
+
+    master_names = {
+        "MASTER-UPLOAD": "P0 end-to-end upload flow (format/mount/configure/upload/pause/resume/"
+                        "blocked-destructive-attempts/completion/cleanup)",
+        "MASTER-DOWNLOAD": "P0 end-to-end download flow (seed upload, then format/mount/configure/download/"
+                          "pause/resume/blocked-destructive-attempts/completion/cleanup)",
+        "MASTER-BOTH": "P0 end-to-end both flow (upload leg then download leg in one continuous session)",
+    }
+    for cid, name in master_names.items():
+        add(cid, "MASTER", name, lambda case_id: _neg_master_handler(case_id.split("-", 1)[1].lower()),
+            "master flow (not in NEGATIVE_TEST_PLAN.md)")
 
     return catalog
 

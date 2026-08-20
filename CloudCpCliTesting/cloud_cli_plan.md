@@ -784,7 +784,7 @@ pieces:
 |---|---|
 | **Dataset Manager** (`NegDatasetManager`) | Picks a fixture dataset from `dataset_cloudcp/spec_files/manifest.json` by shorthand (`small_fast`=`DS-P2-06`/9 files, `empty`=`DS-P8-01`/0 files, `single_file`=`DS-P9-01`/1 file) or an explicit `DS-P*` id — or, with `--spec-file`, materializes one exact YAML spec (or a whole directory of specs) instead. |
 | **Environment Manager** (`NegEnvironmentManager`) | Runs the real `bryckclient-cli/*.py` scripts (mount/eject/configure/deconfigure/initiate/pause/resume/cancel/status/report) and records every command, return code, stdout/stderr and duration. |
-| **Test Case Manager** (`NEG_CATALOG` / `NEG_CATALOG_ORDER`) | Every ID from `NEGATIVE_TEST_PLAN.md` §7-28 (CLI, AUTH, TID, AWS, PATH, LIFE, DATASET, XFER, DOWNLOAD, STATE, RACE, DUP, REPORT, FAULT, REC, VERIFY, INT, CLEAN, MGMT, SVC, SM, F — 308 total), each with a stable `[n]` order number. |
+| **Test Case Manager** (`NEG_CATALOG` / `NEG_CATALOG_ORDER`) | Every ID from `NEGATIVE_TEST_PLAN.md` §7-28 (CLI, AUTH, TID, AWS, PATH, LIFE, DATASET, XFER, DOWNLOAD, STATE, RACE, DUP, REPORT, FAULT, REC, VERIFY, INT, CLEAN, MGMT, SVC, SM, F — 308 total) plus a `MASTER` section (`MASTER-UPLOAD`/`MASTER-DOWNLOAD`/`MASTER-BOTH`, 3 more — see §21.7), each with a stable `[n]` order number. |
 | **Executor** (`_neg_run_case`, `run_negative_suite`) | Selects which IDs to run (`--test`/`--section`/`--range`/`--all-negative`), executes them in order, and never lets one case's exception abort the rest. |
 | **Report Generator** (`_neg_write_reports`) | Writes `summary.json` + `summary.html` under `results/negative/<run-id>/`, in the same style as `cloud_transfer_only.py`'s reports. |
 
@@ -876,4 +876,36 @@ python3 cloudcpclitesting.py --all-negative --live \
   --spec-file dataset_cloudcp/spec_files/DS-P9-01 \
   --run-id nightly_2026_08_20
 ```
+
+### 21.7 P0 master end-to-end flows (`MASTER-UPLOAD` / `MASTER-DOWNLOAD` / `MASTER-BOTH`)
+
+Ported from `cloud_transfer_negative_test_runner.py`'s `run_master_flow()`/
+`run_master_flow_both()`. Unlike every other section (independent, isolated
+cases), these three run one continuous narrative in a single test case:
+
+```
+eject (if mounted) -> format -> mount -> configure AWS -> generate dataset ->
+initiate transfer -> wait IN_PROGRESS -> report -> pause -> verify PAUSED ->
+report -> pause again (idempotence check) -> resume -> wait IN_PROGRESS ->
+report -> attempt FORMAT/EJECT/MOUNT/DECONFIGURE while active (expected to be
+rejected or at least not corrupt state) -> wait COMPLETED -> report ->
+deconfigure -> eject -> cleanup
+```
+
+- `MASTER-UPLOAD` runs the upload leg only.
+- `MASTER-DOWNLOAD` seeds the bucket with an upload leg first, then runs the
+  download leg (a download needs source data to already exist remotely).
+- `MASTER-BOTH` runs the upload leg then the download leg in the same
+  mounted+configured session.
+
+Every step is recorded as one command in that case's `commands` list (so the
+whole narrative is visible in `summary.html`/`summary.json` for that single
+`MASTER-*` row), and `expected`/`actual`/`reason` summarize the full flow.
+Like every other case, `--live` is required (dry-run reports `BLOCKED`):
+
+```bash
+python3 cloudcpclitesting.py --test MASTER-UPLOAD --live
+python3 cloudcpclitesting.py --section MASTER --live
+```
+
 
