@@ -545,6 +545,7 @@ def run_leg(args: argparse.Namespace, mode_label: str, case_dir: pathlib.Path, r
     transfer_id: Optional[str] = None
     final_state = "UNKNOWN"
     error: Optional[str] = None
+    was_interrupted = False
     try:
         transfer_id = initiate_transfer_cli(args, src, dst, redact, tcr)
         if not transfer_id:
@@ -567,6 +568,13 @@ def run_leg(args: argparse.Namespace, mode_label: str, case_dir: pathlib.Path, r
         error = str(exc)
         LOG.error("%s failed: %s", mode_label, error)
         tcr.notes.append(f"ERROR: {error}")
+    except KeyboardInterrupt:
+        # Ctrl+C mid-transfer: do NOT skip the perf report below -- record whatever was
+        # captured up to this point, then re-raise so the run still stops as expected.
+        was_interrupted = True
+        LOG.warning("%s interrupted (Ctrl+C) mid-transfer (transfer_id=%s, last known state=%s) -- "
+                   "still writing the perf report for what was captured so far", mode_label, transfer_id, final_state)
+        tcr.notes.append(f"INTERRUPTED by user (Ctrl+C); transfer_id={transfer_id} last known state={final_state}")
 
     perf_data = None
     logs_collected = args.dry_run or collector is None
@@ -597,9 +605,10 @@ def run_leg(args: argparse.Namespace, mode_label: str, case_dir: pathlib.Path, r
                 or (cloudcp_raw.is_file() and cloudcp_raw.stat().st_size > 0)
             )
 
-    tcr.status = "PASS" if (args.dry_run or (error is None and final_state == TERMINAL_SUCCESS)) else \
+    tcr.status = "INTERRUPTED" if was_interrupted else (
+        "PASS" if (args.dry_run or (error is None and final_state == TERMINAL_SUCCESS)) else
         ("BLOCKED" if error else
-         ("TIMEOUT" if final_state in STILL_RUNNING_STATES else "FAIL"))
+         ("TIMEOUT" if final_state in STILL_RUNNING_STATES else "FAIL")))
     tcr.expected = "Transfer reaches COMPLETED"
     tcr.actual = f"final_state={final_state}" + (f", error={error}" if error else "")
     if tcr.status == "TIMEOUT":
@@ -607,6 +616,8 @@ def run_leg(args: argparse.Namespace, mode_label: str, case_dir: pathlib.Path, r
                          f"{final_state} -- not a product failure, just needs more time; re-run with a "
                          f"larger --poll-timeout or re-check status separately.")
     tcr.notes.append(f"transfer_id={transfer_id} final_state={final_state}")
+    if was_interrupted:
+        raise KeyboardInterrupt()  # perf report is safely written above; now let the run actually stop
 
     return {
         "tcr": tcr, "transfer_id": transfer_id, "final_state": final_state, "error": error,
@@ -1203,13 +1214,17 @@ def main(argv: Optional[list] = None) -> int:
                     collector = perf_mod.TransferPerfCollector(neg_dir, perf_cfg, args.dry_run) if args.perf_capture else None
                     if collector is not None:
                         collector.start()
-                    ner_result = run_negative_case_via_ner(ner_mgr, args, ner_work_dir, entry["id"])
-                    if collector is not None:
-                        perf_data = collector.finish(
-                            entry["id"], csv_path=None, test_id=entry["id"], tier=entry.get("section", ""),
-                            mode="negative", description=entry["name"], gen_summary=None,
-                        )
-                        LOG.info("[%s] perf report: %s", entry["id"], perf_data.get("html_report"))
+                    try:
+                        ner_result = run_negative_case_via_ner(ner_mgr, args, ner_work_dir, entry["id"])
+                    finally:
+                        # Always finish the perf capture, even on Ctrl+C mid-case, so whatever was
+                        # captured up to the interrupt is still written instead of silently dropped.
+                        if collector is not None:
+                            perf_data = collector.finish(
+                                entry["id"], csv_path=None, test_id=entry["id"], tier=entry.get("section", ""),
+                                mode="negative", description=entry["name"], gen_summary=None,
+                            )
+                            LOG.info("[%s] perf report: %s", entry["id"], perf_data.get("html_report"))
                     ner_results.append(ner_result)
                     ner_case_ids.append(entry["id"])
                     result = {"case_id": entry["id"], "status": ner_result.status}
