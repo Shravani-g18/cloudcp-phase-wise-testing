@@ -20,7 +20,7 @@ naming:
   length: 12
 
 flat:
-  num_files: 12
+  num_files: 
 
 size:
   type: range
