@@ -1235,45 +1235,34 @@ class NegEnvironmentManager:
         return self._run_py("eject", "bryck_eject_unmount.py", ["--login", self.login],
                             timeout=self.action_timeout).passed
 
-    def format_with_retry(self, deadline_sec: int = 1800, per_call_timeout: int = 900) -> NegCmd:
-        """Format the Bryck. A real hardware format can legitimately run far
-        longer than a normal action_timeout -- if the subprocess call itself
-        times out that does NOT mean the device rejected the format, it likely
-        means formatting is still genuinely in progress. So on a timeout, POLL
-        bryck_state() for it to settle instead of blindly re-issuing bryck_format.py
-        (which would restart/duplicate a real, still-running format job -- this
-        was the actual bug: format kept re-triggering every poll_interval while
-        the device was still busy formatting from the first call). Only a real,
-        non-timeout rejection (e.g. device still settling right after eject) is
-        retried by re-issuing the format command."""
-        cmd = self.format_bryck(timeout=per_call_timeout)
+    def format_with_retry(self, deadline_sec: int = 1800) -> NegCmd:
+        """Format the Bryck. Issued with NO subprocess timeout (timeout=None),
+        so bryck_format.py blocks until the real hardware format actually
+        finishes and its own return code reflects reality -- no need to guess
+        whether a failure means 'still formatting' vs 'rejected' (that guessing
+        was the actual bug: an artificially short subprocess timeout made a
+        still-running format look like a failure, causing it to be re-issued
+        every poll_interval on top of the one still running). Only retried on
+        a genuine rejection (e.g. device still settling right after eject),
+        on a bounded deadline."""
+        cmd = self.format_bryck(timeout=None)
         if self.dry_run or cmd.passed:
             return cmd
         deadline = time.time() + deadline_sec
-        while time.time() < deadline:
-            if cmd.stderr.startswith("TIMEOUT"):
-                settled = self.wait_for_bryck_state({"ejected", "removed"}, timeout=min(60, deadline_sec))
-                if settled.strip().lower() in {"ejected", "removed"}:
-                    return NegCmd(cmd.label, cmd.argv, 0, cmd.stdout, cmd.stderr, cmd.duration)
-                continue
+        while not cmd.passed and time.time() < deadline:
             time.sleep(self.poll_interval)
-            cmd = self.format_bryck(timeout=per_call_timeout)
+            cmd = self.format_bryck(timeout=None)
         return cmd
 
-    def mount_with_retry(self, deadline_sec: int = 900, per_call_timeout: int = 300) -> NegCmd:
-        """Same stuck-transitional/still-running race as format_with_retry, for mount."""
-        cmd = self.mount_bryck(timeout=per_call_timeout)
+    def mount_with_retry(self, deadline_sec: int = 900) -> NegCmd:
+        """Same no-artificial-timeout approach as format_with_retry, for mount."""
+        cmd = self.mount_bryck(timeout=None)
         if self.dry_run or cmd.passed:
             return cmd
         deadline = time.time() + deadline_sec
-        while time.time() < deadline:
-            if cmd.stderr.startswith("TIMEOUT"):
-                settled = self.wait_for_bryck_state({"mounted"}, timeout=min(60, deadline_sec))
-                if settled.strip().lower() == "mounted":
-                    return NegCmd(cmd.label, cmd.argv, 0, cmd.stdout, cmd.stderr, cmd.duration)
-                continue
+        while not cmd.passed and time.time() < deadline:
             time.sleep(self.poll_interval)
-            cmd = self.mount_bryck(timeout=per_call_timeout)
+            cmd = self.mount_bryck(timeout=None)
         return cmd
 
     def configure_cloud_with_retry(self, tier: str, base_cloud_ops: dict, deadline_sec: int = 120) -> bool:
@@ -1786,26 +1775,27 @@ def _neg_master_handler(direction: str) -> Callable:
             return fail(f"could not determine a known Bryck state before format (state={baseline_state!r})")
 
         # 3. Format, retried on a bounded deadline (a stuck 'Ejecting' device, or a
-        # real hardware format that's still genuinely running, are both handled by
-        # format_with_retry itself), then VERIFY it is not mounted immediately
-        # afterward before attempting mount.
+        # 3. Format, retried on a bounded deadline (a stuck 'Ejecting' device is
+        # handled by format_with_retry itself via a real, non-timed-out rc), then
+        # check the resulting state -- on this hardware, format can legitimately
+        # leave the device already Mounted (not just Ejected/Removed), so both
+        # are accepted here; step 4 below skips mount if it's already Mounted.
         fmt_cmd = env.format_with_retry()
         notes.append(f"format: {'OK' if fmt_cmd.passed else 'FAIL'} (rc={fmt_cmd.rc})")
         if not fmt_cmd.passed:
             return fail("format step failed (device never confirmed formatted within the retry deadline)")
-        post_format_state = env.wait_for_bryck_state({"ejected", "removed"}, timeout=60)
-        notes.append(f"verify NOT mounted after format: bryck_state={post_format_state!r}")
-        if post_format_state.strip().lower() not in {"ejected", "removed"}:
-            return fail(f"device not in Ejected/Removed immediately after format (state={post_format_state!r})")
+        post_format_bucket = env.state_bucket(timeout=60)
+        notes.append(f"state after format: bucket={post_format_bucket!r}")
+        if post_format_bucket == "other":
+            return fail(f"device state unresolved (neither Mounted nor Ejected/Removed) after format")
 
-        # 4. Only mount if currently Ejected/Removed; if somehow already Mounted
-        # (unexpected right after format), skip the mount step instead of
-        # issuing it blindly, then VERIFY Mounted before configuring cloud or
-        # generating any dataset (never generate data against an unconfirmed
-        # mount state).
-        pre_mount_bucket = env.state_bucket()
+        # 4. Only mount if currently Ejected/Removed; if format already left the
+        # device Mounted, skip the mount step instead of issuing it blindly, then
+        # VERIFY Mounted before configuring cloud or generating any dataset
+        # (never generate data against an unconfirmed mount state).
+        pre_mount_bucket = post_format_bucket
         if pre_mount_bucket == "mounted":
-            notes.append("already Mounted right after format (unexpected); skipping mount step")
+            notes.append("already Mounted right after format; skipping mount step")
             mounted_state = "Mounted"
         else:
             mount_cmd = env.mount_with_retry()
