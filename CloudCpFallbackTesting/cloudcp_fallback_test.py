@@ -1565,6 +1565,32 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     paths.add_argument("--src-base", default=DEF_SRC_BASE)
     paths.add_argument("--bucket-base", default=DEF_BUCKET_BASE)
     paths.add_argument("--dl-base", default=DEF_DL_BASE)
+
+    # -- component-level fallback tests (fallback_worker + mp_batch_retry) -----
+    # These run the two internal fallback mechanisms in isolation via SSH,
+    # staging their exact on-disk inputs (see plan_cp_component_fallback.md).
+    comp = p.add_argument_group("component tests (internal fallback mechanisms)")
+    comp.add_argument("--component", action="store_true",
+                      help="Run the component fallback suite (fallback_worker + mp_batch_retry).")
+    comp.add_argument("--component-one",
+                      help="Run one/comma-separated component case(s) by # index or id.")
+    comp.add_argument("--component-negative", action="store_true",
+                      help="Run only the component negative cases.")
+    comp.add_argument("--component-list", action="store_true",
+                      help="List all component cases and exit.")
+    comp.add_argument("--heavy", action="store_true",
+                      help="Include heavy datasets (large, scale) in the component suite.")
+    comp.add_argument("--component-bucket", default="omicron",
+                      help="Destination bucket for both component mechanisms (default: omicron).")
+    comp.add_argument("--region", default="us-west-1",
+                      help="AWS region passed to retry_whole_batch (default: us-west-1).")
+    comp.add_argument("--venv-python", default="/opt/bryck/.venv/bryck/bin/python3",
+                      help="Target interpreter that imports bryckcloud.")
+    comp.add_argument("--batchmeta-dir",
+                      default="/opt/bryck/bryckapi/downloads/bcloud_batchmeta",
+                      help="BATCH_FILE_DIR (batch-meta root) on the target.")
+    comp.add_argument("--pool-size", type=int, default=16,
+                      help="Fallback worker --pool-size (default: 16).")
     return p.parse_args(argv)
 
 
@@ -1684,10 +1710,18 @@ def main(argv: list[str] | None = None) -> int:
               + ", ".join(f"{k}={v.fail_pct}/{v.crash_pct}" for k, v in PROFILES.items()))
         return 0
 
+    if args.component_list:
+        from cloudcp_component_fallback_test import print_component_list
+        print_component_list()
+        return 0
+
+    component_mode = bool(args.component or args.component_one or args.component_negative)
+
     selected = select_cases(args, catalog)
-    if not selected:
+    if not selected and not component_mode:
         print("No cases selected. Use --all, --one, --from/--to, --negative, "
-              "or --list.", file=sys.stderr)
+              "--component, --component-one, --component-negative, or --list.",
+              file=sys.stderr)
         return 2
 
     cli_dir = Path(args.cli_dir)
@@ -1727,6 +1761,24 @@ def main(argv: list[str] | None = None) -> int:
         ssh.connect()
         host = RemoteHost(ssh, dry_run=False)
         host_ip = session.host
+
+    if component_mode:
+        # Delegate to the component-level fallback suite, then tidy up the
+        # shared SSH/API session before returning.
+        try:
+            from cloudcp_component_fallback_test import run_component_suite
+            return run_component_suite(args, host, session)
+        finally:
+            if session is not None:
+                try:
+                    session.close()
+                except Exception:  # noqa: BLE001
+                    pass
+            if host.ssh is not None:
+                try:
+                    host.ssh.close()
+                except Exception:  # noqa: BLE001
+                    pass
 
     runner = Runner(args, api, host, creds, session=session)
     results: list[dict] = []
