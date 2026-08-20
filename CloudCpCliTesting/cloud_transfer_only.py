@@ -97,6 +97,30 @@ def parse_args(argv: Optional[list] = None) -> argparse.Namespace:
     p.add_argument("--poll-interval", type=int, default=10)
     p.add_argument("--wait-timeout", type=int, default=1800)
     p.add_argument("--action-timeout", type=int, default=90)
+    p.add_argument("--pause-resume", action="store_true",
+                   help="Pause/resume each transfer leg --pause-cycles times while it is IN_PROGRESS "
+                        "(spaced --pause-interval seconds apart -- e.g. shortly after start, mid-transfer, "
+                        "and near the end), plus one post-completion pause/resume verification attempt "
+                        "(expected to be rejected once the transfer is terminal) -- before/around polling "
+                        "on to completion as usual.")
+    p.add_argument("--pause-cycles", type=int, default=3,
+                   help="Number of pause -> wait --pause-duration -> resume cycles to run while the "
+                        "transfer is IN_PROGRESS (default 3: early/middle/late).")
+    p.add_argument("--pause-interval", type=float, default=60,
+                   help="Seconds to let the transfer run again after each resume before the next pause "
+                        "cycle (i.e. spacing between cycles).")
+    p.add_argument("--pause-wait-timeout", type=float, default=120,
+                   help="Seconds to wait for the transfer to reach IN_PROGRESS before attempting to pause "
+                        "it, and to confirm PAUSED/IN_PROGRESS after each pause/resume call. If the "
+                        "transfer reaches a terminal state first (too small/fast to catch mid-flight), "
+                        "any remaining pause/resume cycles are skipped for that leg.")
+    p.add_argument("--pause-duration", type=float, default=10,
+                   help="Seconds to remain paused before resuming, each cycle.")
+    p.add_argument("--no-verify-after-completion", dest="verify_after_completion",
+                   action="store_false", default=True,
+                   help="Skip the post-completion pause/resume verification attempt (on by default when "
+                        "--pause-resume is set) that confirms pause/resume are correctly rejected/no-op "
+                        "once the transfer has already reached a terminal state.")
 
     p.add_argument("--results-dir", default=str(RESULTS_ROOT / "transfer_only"))
     p.add_argument("--run-id", default=None)
@@ -108,6 +132,7 @@ def parse_args(argv: Optional[list] = None) -> argparse.Namespace:
     p.add_argument("--capture-drain", type=float, default=6)
     p.add_argument("--bryck-config-json", default=ccr.DEFAULT_BRYCK_CONFIG_JSON)
     p.add_argument("--transfer-logs-dir", default=ccr.DEFAULT_TRANSFER_LOGS)
+
 
     p.add_argument("--cleanup", action="store_true",
                    help="Delete the generated /bryck data and S3 objects after the transfer. "
@@ -242,6 +267,125 @@ def initiate_transfer_cli(args: argparse.Namespace, src: str, dst: str, redact,
     return str(transfer_id) if transfer_id is not None else None
 
 
+def _cycle_label(index: int, total: int) -> str:
+    if total <= 1:
+        return "single"
+    if index == 0:
+        return "early"
+    if index == total - 1:
+        return "late"
+    return "middle"
+
+
+def _one_pause_resume_cycle(args: argparse.Namespace, transfer_id: str, redact,
+                            tcr: ccr.TestCaseResult, ns: argparse.Namespace, label: str) -> bool:
+    """One pause -> wait --pause-duration -> resume cycle. Returns True if the
+    transfer was confirmed IN_PROGRESS beforehand (i.e. the cycle actually ran),
+    False if it had already reached a terminal state (nothing left to pause)."""
+    deadline = time.time() + args.pause_wait_timeout
+    state = "UNKNOWN"
+    while time.time() < deadline:
+        state, cmd = ccr.get_transfer_status(ns, transfer_id, LOG, redact)
+        tcr.commands.append(cmd.as_dict())
+        if state == "IN_PROGRESS" or state in TERMINAL_STATES:
+            break
+        time.sleep(args.poll_interval)
+
+    if state != "IN_PROGRESS":
+        LOG.warning("transfer %s not IN_PROGRESS for the %r pause/resume cycle (state=%s); skipping",
+                   transfer_id, label, state)
+        tcr.notes.append(f"pause/resume [{label}] skipped: transfer not IN_PROGRESS (state={state})")
+        return False
+
+    pause_cmd = ccr.run_py_script(
+        "bryck_cloud_transfer_pause.py", ["--login", args.login, "--transfer-id", str(transfer_id)],
+        LOG, args.dry_run, redact, args.python_bin)
+    tcr.commands.append(pause_cmd.as_dict())
+    if pause_cmd.returncode != 0:
+        LOG.warning("pause [%s] failed (rc=%s): %s", label, pause_cmd.returncode,
+                   pause_cmd.stderr or pause_cmd.stdout)
+        tcr.notes.append(f"pause [{label}] failed rc={pause_cmd.returncode}")
+        return True
+
+    paused_deadline = time.time() + args.pause_wait_timeout
+    while time.time() < paused_deadline:
+        state, cmd = ccr.get_transfer_status(ns, transfer_id, LOG, redact)
+        tcr.commands.append(cmd.as_dict())
+        if state == "PAUSED":
+            break
+        time.sleep(args.poll_interval)
+    LOG.info("transfer %s state after pause [%s]: %s", transfer_id, label, state)
+    tcr.notes.append(f"paused [{label}] (state={state})")
+
+    if args.pause_duration > 0:
+        time.sleep(args.pause_duration)
+
+    resume_cmd = ccr.run_py_script(
+        "bryck_cloud_transfer_resume.py", ["--login", args.login, "--transfer-id", str(transfer_id)],
+        LOG, args.dry_run, redact, args.python_bin)
+    tcr.commands.append(resume_cmd.as_dict())
+    if resume_cmd.returncode != 0:
+        LOG.warning("resume [%s] failed (rc=%s): %s", label, resume_cmd.returncode,
+                   resume_cmd.stderr or resume_cmd.stdout)
+        tcr.notes.append(f"resume [{label}] failed rc={resume_cmd.returncode}")
+        return True
+
+    resumed_deadline = time.time() + args.pause_wait_timeout
+    while time.time() < resumed_deadline:
+        state, cmd = ccr.get_transfer_status(ns, transfer_id, LOG, redact)
+        tcr.commands.append(cmd.as_dict())
+        if state == "IN_PROGRESS" or state in TERMINAL_STATES:
+            break
+        time.sleep(args.poll_interval)
+    LOG.info("transfer %s state after resume [%s]: %s", transfer_id, label, state)
+    tcr.notes.append(f"resumed [{label}] (state={state})")
+    return True
+
+
+def pause_resume_transfer(args: argparse.Namespace, transfer_id: str, redact,
+                          tcr: ccr.TestCaseResult) -> None:
+    """Run --pause-cycles pause->wait->resume cycles spaced --pause-interval
+    seconds apart while the transfer is IN_PROGRESS (labeled early/middle/late
+    for --pause-cycles=3, the default) -- recording each step/status check as
+    its own command. Stops early (with a note, not an error) once the transfer
+    reaches a terminal state, since there's nothing left to pause."""
+    ns = argparse.Namespace(login=args.login, dry_run=args.dry_run, python_bin=args.python_bin)
+    total = max(1, args.pause_cycles)
+    for i in range(total):
+        label = _cycle_label(i, total)
+        still_running = _one_pause_resume_cycle(args, transfer_id, redact, tcr, ns, label)
+        if not still_running:
+            break
+        if i < total - 1 and args.pause_interval > 0:
+            time.sleep(args.pause_interval)
+
+
+def verify_pause_after_completion(args: argparse.Namespace, transfer_id: str, final_state: str,
+                                  redact, tcr: ccr.TestCaseResult) -> None:
+    """Verification step: once the transfer has reached a terminal state,
+    attempt one more pause then resume and record whether they were correctly
+    rejected/no-op -- purely observational, never affects the leg's PASS/FAIL."""
+    if final_state not in TERMINAL_STATES:
+        tcr.notes.append(f"post-completion pause/resume verification skipped: final_state={final_state!r} "
+                          f"is not terminal")
+        return
+    pause_cmd = ccr.run_py_script(
+        "bryck_cloud_transfer_pause.py", ["--login", args.login, "--transfer-id", str(transfer_id)],
+        LOG, args.dry_run, redact, args.python_bin)
+    tcr.commands.append(pause_cmd.as_dict())
+    resume_cmd = ccr.run_py_script(
+        "bryck_cloud_transfer_resume.py", ["--login", args.login, "--transfer-id", str(transfer_id)],
+        LOG, args.dry_run, redact, args.python_bin)
+    tcr.commands.append(resume_cmd.as_dict())
+    LOG.info("post-completion verification for transfer %s: pause rc=%s, resume rc=%s (transfer was %s)",
+             transfer_id, pause_cmd.returncode, resume_cmd.returncode, final_state)
+    tcr.notes.append(
+        f"post-completion pause/resume verification: pause_rc={pause_cmd.returncode} "
+        f"resume_rc={resume_cmd.returncode} (transfer already {final_state}; both are expected to be "
+        f"rejected/no-op, not accepted as if the transfer were still active)"
+    )
+
+
 def poll_until_terminal(args: argparse.Namespace, transfer_id: str,
                         active_journal_raw: Optional[pathlib.Path], redact,
                         tcr: ccr.TestCaseResult) -> str:
@@ -346,6 +490,33 @@ def find_transfer_report_csv(transfer_logs_dir: str, transfer_id: str, extract_d
         return None
 
 
+def capture_bryck_state(args: argparse.Namespace, redact, tcr: ccr.TestCaseResult, label: str) -> str:
+    """Records the Bryck mount state (Mounted/Ejected/Removed) at a named point
+    in the transfer's lifecycle -- e.g. right before initiating this transfer
+    and right before initiating the next one -- so state drift across a run
+    of many datasets/legs is visible in commands.log/summary.json, not just
+    inferred."""
+    state, cmd = ccr.get_bryck_state(
+        argparse.Namespace(login=args.login, dry_run=args.dry_run, python_bin=args.python_bin), LOG, redact)
+    tcr.commands.append(cmd.as_dict())
+    LOG.info("bryck_state [%s] = %s", label, state)
+    tcr.notes.append(f"bryck_state [{label}] = {state}")
+    return state
+
+
+def capture_transfer_status(args: argparse.Namespace, transfer_id: str, redact,
+                            tcr: ccr.TestCaseResult, label: str) -> str:
+    """Records the transfer's status at a named point -- after initiation, 
+    after each pause/resume, and after completion -- as its own explicit,
+    labeled command/note instead of only being implied by the poll loop."""
+    ns = argparse.Namespace(login=args.login, dry_run=args.dry_run, python_bin=args.python_bin)
+    state, cmd = ccr.get_transfer_status(ns, transfer_id, LOG, redact)
+    tcr.commands.append(cmd.as_dict())
+    LOG.info("transfer %s status [%s] = %s", transfer_id, label, state)
+    tcr.notes.append(f"transfer_status [{label}] = {state}")
+    return state
+
+
 def run_leg(args: argparse.Namespace, mode_label: str, case_dir: pathlib.Path, run_id: str,
            src: str, dst: str, redact, tier: str, gen_summary: dict, dataset_label: str) -> dict:
     """Run one full transfer leg (upload or download) with its own perf
@@ -355,6 +526,9 @@ def run_leg(args: argparse.Namespace, mode_label: str, case_dir: pathlib.Path, r
     tcr = ccr.TestCaseResult(
         test_id=f"{run_id}_{mode_label}", kind=mode_label,
         description=f"transfer-only {mode_label} of {dataset_label}")
+
+    if not args.dry_run:
+        capture_bryck_state(args, redact, tcr, "before_initiate")
 
     perf_cfg = {
         "journal_tag": args.journal_tag, "cloudcp_log": args.cloudcp_log,
@@ -374,9 +548,20 @@ def run_leg(args: argparse.Namespace, mode_label: str, case_dir: pathlib.Path, r
         transfer_id = initiate_transfer_cli(args, src, dst, redact, tcr)
         if not transfer_id:
             raise RuntimeError("transfer initiate did not return a transfer_id")
+        if not args.dry_run and transfer_id != "DRYRUN-ID":
+            capture_transfer_status(args, transfer_id, redact, tcr, "after_initiate")
+
+        if args.pause_resume and not args.dry_run and transfer_id != "DRYRUN-ID":
+            pause_resume_transfer(args, transfer_id, redact, tcr)
 
         final_state = poll_until_terminal(args, transfer_id, active_journal_raw, redact, tcr)
         LOG.info("%s transfer %s finished with state=%s", mode_label, transfer_id, final_state)
+        if not args.dry_run and transfer_id != "DRYRUN-ID":
+            capture_transfer_status(args, transfer_id, redact, tcr, "after_completion")
+            capture_bryck_state(args, redact, tcr, "after_completion")
+
+        if args.pause_resume and args.verify_after_completion and not args.dry_run and transfer_id != "DRYRUN-ID":
+            verify_pause_after_completion(args, transfer_id, final_state, redact, tcr)
     except RuntimeError as exc:
         error = str(exc)
         LOG.error("%s failed: %s", mode_label, error)
