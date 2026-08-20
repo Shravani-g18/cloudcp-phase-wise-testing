@@ -1235,28 +1235,45 @@ class NegEnvironmentManager:
         return self._run_py("eject", "bryck_eject_unmount.py", ["--login", self.login],
                             timeout=self.action_timeout).passed
 
-    def format_with_retry(self, deadline_sec: int = 300) -> NegCmd:
-        """A just-ejected device can stay in 'Ejecting' well past action_timeout
-        before format is accepted -- retry on a bounded deadline instead of
-        giving up after one attempt (mirrors the reference master-flow runner)."""
-        cmd = self.format_bryck()
-        if self.dry_run:
+    def format_with_retry(self, deadline_sec: int = 1800, per_call_timeout: int = 900) -> NegCmd:
+        """Format the Bryck. A real hardware format can legitimately run far
+        longer than a normal action_timeout -- if the subprocess call itself
+        times out that does NOT mean the device rejected the format, it likely
+        means formatting is still genuinely in progress. So on a timeout, POLL
+        bryck_state() for it to settle instead of blindly re-issuing bryck_format.py
+        (which would restart/duplicate a real, still-running format job -- this
+        was the actual bug: format kept re-triggering every poll_interval while
+        the device was still busy formatting from the first call). Only a real,
+        non-timeout rejection (e.g. device still settling right after eject) is
+        retried by re-issuing the format command."""
+        cmd = self.format_bryck(timeout=per_call_timeout)
+        if self.dry_run or cmd.passed:
             return cmd
         deadline = time.time() + deadline_sec
-        while not cmd.passed and time.time() < deadline:
+        while time.time() < deadline:
+            if cmd.stderr.startswith("TIMEOUT"):
+                settled = self.wait_for_bryck_state({"ejected", "removed"}, timeout=min(60, deadline_sec))
+                if settled.strip().lower() in {"ejected", "removed"}:
+                    return NegCmd(cmd.label, cmd.argv, 0, cmd.stdout, cmd.stderr, cmd.duration)
+                continue
             time.sleep(self.poll_interval)
-            cmd = self.format_bryck()
+            cmd = self.format_bryck(timeout=per_call_timeout)
         return cmd
 
-    def mount_with_retry(self, deadline_sec: int = 300) -> NegCmd:
-        """Same stuck-transitional-state race as format_with_retry, for mount."""
-        cmd = self.mount_bryck()
-        if self.dry_run:
+    def mount_with_retry(self, deadline_sec: int = 900, per_call_timeout: int = 300) -> NegCmd:
+        """Same stuck-transitional/still-running race as format_with_retry, for mount."""
+        cmd = self.mount_bryck(timeout=per_call_timeout)
+        if self.dry_run or cmd.passed:
             return cmd
         deadline = time.time() + deadline_sec
-        while not cmd.passed and time.time() < deadline:
+        while time.time() < deadline:
+            if cmd.stderr.startswith("TIMEOUT"):
+                settled = self.wait_for_bryck_state({"mounted"}, timeout=min(60, deadline_sec))
+                if settled.strip().lower() == "mounted":
+                    return NegCmd(cmd.label, cmd.argv, 0, cmd.stdout, cmd.stderr, cmd.duration)
+                continue
             time.sleep(self.poll_interval)
-            cmd = self.mount_bryck()
+            cmd = self.mount_bryck(timeout=per_call_timeout)
         return cmd
 
     def configure_cloud_with_retry(self, tier: str, base_cloud_ops: dict, deadline_sec: int = 120) -> bool:
@@ -1282,17 +1299,17 @@ class NegEnvironmentManager:
         configure = self._run_py("configure", "bryck_cloud_configure.py", ["--login", self.login, "--params", self.params])
         return configure.passed or self.dry_run
 
-    def format_bryck(self) -> NegCmd:
+    def format_bryck(self, timeout: Optional[int] = None) -> NegCmd:
         """Unconditional format attempt (used by the MASTER flow's baseline setup
         and as a during-active-transfer rejection probe -- unlike ensure_mounted/
         ensure_ejected, this always issues the command."""
         return self._run_py("format", "bryck_format.py", ["--login", self.login, "--params", self.format_mount_params],
-                            timeout=self.action_timeout)
+                            timeout=timeout or self.action_timeout)
 
-    def mount_bryck(self) -> NegCmd:
+    def mount_bryck(self, timeout: Optional[int] = None) -> NegCmd:
         """Unconditional mount attempt (see format_bryck)."""
         return self._run_py("mount", "bryck_mount.py", ["--login", self.login, "--params", self.format_mount_params],
-                            timeout=self.action_timeout)
+                            timeout=timeout or self.action_timeout)
 
     def eject_bryck(self) -> NegCmd:
         """Unconditional eject attempt (see format_bryck)."""
@@ -1768,13 +1785,14 @@ def _neg_master_handler(direction: str) -> Callable:
         else:
             return fail(f"could not determine a known Bryck state before format (state={baseline_state!r})")
 
-        # 3. Format, retried on a bounded deadline (a just-ejected device can stay
-        # in 'Ejecting' well past action_timeout), then VERIFY it is not mounted
-        # immediately afterward before attempting mount.
-        fmt_cmd = env.format_with_retry(deadline_sec=300)
+        # 3. Format, retried on a bounded deadline (a stuck 'Ejecting' device, or a
+        # real hardware format that's still genuinely running, are both handled by
+        # format_with_retry itself), then VERIFY it is not mounted immediately
+        # afterward before attempting mount.
+        fmt_cmd = env.format_with_retry()
         notes.append(f"format: {'OK' if fmt_cmd.passed else 'FAIL'} (rc={fmt_cmd.rc})")
         if not fmt_cmd.passed:
-            return fail("format step failed (device never accepted format within the 300s retry deadline)")
+            return fail("format step failed (device never confirmed formatted within the retry deadline)")
         post_format_state = env.wait_for_bryck_state({"ejected", "removed"}, timeout=60)
         notes.append(f"verify NOT mounted after format: bryck_state={post_format_state!r}")
         if post_format_state.strip().lower() not in {"ejected", "removed"}:
@@ -1790,10 +1808,10 @@ def _neg_master_handler(direction: str) -> Callable:
             notes.append("already Mounted right after format (unexpected); skipping mount step")
             mounted_state = "Mounted"
         else:
-            mount_cmd = env.mount_with_retry(deadline_sec=300)
+            mount_cmd = env.mount_with_retry()
             notes.append(f"mount: {'OK' if mount_cmd.passed else 'FAIL'} (rc={mount_cmd.rc})")
             if not mount_cmd.passed:
-                return fail("mount step failed (device never accepted mount within the 300s retry deadline)")
+                return fail("mount step failed (device never confirmed mounted within the retry deadline)")
             mounted_state = env.wait_for_bryck_state({"mounted"}, timeout=env.action_timeout)
         notes.append(f"verify Mounted after mount: bryck_state={mounted_state!r}")
         if mounted_state.strip().lower() != "mounted":
