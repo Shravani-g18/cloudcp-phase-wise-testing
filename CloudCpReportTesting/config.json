@@ -1,6 +1,6 @@
 {
-  "cli_dir": "../CloudCpCliTesting/bryckclient-cli",
-  "login_json": "../CloudCpCliTesting/bryckclient-cli/login.json",
+  "cli_dir": "./bryckclient-cli",
+  "login_json": "./bryckclient-cli/login.json",
   "cloud_type": "aws",
   "datagen_binary": "/home/bryck/rperiyas/datagen",
   "bryck_local_root": "/bryck/report_testing",
