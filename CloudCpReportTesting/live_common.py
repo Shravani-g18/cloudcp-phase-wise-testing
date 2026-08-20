@@ -77,7 +77,7 @@ def generate_data(ctx, case_id, spec_file, remote_dir, spec_case_dir=None):
     local_spec = spec_path(spec_case_dir or case_id, spec_file)
     if not local_spec.is_file():
         raise bc.LiveClientError(f"spec file not found: {local_spec}")
-    remote_spec = bc.push_spec_file(ctx.ssh(), local_spec, case_id)
+    remote_spec = bc.push_spec_file(ctx.ssh(), local_spec, case_id, root_override=remote_dir)
     bc.run_datagen(ctx.ssh(), ctx.cfg, remote_spec)
     entries = bc.enumerate_remote_files(ctx.ssh(), remote_dir)
     if not entries:

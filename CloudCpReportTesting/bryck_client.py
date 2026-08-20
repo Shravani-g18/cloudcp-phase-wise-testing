@@ -15,8 +15,10 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -114,11 +116,26 @@ def ssh_dir_exists(ssh, remote_path):
     return rc == 0
 
 
-def push_spec_file(ssh, local_spec_path, case_id):
-    """SFTP-upload a datagen YAML spec to a per-case /tmp path and return it."""
+def push_spec_file(ssh, local_spec_path, case_id, root_override=None):
+    """SFTP-upload a datagen YAML spec to a per-case /tmp path and return it.
+
+    root_override replaces the spec's root: field so datagen writes to the
+    directory this case actually expects, regardless of what the YAML hardcodes.
+    """
     basename = os.path.basename(local_spec_path)
     remote_path = f"/tmp/report_testing_{case_id}_{basename}"
-    ssh.put(str(local_spec_path), remote_path)
+    if root_override is not None:
+        content = Path(local_spec_path).read_text(encoding="utf-8")
+        content = re.sub(r"^root:[ \t]*.*$", f"root: {root_override}", content, flags=re.MULTILINE)
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as tf:
+            tf.write(content)
+            tmp_local = tf.name
+        try:
+            ssh.put(tmp_local, remote_path)
+        finally:
+            os.unlink(tmp_local)
+    else:
+        ssh.put(str(local_spec_path), remote_path)
     return remote_path
 
 
