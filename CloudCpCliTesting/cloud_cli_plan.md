@@ -773,3 +773,107 @@ ZERO/TINY/SMALL/MEDIUM/LARGE/SPARSE tiers or `bryck_cloud_transfer_initiate.py`:
    REST API before the CLI transfer command runs. Override the CLI path with
    `--bryckcloud-bin` (default `/opt/bryck/.venv/bryck/bin/bryckcloud`).
 
+## 21. Negative-Test Suite (`cloudcpclitesting.py --negative`)
+
+This is the script actually being run for the ~300-case negative catalog
+(distinct from `cloud_cli_runner.py`'s positive transfer matrix in §1-20
+above). It consolidates the negative-test framework into one file with five
+pieces:
+
+| Piece | What it does |
+|---|---|
+| **Dataset Manager** (`NegDatasetManager`) | Picks a fixture dataset from `dataset_cloudcp/spec_files/manifest.json` by shorthand (`small_fast`=`DS-P2-06`/9 files, `empty`=`DS-P8-01`/0 files, `single_file`=`DS-P9-01`/1 file) or an explicit `DS-P*` id — or, with `--spec-file`, materializes one exact YAML spec (or a whole directory of specs) instead. |
+| **Environment Manager** (`NegEnvironmentManager`) | Runs the real `bryckclient-cli/*.py` scripts (mount/eject/configure/deconfigure/initiate/pause/resume/cancel/status/report) and records every command, return code, stdout/stderr and duration. |
+| **Test Case Manager** (`NEG_CATALOG` / `NEG_CATALOG_ORDER`) | Every ID from `NEGATIVE_TEST_PLAN.md` §7-28 (CLI, AUTH, TID, AWS, PATH, LIFE, DATASET, XFER, DOWNLOAD, STATE, RACE, DUP, REPORT, FAULT, REC, VERIFY, INT, CLEAN, MGMT, SVC, SM, F — 308 total), each with a stable `[n]` order number. |
+| **Executor** (`_neg_run_case`, `run_negative_suite`) | Selects which IDs to run (`--test`/`--section`/`--range`/`--all-negative`), executes them in order, and never lets one case's exception abort the rest. |
+| **Report Generator** (`_neg_write_reports`) | Writes `summary.json` + `summary.html` under `results/negative/<run-id>/`, in the same style as `cloud_transfer_only.py`'s reports. |
+
+### 21.1 Listing test cases
+
+```bash
+python3 cloudcpclitesting.py --list-negative
+```
+Prints every case with its `[n]` order number, section, implementation status
+(`IMPLEMENTED` vs `stub`), and name — the `[n]` number is what `--range` uses:
+```
+  [  1] CLI-01     [CLI     ] IMPLEMENTED  Initiate without --mode
+  [  2] CLI-02     [CLI     ] IMPLEMENTED  Invalid mode
+  ...
+  [308] F-40        [F       ] stub         Full Download Negative Regression
+```
+
+### 21.2 Selecting what to run
+
+| Flag | Selects |
+|---|---|
+| `--test AWS-03` or `--test AWS-03,CLI-01,TID-05` | One case, or an explicit comma-separated list — run a single test case or a hand-picked series. |
+| `--section AWS` | Every case registered under one section (e.g. all 18 `AWS-*`). |
+| `--range 1-9` | A contiguous **series by order/position**, using the `[n]` numbers from `--list-negative` (e.g. `--range 1-9` = the first 9 cases = all of CLI; `--range 42-42` runs exactly one case by position). |
+| `--all-negative` | Every registered case (308). |
+
+`--test`/`--section`/`--range`/`--all-negative` are mutually selected in that
+priority order — pick exactly one per run.
+
+### 21.3 Choosing the fixture dataset
+
+- `--dataset-requirement small_fast|empty|single_file|<DS-P*-id>` (default
+  `small_fast`) resolves a dataset from `dataset_cloudcp/spec_files/manifest.json`.
+- `--spec-file <path>` **overrides** `--dataset-requirement` when given: point
+  it at one spec YAML or a whole spec directory (e.g.
+  `--spec-file dataset_cloudcp/spec_files/DS-P9-01` or
+  `--spec-file CloudCpSchedulerTesting/spec_files/SCH-DEEP-01`) to materialize
+  exactly that fixture instead of a manifest-resolved dataset id.
+
+### 21.4 Dry-run vs. live, and where results land
+
+- Default is **dry-run** (no `--live`): every command is logged and reported
+  but never executed — used to validate the framework's own mechanics
+  (argument construction, fixture generation, report shape).
+- `--live` actually executes against the Bryck host in `--login`/`--cloud-ops`.
+- Results always land under `--results-dir` (default
+  `CloudCpCliTesting/results/negative/`) `/<run-id>/summary.json` +
+  `summary.html`, where `<run-id>` defaults to a timestamp
+  (`--run-id` to name it yourself, e.g. per CI job).
+- **If the run is cancelled midway (Ctrl+C) or crashes unexpectedly, a report
+  is still written** for exactly the cases that ran before the interruption;
+  every case that never got to run is recorded with status `SKIP` and
+  `summary.json`'s top-level `"interrupted": true` flag is set (the HTML
+  report also shows a red "RUN WAS CANCELLED / INTERRUPTED — PARTIAL" banner).
+  You never lose evidence from a long `--all-negative --live` run that gets
+  interrupted partway through.
+
+### 21.5 Performance recording
+
+Every case records its own `duration` (seconds). The report additionally
+aggregates a **performance** block:
+- total run duration,
+- per-case average duration,
+- per-section case count / total duration / average duration,
+
+shown in `summary.json`'s `"performance"` key and as a "Performance by
+section" table at the top of `summary.html`.
+
+### 21.6 Example runs
+
+```bash
+# See every case and its order number
+python3 cloudcpclitesting.py --list-negative
+
+# Run one case
+python3 cloudcpclitesting.py --test AWS-03 --live
+
+# Run a hand-picked series
+python3 cloudcpclitesting.py --test CLI-01,AWS-03,TID-05 --live
+
+# Run the first 9 cases (all of CLI) by position
+python3 cloudcpclitesting.py --range 1-9 --live
+
+# Run one whole section
+python3 cloudcpclitesting.py --section AWS --live
+
+# Run everything, naming the run and using an explicit spec-file fixture
+python3 cloudcpclitesting.py --all-negative --live \
+  --spec-file dataset_cloudcp/spec_files/DS-P9-01 \
+  --run-id nightly_2026_08_20
+```
+

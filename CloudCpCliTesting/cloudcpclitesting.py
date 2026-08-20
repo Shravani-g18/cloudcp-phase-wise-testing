@@ -1036,11 +1036,55 @@ class NegDatasetManager:
         return select_dataset(self.spec_root, self.resolve(requirement))
 
     def materialize(self, requirement: str, output_base: str, logger: logging.Logger,
-                    dry_run: bool, skip_generate: bool = False) -> tuple[pathlib.Path, dict]:
+                    dry_run: bool, skip_generate: bool = False,
+                    spec_file: Optional[str] = None) -> tuple[pathlib.Path, dict]:
+        """If `spec_file` is given, it takes priority over `requirement` and is
+        materialized directly (see materialize_spec_file); otherwise a dataset
+        id/shorthand is resolved from manifest.json as before."""
+        if spec_file:
+            return self.materialize_spec_file(spec_file, output_base, logger, dry_run)
         dataset = self.select(requirement)
         ns = types.SimpleNamespace(output_base=output_base, skip_generate=skip_generate,
                                    datagen_bin=DEFAULT_DATAGEN, dry_run=dry_run, verbose=False)
         return generate_dataset(ns, dataset, self.spec_root, logger)
+
+    def materialize_spec_file(self, spec_file: str, output_base: str, logger: logging.Logger,
+                              dry_run: bool) -> tuple[pathlib.Path, dict]:
+        """Materialize an explicit datagen spec YAML (or a directory of *.yaml
+        specs) instead of resolving a dataset id from manifest.json -- lets a
+        single --test/--section/--range run use exactly the fixture passed via
+        --spec-file (e.g. a CloudCpSchedulerTesting/spec_files/<id>/ folder)."""
+        spec_path = pathlib.Path(spec_file)
+        if not spec_path.is_absolute():
+            candidate = self.spec_root / spec_path
+            spec_path = candidate if candidate.exists() else (REPO_ROOT / spec_path)
+        if not spec_path.exists():
+            raise SystemExit(f"--spec-file not found: {spec_file}")
+        spec_files = sorted(spec_path.glob("*.yaml")) if spec_path.is_dir() else [spec_path]
+        if not spec_files:
+            raise SystemExit(f"no .yaml spec file(s) found under {spec_path}")
+        summary: dict = {"spec_file": str(spec_path), "spec_results": []}
+        dataset_root: Optional[pathlib.Path] = None
+        total_actual = 0
+        for sf in spec_files:
+            tmp_spec, spec_output_root = rewrite_spec_root(sf, "", output_base)
+            dataset_root = dataset_root or spec_output_root
+            try:
+                spec_output_root.mkdir(parents=True, exist_ok=True)
+                proc = run_cmd([DEFAULT_DATAGEN, "--spec", str(tmp_spec)], logger, dry_run)
+                if proc is not None:
+                    check_completed(proc, f"datagen for {sf.name}")
+                actual = 0 if dry_run else count_files_recursive(spec_output_root)
+                total_actual += actual
+                summary["spec_results"].append({"spec_file": sf.name, "actual_files": actual,
+                                                "materialized_root": str(spec_output_root)})
+            finally:
+                try:
+                    tmp_spec.unlink()
+                except OSError:
+                    pass
+        summary["actual_files"] = total_actual
+        return dataset_root or pathlib.Path(output_base), summary
 
 
 # -----------------------------------------------------------------------------
@@ -1075,7 +1119,8 @@ class NegEnvironmentManager:
                 output_base: str, download_base: str, bucket: str,
                 datagen_manager: NegDatasetManager, dry_run: bool,
                 logger: logging.Logger, python_bin: str = "python3",
-                poll_interval: int = 10, action_timeout: int = 90):
+                poll_interval: int = 10, action_timeout: int = 90,
+                spec_file: Optional[str] = None):
         self.login = login
         self.params = params
         self.format_mount_params = format_mount_params
@@ -1085,6 +1130,7 @@ class NegEnvironmentManager:
         self.datasets = datagen_manager
         self.dry_run = dry_run
         self.logger = logger
+        self.spec_file = spec_file  # overrides dataset_requirement when set (see --spec-file)
         self.python_bin = python_bin
         self.poll_interval = poll_interval
         self.action_timeout = action_timeout
@@ -1452,7 +1498,7 @@ def _neg_state_handler(case_id: str) -> Callable:
             cmd = env._run_py(case_id, "bryck_cloud_transfer_status.py",
                               ["--login", env.login, "--state", "NOT_A_REAL_STATE"])
             return _neg_from_cmd(tc, cmd, True, "An unknown state filter is rejected without a traceback.")
-        if not env.args.live:
+        if not ctx.args.live:
             return _neg_blocked(tc, "requires --live against the dedicated Bryck device")
         if case_id not in NEG_STATE_SEQUENCES:
             return _neg_blocked(tc, "no automated sequence registered for this case yet")
@@ -1460,7 +1506,8 @@ def _neg_state_handler(case_id: str) -> Callable:
         tier = env.datasets.resolve(dataset)
         if not (env.ensure_mounted() and env.configure_cloud(tier, ctx.cloud_ops_cfg)):
             return _neg_blocked(tc, "could not establish mounted+configured baseline")
-        _root, _summary = env.datasets.materialize(dataset, env.output_base, env.logger, env.dry_run)
+        _root, _summary = env.datasets.materialize(dataset, env.output_base, env.logger, env.dry_run,
+                                                    spec_file=env.spec_file)
         init_cmd, tid = env.initiate_transfer("upload")
         if not tid:
             return _neg_blocked(tc, "could not establish an active transfer fixture")
@@ -1735,6 +1782,9 @@ def _neg_build_catalog() -> Dict[str, NegTestCase]:
 
 
 NEG_CATALOG: Dict[str, NegTestCase] = _neg_build_catalog()
+# Canonical 1..N ordering (insertion order == plan section order 7-28) used by
+# --list-negative's [n] column and --range START-END selection.
+NEG_CATALOG_ORDER: List[str] = list(NEG_CATALOG.keys())
 
 
 # -----------------------------------------------------------------------------
@@ -1761,22 +1811,44 @@ def _neg_run_case(case_id: str, env: NegEnvironmentManager, ctx: NegExecContext)
     return result
 
 
-def _neg_write_reports(results_dir: pathlib.Path, run_id: str, results: List[NegResult]) -> tuple[pathlib.Path, pathlib.Path]:
-    """Writes summary.json/summary.html, reusing cloud_transfer_only.py's report style."""
+def _neg_write_reports(results_dir: pathlib.Path, run_id: str, results: List[NegResult],
+                       interrupted: bool = False, total_duration: float = 0.0) -> tuple[pathlib.Path, pathlib.Path]:
+    """Writes summary.json/summary.html, reusing cloud_transfer_only.py's report style.
+
+    Called exactly once per run -- including a cancelled/crashed run -- so a
+    report always exists at results/<results-dir>/<run_id>/ even if the run
+    never reaches its last test case (see run_negative_suite's try/finally)."""
     run_dir = results_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
     counts = {"PASS": 0, "FAIL": 0, "BLOCKED": 0, "SKIP": 0}
     for r in results:
         counts[r.status] = counts.get(r.status, 0) + 1
 
+    section_perf: Dict[str, Dict[str, float]] = {}
+    for r in results:
+        agg = section_perf.setdefault(r.section, {"count": 0, "total_duration_sec": 0.0})
+        agg["count"] += 1
+        agg["total_duration_sec"] += r.duration
+    performance = {
+        "total_run_duration_sec": round(total_duration, 2),
+        "case_count": len(results),
+        "avg_case_duration_sec": round(sum(r.duration for r in results) / len(results), 2) if results else 0.0,
+        "by_section": {
+            sec: {"count": int(v["count"]), "total_duration_sec": round(v["total_duration_sec"], 2),
+                 "avg_duration_sec": round(v["total_duration_sec"] / v["count"], 2) if v["count"] else 0.0}
+            for sec, v in sorted(section_perf.items())
+        },
+    }
+
     json_path = run_dir / "summary.json"
     json_path.write_text(json.dumps({
-        "run_id": run_id, "generated_at": dt.datetime.now().isoformat(), "counts": counts,
+        "run_id": run_id, "generated_at": dt.datetime.now().isoformat(), "interrupted": interrupted,
+        "counts": counts, "performance": performance,
         "test_cases": [dataclasses_asdict_neg(r) for r in results],
     }, indent=2, default=str), encoding="utf-8")
 
     def status_class(status: str) -> str:
-        return {"PASS": "pass", "FAIL": "fail", "BLOCKED": "blocked"}.get(status, "")
+        return {"PASS": "pass", "FAIL": "fail", "BLOCKED": "blocked", "SKIP": "blocked"}.get(status, "")
 
     rows = "".join(
         f"<tr class='{status_class(r.status)}'><td><span class='badge {status_class(r.status)}'>{r.status}</span></td>"
@@ -1784,26 +1856,45 @@ def _neg_write_reports(results_dir: pathlib.Path, run_id: str, results: List[Neg
         f"<td>{r.duration:.2f}s</td><td>{(r.reason or '')[:200]}</td></tr>"
         for r in results
     )
+    perf_rows = "".join(
+        f"<tr><td>{sec}</td><td>{v['count']}</td><td>{v['total_duration_sec']:.2f}s</td>"
+        f"<td>{v['avg_duration_sec']:.2f}s</td></tr>"
+        for sec, v in performance["by_section"].items()
+    )
+    banner = (
+        f'<div class="banner">RUN WAS CANCELLED / INTERRUPTED -- this report is PARTIAL '
+        f'({len(results) - counts.get("SKIP", 0)}/{len(results)} case(s) actually executed, '
+        f'remaining case(s) marked SKIP below).</div>' if interrupted else ""
+    )
     html = f"""<!doctype html><html><head><meta charset="utf-8"><title>CloudCP Negative Suite {run_id}</title>
 <style>
 body {{ font-family: Arial, sans-serif; margin: 24px; background: #f3f4f6; color: #1f2937; }}
 .summary {{ display: flex; gap: 12px; margin: 16px 0; }}
 .summary div {{ background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 16px; text-align: center; }}
-table {{ border-collapse: collapse; width: 100%; background: #fff; font-size: 13px; }}
+table {{ border-collapse: collapse; width: 100%; background: #fff; font-size: 13px; margin-bottom: 24px; }}
 th, td {{ border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; }}
 th {{ background: #f9fafb; }}
 tr.fail td {{ background: #fef2f2; }} tr.blocked td {{ background: #fffbeb; }}
 .badge {{ padding: 2px 8px; border-radius: 999px; font-weight: 700; font-size: 12px; }}
 .badge.pass {{ background: #dcfce7; color: #14532d; }} .badge.fail {{ background: #fee2e2; color: #7f1d1d; }}
 .badge.blocked {{ background: #fef3c7; color: #78350f; }}
+.banner {{ background: #fee2e2; color: #7f1d1d; border: 1px solid #fecaca; border-radius: 8px; padding: 10px 16px; margin-bottom: 16px; font-weight: 700; }}
 </style></head><body>
 <h1>CloudCP Negative Suite {run_id}</h1>
+{banner}
 <div class="summary">
   <div><div>{len(results)}</div>Total</div>
   <div><div>{counts.get('PASS', 0)}</div>PASS</div>
   <div><div>{counts.get('FAIL', 0)}</div>FAIL</div>
   <div><div>{counts.get('BLOCKED', 0)}</div>BLOCKED</div>
+  <div><div>{counts.get('SKIP', 0)}</div>SKIP</div>
+  <div><div>{performance['total_run_duration_sec']:.2f}s</div>Total run time</div>
 </div>
+<h2>Performance by section</h2>
+<table><tr><th>Section</th><th>Cases</th><th>Total duration</th><th>Avg duration</th></tr>
+{perf_rows}
+</table>
+<h2>Test cases</h2>
 <table><tr><th>Status</th><th>Test ID</th><th>Section</th><th>Name</th><th>Dataset</th><th>Duration</th><th>Reason</th></tr>
 {rows}
 </table></body></html>"""
@@ -1821,40 +1912,69 @@ def dataclasses_asdict_neg(r: NegResult) -> dict:
 def run_negative_suite(argv: Optional[Sequence[str]] = None) -> int:
     p = argparse.ArgumentParser(description="Consolidated CloudCP CLI negative-test framework.")
     p.add_argument("--negative", action="store_true", help="Run the negative-test suite instead of the single-transfer tool.")
-    p.add_argument("--list-negative", action="store_true", help="List every registered test case ID and exit.")
+    p.add_argument("--list-negative", action="store_true",
+                   help="List every registered test case with its [n] order number (for --range) and exit.")
     p.add_argument("--test", default=None, help="Run one test case, or a comma-separated list, e.g. AWS-03,CLI-01.")
     p.add_argument("--section", default=None, help="Run every case in one section, e.g. --section CLI.")
+    p.add_argument("--range", default=None,
+                   help="Run a contiguous range of cases by the [n] order number shown by --list-negative, "
+                        "e.g. --range 1-9 (first 9 cases) or --range 42-42 (a single case by position).")
     p.add_argument("--all-negative", action="store_true", help="Run every registered test case.")
     p.add_argument("--live", action="store_true", help="Execute for real (default: dry-run).")
     p.add_argument("--dataset-requirement", dest="dataset_requirement", default="small_fast",
                    help="Dataset requirement: 'small_fast' (default), 'empty', 'single_file', or an explicit DS-P* id.")
+    p.add_argument("--spec-file", dest="spec_file", default=None,
+                   help="Explicit datagen spec YAML, or a directory of *.yaml specs, to materialize instead of "
+                        "resolving --dataset-requirement from manifest.json -- overrides --dataset-requirement "
+                        "when given, e.g. --spec-file dataset_cloudcp/spec_files/DS-P9-01 or "
+                        "--spec-file CloudCpSchedulerTesting/spec_files/SCH-DEEP-01")
     p.add_argument("--login", default=str(BRYCK_CLI_DIR / "login.json"))
     p.add_argument("--cloud-ops", default=str(BRYCK_CLI_DIR / "cloud_ops.json"))
     p.add_argument("--format-mount-params", default=str(BRYCK_CLI_DIR / "format_mount_params.json"))
     p.add_argument("--output-base", default="/bryck")
     p.add_argument("--download-base", default="/bryck/cloudcp_cli_dl")
     p.add_argument("--bucket", default="s3://shravani/cloudcp-cli")
-    p.add_argument("--results-dir", default=str(HERE / "results" / "negative"))
+    p.add_argument("--results-dir", default=str(HERE / "results" / "negative"),
+                   help="Report root. A report (summary.json/summary.html) is ALWAYS written under "
+                        "<results-dir>/<run-id>/ when the run finishes, fails, or is cancelled midway "
+                        "(Ctrl+C) -- it is never lost, only marked 'interrupted': true / PARTIAL.")
     p.add_argument("--run-id", default=None)
     p.add_argument("--verbose", action="store_true")
     args = p.parse_args(argv)
 
     if args.list_negative:
-        for cid in sorted(NEG_CATALOG, key=lambda c: (NEG_CATALOG[c].section, c)):
+        for i, cid in enumerate(NEG_CATALOG_ORDER, start=1):
             tc = NEG_CATALOG[cid]
             impl = "IMPLEMENTED" if tc.run else "stub"
-            print(f"  {cid:<10} [{tc.section:<8}] {impl:<12} {tc.name}")
-        print(f"\n{len(NEG_CATALOG)} total case(s).")
+            print(f"  [{i:>3}] {cid:<10} [{tc.section:<8}] {impl:<12} {tc.name}")
+        print(f"\n{len(NEG_CATALOG)} total case(s). Use --range START-END against the [n] numbers above.")
         return 0
 
-    if args.test:
+    if args.range:
+        m = re.fullmatch(r"\s*(\d+)\s*-\s*(\d+)\s*", args.range)
+        if not m:
+            print(f"ERROR: --range must look like START-END (e.g. 1-9), got {args.range!r}")
+            return 2
+        start, end = int(m.group(1)), int(m.group(2))
+        if not (1 <= start <= end <= len(NEG_CATALOG_ORDER)):
+            print(f"ERROR: --range {args.range!r} is out of bounds for 1-{len(NEG_CATALOG_ORDER)} (see --list-negative)")
+            return 2
+        ids = NEG_CATALOG_ORDER[start - 1:end]
+    elif args.test:
         ids = [t.strip() for t in args.test.split(",") if t.strip()]
+        unknown = [t for t in ids if t not in NEG_CATALOG]
+        if unknown:
+            print(f"ERROR: unknown test id(s): {unknown}. Use --list-negative to see valid IDs.")
+            return 2
     elif args.section:
-        ids = [cid for cid, tc in NEG_CATALOG.items() if tc.section == args.section.upper()]
+        ids = [cid for cid in NEG_CATALOG_ORDER if NEG_CATALOG[cid].section == args.section.upper()]
+        if not ids:
+            print(f"ERROR: no cases registered for section {args.section!r}.")
+            return 2
     elif args.all_negative:
-        ids = list(NEG_CATALOG)
+        ids = list(NEG_CATALOG_ORDER)
     else:
-        print("Use --list-negative, --test <id[,id...]>, --section <NAME>, or --all-negative.")
+        print("Use --list-negative, --test <id[,id...]>, --section <NAME>, --range <START-END>, or --all-negative.")
         return 2
 
     logger = setup_logging(args.verbose)
@@ -1862,33 +1982,58 @@ def run_negative_suite(argv: Optional[Sequence[str]] = None) -> int:
     results_dir = pathlib.Path(args.results_dir)
     dataset_mgr = NegDatasetManager(SPEC_ROOT)
 
+    results: List[NegResult] = []
+    interrupted = False
+    run_started = time.time()
     with tempfile.TemporaryDirectory(prefix=f"cloudcpclitesting-neg-{run_id}-") as work_dir:
         work = pathlib.Path(work_dir)
         env = NegEnvironmentManager(
             login=args.login, params=args.cloud_ops, format_mount_params=args.format_mount_params,
             output_base=args.output_base, download_base=args.download_base, bucket=args.bucket,
-            datagen_manager=dataset_mgr, dry_run=(not args.live), logger=logger,
+            datagen_manager=dataset_mgr, dry_run=(not args.live), logger=logger, spec_file=args.spec_file,
         )
         ctx = NegExecContext(args, work)
-        results: List[NegResult] = []
-        for i, cid in enumerate(ids, start=1):
-            logger.info("=== [%d/%d] %s ===", i, len(ids), cid)
-            result = _neg_run_case(cid, env, ctx)
-            logger.info("    -> %s: %s", result.status, result.reason)
-            results.append(result)
+        try:
+            for i, cid in enumerate(ids, start=1):
+                logger.info("=== [%d/%d] %s ===", i, len(ids), cid)
+                result = _neg_run_case(cid, env, ctx)
+                logger.info("    -> %s: %s", result.status, result.reason)
+                results.append(result)
+        except KeyboardInterrupt:
+            # Ctrl+C mid-run -- still write a report for every case that already ran,
+            # instead of losing all evidence collected so far.
+            interrupted = True
+            logger.warning("Run cancelled by user (Ctrl+C) after %d/%d case(s); writing partial report...",
+                           len(results), len(ids))
+        except Exception as exc:  # noqa: BLE001 - an unexpected crash must not lose already-collected results
+            interrupted = True
+            logger.error("Run aborted by unexpected error (%s: %s) after %d/%d case(s); writing partial report...",
+                        type(exc).__name__, exc, len(results), len(ids))
+        finally:
+            for cid in ids[len(results):]:
+                tc = NEG_CATALOG.get(cid)
+                if tc is not None:
+                    results.append(NegResult(test_id=cid, section=tc.section, name=tc.name, status="SKIP",
+                                             reason="run cancelled/aborted before this case executed"))
 
-    json_path, html_path = _neg_write_reports(results_dir, run_id, results)
+    total_duration = time.time() - run_started
+    json_path, html_path = _neg_write_reports(results_dir, run_id, results, interrupted=interrupted,
+                                              total_duration=total_duration)
     counts: Dict[str, int] = {}
     for r in results:
         counts[r.status] = counts.get(r.status, 0) + 1
-    logger.info("PASS=%s FAIL=%s BLOCKED=%s (total %s)", counts.get("PASS", 0), counts.get("FAIL", 0),
-               counts.get("BLOCKED", 0), len(results))
+    logger.info("PASS=%s FAIL=%s BLOCKED=%s SKIP=%s (total %s, %.1fs)", counts.get("PASS", 0), counts.get("FAIL", 0),
+               counts.get("BLOCKED", 0), counts.get("SKIP", 0), len(results), total_duration)
     logger.info("JSON: %s", json_path)
     logger.info("HTML: %s", html_path)
+    if interrupted:
+        logger.warning("Run was cancelled/interrupted -- report above is PARTIAL (%d/%d case(s) actually executed).",
+                       len(results) - counts.get("SKIP", 0), len(ids))
     return 1 if counts.get("FAIL", 0) else 0
 
 
 if __name__ == "__main__":
-    if any(a in ("--negative", "--list-negative", "--test", "--section", "--all-negative") for a in sys.argv[1:]):
+    if any(a in ("--negative", "--list-negative", "--test", "--section", "--range", "--all-negative")
+          for a in sys.argv[1:]):
         raise SystemExit(run_negative_suite())
     raise SystemExit(main())
