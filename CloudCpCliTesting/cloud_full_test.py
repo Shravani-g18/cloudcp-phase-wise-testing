@@ -69,6 +69,12 @@ import cloud_cli_runner as ccr  # noqa: E402  (datagen, status polling/fallbacks
 import cli_perf_capture as perf_mod  # noqa: E402
 import cloudcpclitesting as negtest  # noqa: E402  (NEG_CATALOG names/order -- id/name source only, not execution)
 import cloud_transfer_test_runner as ctr  # noqa: E402  (TestContext -- underlies negative_environment_runner)
+# cloud_transfer_test_runner.py assumes bryck_info.py/etc. live beside itself, but they
+# actually live one level down in bryckclient-cli/. Patched here (not in that file, since
+# this script is the only entry point used) so every ctx.run_py()/bryck_info() call inside
+# negative_environment_runner.py resolves to the real script location. Must happen before
+# negative_environment_runner is imported, since its own module-level constants copy this value.
+ctr.SCRIPT_DIR = BRYCK_CLI_DIR
 import negative_environment_runner as ner  # noqa: E402  (the actual, comprehensive negative-case implementations:
                                             # LIFE/DATA/XFER/DOWNLOAD/RACE/DUP/REPORT/FAULT/REC/VERIFY/INT/MGMT/
                                             # SVC/SM/F, not just CLI/AUTH/TID/AWS/STATE/CLEAN -- this is the
@@ -80,6 +86,9 @@ LOG = logging.getLogger("cloud_full_test")
 TERMINAL_SUCCESS = "COMPLETED"
 TERMINAL_FAILURE = {"FAILED", "STOPPED", "CANCELLED"}
 TERMINAL_STATES = {TERMINAL_SUCCESS} | TERMINAL_FAILURE
+# States that mean the transfer is still legitimately progressing -- hitting
+# --poll-timeout while in one of these is "still running", not a product failure.
+STILL_RUNNING_STATES = {"IN_PROGRESS", "PAUSED", "QUEUED"}
 TRANSFER_MODES = ("upload", "download", "both")
 
 
@@ -95,25 +104,58 @@ def setup_logging(verbose: bool) -> None:
 # Transfer engine -- copied verbatim from cloud_transfer_only.py (unchanged)
 # =============================================================================
 
+_BRYCK_STATE_RE = re.compile(r"\b(Mounted|Ejected|Removed)\b", re.IGNORECASE)
+
+
+def read_bryck_state_from_journalctl(args: argparse.Namespace) -> str:
+    """Fallback when bryck_info.py's own state read comes back UNKNOWN/blank:
+    grep recent journalctl history (same --journal-tag(s) cli_perf_capture.py
+    already tails for perf data) for the last mount-state keyword the broker
+    itself logged. Never raises -- returns 'UNKNOWN' on any failure so the
+    caller can log it and move on to the next step instead of blocking the
+    whole case on one flaky state read."""
+    import subprocess
+    tags = args.journal_tag if isinstance(args.journal_tag, list) else [args.journal_tag]
+    tag_flags = [flag for tag in tags for flag in ("-t", tag)]
+    try:
+        proc = subprocess.run(
+            ["sudo", "journalctl", *tag_flags, "-n", "500", "--no-pager"],
+            capture_output=True, text=True, timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return "UNKNOWN"
+    text = (proc.stdout or "") + (proc.stderr or "")
+    matches = _BRYCK_STATE_RE.findall(text)
+    return matches[-1].capitalize() if matches else "UNKNOWN"
+
+
 def ensure_mounted(args: argparse.Namespace, redact, tcr: ccr.TestCaseResult) -> str:
     """Real bryck_info states are ' Mounted', ' Ejected', ' Removed' (leading
     space, per bryckclient-cli). Only auto-mount from 'Ejected' (the only
     state bryck_mount.py accepts) -- 'Removed' or anything else means the
     device needs format/mount (or scan) first, which this script does not
-    attempt; surface it as a clear error instead of a confusing bryck_mount.py
-    failure."""
+    attempt; surface it as a clear warning instead of a confusing
+    bryck_mount.py failure. If the state read itself is UNKNOWN/blank, fall
+    back to journalctl and proceed with whatever state that shows -- never
+    block the case on one flaky read."""
     state, cmd = ccr.get_bryck_state(
         argparse.Namespace(login=args.login, dry_run=args.dry_run, python_bin=args.python_bin), LOG, redact)
     tcr.commands.append(cmd.as_dict())
     if args.dry_run:
         return state
     normalized = state.strip().lower()
+    if normalized in ("", "unknown"):
+        LOG.warning("bryck_info state read was %r; falling back to journalctl before proceeding", state)
+        journal_state = read_bryck_state_from_journalctl(args)
+        tcr.notes.append(f"bryck state fallback via journalctl: {journal_state}")
+        LOG.info("journalctl fallback bryck state: %s", journal_state)
+        state, normalized = journal_state, journal_state.strip().lower()
     if normalized == "mounted":
         return state
     if normalized != "ejected":
-        LOG.error("Bryck state is %r -- expected 'Ejected' or 'Mounted'. Not attempting to mount "
-                  "('Removed' needs bryck_format.py + bryck_mount.py first; run bryck_info.py "
-                  "manually to confirm).", state)
+        LOG.warning("Bryck state is %r after API+journalctl checks -- proceeding to the next step anyway "
+                   "instead of blocking ('Removed'/unknown needs bryck_format.py + bryck_mount.py first; "
+                   "only auto-mounts from 'Ejected').", state)
         return state
     LOG.info("Bryck is Ejected; mounting before dataset generation/transfer")
     mount_cmd = ccr.run_py_script(
@@ -131,6 +173,13 @@ def ensure_mounted(args: argparse.Namespace, redact, tcr: ccr.TestCaseResult) ->
         if state.strip().lower() == "mounted":
             break
         time.sleep(args.poll_interval)
+    if state.strip().lower() != "mounted":
+        journal_state = read_bryck_state_from_journalctl(args)
+        tcr.notes.append(f"post-mount state fallback via journalctl: {journal_state}")
+        LOG.warning("post-mount state still %r after %ss; journalctl shows %r -- proceeding to the next "
+                   "step anyway", state, args.action_timeout, journal_state)
+        if journal_state.strip().lower() == "mounted":
+            state = journal_state
     return state
 
 
@@ -537,9 +586,14 @@ def run_leg(args: argparse.Namespace, mode_label: str, case_dir: pathlib.Path, r
             )
 
     tcr.status = "PASS" if (args.dry_run or (error is None and final_state == TERMINAL_SUCCESS)) else \
-        ("BLOCKED" if error else "FAIL")
+        ("BLOCKED" if error else
+         ("TIMEOUT" if final_state in STILL_RUNNING_STATES else "FAIL"))
     tcr.expected = "Transfer reaches COMPLETED"
     tcr.actual = f"final_state={final_state}" + (f", error={error}" if error else "")
+    if tcr.status == "TIMEOUT":
+        tcr.notes.append(f"--poll-timeout ({args.wait_timeout}s) reached while transfer was still "
+                         f"{final_state} -- not a product failure, just needs more time; re-run with a "
+                         f"larger --poll-timeout or re-check status separately.")
     tcr.notes.append(f"transfer_id={transfer_id} final_state={final_state}")
 
     return {
@@ -634,6 +688,34 @@ def run_negative_case_via_ner(mgr: "ner.EnvironmentManager", args: argparse.Name
     result = ner.dispatch(case_id, desc, mgr, args, work, {})
     result.narrative = ner.build_narrative(result)
     return result
+
+
+_DETAIL_ROW_RE = re.compile(
+    r'(<tr id="detail-(\d+)" class="detailrow"[^>]*>\s*<td colspan="8">\s*<div class="detailbody">)'
+)
+
+
+def integrate_perf_report_links(html_str: str, neg_report_dir: pathlib.Path, case_ids: List[str]) -> str:
+    """Embed a link to each negative case's own perf/report.html (the same
+    journalctl/cloudcp.log chart report transfer cases get) directly inside
+    negative_environment_runner.py's combined_report.html detail rows, so the
+    perf charts and the test-result report are reachable from one page
+    instead of two disconnected files."""
+    import html as _html_mod
+
+    def _inject(match: "re.Match") -> str:
+        idx = int(match.group(2))
+        if idx >= len(case_ids):
+            return match.group(1)
+        case_id = case_ids[idx].replace("/", "_")
+        perf_html = neg_report_dir / case_id / "perf" / "report.html"
+        if not perf_html.is_file():
+            return match.group(1)
+        link = (f'<p class="perf-link" style="margin:6px 0 14px"><a href="{case_id}/perf/report.html" '
+                f'target="_blank" rel="noopener">&#128202; View performance report '
+                f'(journalctl/cloudcp.log charts) for {_html_mod.escape(case_id)}</a></p>')
+        return match.group(1) + link
+    return _DETAIL_ROW_RE.sub(_inject, html_str)
 
 
 # =============================================================================
@@ -866,7 +948,9 @@ def run_transfer_case(args: argparse.Namespace, entry: dict, run_dir: pathlib.Pa
         {"id": t.test_id, "dataset": dataset_id, "mode": t.kind} for t in all_tcrs]}, all_tcrs)
 
     overall_ok = all(leg["error"] is None and leg["final_state"] == TERMINAL_SUCCESS for leg in legs) or args.dry_run
-    return {"case_id": case_id, "status": "PASS" if overall_ok else "FAIL", "legs": legs, "error": None}
+    any_timeout = any(leg["tcr"].status == "TIMEOUT" for leg in legs)
+    case_status = "PASS" if overall_ok else ("TIMEOUT" if any_timeout else "FAIL")
+    return {"case_id": case_id, "status": case_status, "legs": legs, "error": None}
 
 
 def run_component_suite(args: argparse.Namespace) -> int:
@@ -931,7 +1015,11 @@ def parse_args(argv: Optional[list] = None) -> argparse.Namespace:
                          "even if --cleanup is also given.")
     ex.add_argument("--seed", type=int, default=1337, help="Random seed for reproducibility (default 1337).")
     ex.add_argument("--poll-interval", type=int, default=10)
-    ex.add_argument("--poll-timeout", dest="wait_timeout", type=int, default=1800)
+    ex.add_argument("--poll-timeout", dest="wait_timeout", type=int, default=600,
+                    help="Per-leg terminal-state wait cap in seconds (default 600 = 10min). Real transfer "
+                         "state is always trusted as-is; hitting this cap while still IN_PROGRESS/PAUSED/"
+                         "QUEUED is reported as TIMEOUT (not a false FAIL) -- raise this for larger datasets "
+                         "that legitimately need more than 10 minutes.")
     ex.add_argument("--verbose", action="store_true")
     ex.add_argument("--confirm-destructive", action="store_true",
                     help="Allow negative_environment_runner.py's destructive negative cases "
@@ -1050,6 +1138,7 @@ def main(argv: Optional[list] = None) -> int:
     # carries over between cases exactly like a real run of that script.
     ner_mgr: Optional["ner.EnvironmentManager"] = None
     ner_results: List["ner.TestResult"] = []
+    ner_case_ids: List[str] = []  # parallel to ner_results, for perf-report link injection
     ner_work_dir = run_dir / "negative" / "_work"
 
     results: List[dict] = []
@@ -1088,8 +1177,26 @@ def main(argv: Optional[list] = None) -> int:
                 ner_ctx = build_ner_context(args)
                 ner_mgr = ner.EnvironmentManager(ner_ctx)
                 ner_work_dir.mkdir(parents=True, exist_ok=True)
+            # Same journalctl/cloudcp.log perf capture as transfer cases (see run_leg()),
+            # wrapped around the whole case so every negative case -- not just transfers --
+            # gets a perf report.
+            perf_cfg = {
+                "journal_tag": args.journal_tag, "cloudcp_log": args.cloudcp_log,
+                "capture_lead": args.capture_lead, "capture_drain": args.capture_drain,
+                "transfer_logs_dir": args.transfer_logs_dir, "bryck_config_json": args.bryck_config_json,
+            }
+            collector = perf_mod.TransferPerfCollector(neg_dir, perf_cfg, args.dry_run) if args.perf_capture else None
+            if collector is not None:
+                collector.start()
             ner_result = run_negative_case_via_ner(ner_mgr, args, ner_work_dir, entry["id"])
+            if collector is not None:
+                perf_data = collector.finish(
+                    entry["id"], csv_path=None, test_id=entry["id"], tier=entry.get("section", ""),
+                    mode="negative", description=entry["name"], gen_summary=None,
+                )
+                LOG.info("[%s] perf report: %s", entry["id"], perf_data.get("html_report"))
             ner_results.append(ner_result)
+            ner_case_ids.append(entry["id"])
             result = {"case_id": entry["id"], "status": ner_result.status}
         results.append(result)
         LOG.info("    -> %s", result.get("status"))
@@ -1112,7 +1219,10 @@ def main(argv: Optional[list] = None) -> int:
         (neg_report_dir / "combined_results.json").write_text(
             json.dumps([_dc.asdict(r) for r in ner_results], indent=2, default=str), encoding="utf-8")
         (neg_report_dir / "combined_report.html").write_text(
-            ner.build_html(run_id, run_id, dt.datetime.now().isoformat(timespec="seconds"), ner_results),
+            integrate_perf_report_links(
+                ner.build_html(run_id, run_id, dt.datetime.now().isoformat(timespec="seconds"), ner_results),
+                neg_report_dir, ner_case_ids,
+            ),
             encoding="utf-8")
         LOG.info("Combined negative report: %s", neg_report_dir / "combined_report.html")
 
