@@ -166,6 +166,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                            help="do not approve destructive negative cases")
     execution.add_argument("--confirm-destructive", action="store_true",
                            help="allow destructive negative cases after the main YES gate")
+    execution.add_argument("--yes", action="store_true",
+                           help="skip the interactive 'Type YES to execute' prompt (still prints "
+                                "the full plan/warning first; use for unattended/scripted runs)")
     execution.add_argument("--allow-ip-change", action="store_true")
     execution.add_argument("--allow-service-faults", action="store_true")
     execution.add_argument("--allow-network-faults", action="store_true")
@@ -1192,6 +1195,9 @@ def confirm_execution(plan: dict, args: argparse.Namespace) -> bool:
     else:
         print("Destructive negative cases are BLOCKED.")
     print("")
+    if args.yes:
+        print("--yes given: skipping interactive confirmation, proceeding with execution.")
+        return True
     answer = input("Type YES to execute the complete plan: ").strip()
     return answer == "YES"
 
