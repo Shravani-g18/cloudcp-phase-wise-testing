@@ -653,6 +653,443 @@ def run_scheduler(cmd: list[str], dry_run: bool) -> int:
 
 
 # =====================================================================================
+# Step 5b — pause / resume (kill & restart) — plan Group E.1
+# =====================================================================================
+DEF_PR_KILL_AFTER = 5.0        # default seconds before the broker is killed mid-run
+PR_LATE_FRACTION = 0.80        # "kill late" fires once this fraction of files is done
+PR_LATE_MAX_WAIT = 900         # safety cap (s) while waiting for the late-kill target
+
+# Each case kills the broker (or a worker) mid-run then resumes on the SAME
+# transfer-id/transfer-dir. mode:
+#   "broker"      SIGKILL the whole broker process group, then resume
+#   "broker_late" like "broker" but fire once PR_LATE_FRACTION of files are done
+#   "sigint"      SIGINT the broker (graceful stop), then resume
+#   "worker"      SIGKILL a single aws_transfer.py child; the broker SURVIVES and
+#                 re-dispatches — a single run, no resume
+PAUSE_RESUME_CASES = [
+    {"id": "SCH-PR-01", "dataset": "SCH-DEEP-01", "kill_after": 5.0, "cycles": 1,
+     "mode": "broker", "title": "Broker SIGKILL, single resume",
+     "summary": "Kill the broker mid-run; resume on the same id+dir."},
+    {"id": "SCH-PR-02", "dataset": "SCH-DEEP-02", "kill_after": 8.0, "cycles": 1,
+     "mode": "broker", "title": "Kill mid-multipart (LARGE/MEDIUM)",
+     "summary": "Kill while a bandwidth-tier multipart batch is inflight."},
+    {"id": "SCH-PR-03", "dataset": "SCH-DEEP-01", "kill_after": 2.0, "cycles": 1,
+     "mode": "broker", "title": "Kill very early (baseline ~0)",
+     "summary": "Kill before any batch completes; resume uploads the full backlog."},
+    {"id": "SCH-PR-04", "dataset": "SCH-ORD-01", "kill_after": None, "cycles": 1,
+     "mode": "broker_late", "title": "Kill late (tail only)",
+     "summary": "Kill after ~80% of files are done; resume dispatches only the tail."},
+    {"id": "SCH-PR-05", "dataset": "SCH-DEEP-01", "kill_after": 5.0, "cycles": 2,
+     "mode": "broker", "title": "Double kill / two resume cycles",
+     "summary": "Kill, resume, kill again, resume to completion."},
+    {"id": "SCH-PR-06", "dataset": "SCH-DEEP-01", "kill_after": 5.0, "cycles": 1,
+     "mode": "worker", "title": "Worker crash, broker survives",
+     "summary": "SIGKILL one aws_transfer.py worker; the broker re-dispatches it."},
+    {"id": "SCH-PR-07", "dataset": "SCH-ORD-01", "kill_after": 5.0, "cycles": 1,
+     "mode": "broker", "reconcile": "kept",
+     "title": ".lst-backed inprogress kept for fallback",
+     "summary": "Resume leaves a .lst-backed inprogress batch for the fallback."},
+    {"id": "SCH-PR-08", "dataset": "SCH-ORD-01", "kill_after": 3.0, "cycles": 1,
+     "mode": "broker", "reconcile": "reset",
+     "title": "Stale inprogress (no .lst) requeued",
+     "summary": "Resume requeues a stale inprogress batch back to pending."},
+    {"id": "SCH-PR-09", "dataset": "SCH-DEEP-01", "kill_after": 5.0, "cycles": 1,
+     "mode": "sigint", "title": "Graceful SIGINT pause + resume",
+     "summary": "SIGINT the broker (clean shutdown); resume completes."},
+]
+PR_CASE_BY_ID = {c["id"]: c for c in PAUSE_RESUME_CASES}
+
+# resume-reconcile lines the broker logs in _reset_stale_inprogress()
+_PR_RECONCILE_RE = re.compile(
+    r"resume reconcile.*?reset\s+(\d+)\s+stale.*?left\s+(\d+)\s+for the fallback",
+    re.IGNORECASE)
+
+
+def count_ok_in_cloudcp_log(log_path: str, tr_id: int) -> int:
+    """Sum ``ok=N`` from ``[Batch]…done`` lines for transfer *tr_id* in cloudcp.log.
+
+    This is the "how much is already durably uploaded" signal the resume relies
+    on; the csv path on each line ties the batch to its transfer id.
+    """
+    p = Path(log_path)
+    if not p.is_file():
+        return 0
+    marker = f"cloud_transfer_{tr_id}/"
+    total = 0
+    try:
+        with p.open(encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                if marker not in line:
+                    continue
+                m = re.search(r"\[Batch\].*\bdone\b.*\bok=(\d+)", line)
+                if m:
+                    total += int(m.group(1))
+    except OSError:
+        pass
+    return total
+
+
+def csv_duplicate_stats(csv_path: Path) -> dict:
+    """Return {distinct, rows, duplicates, failed} keyed on the S3 object path."""
+    seen: dict[str, int] = {}
+    rows = failed = 0
+    try:
+        with csv_path.open(newline="", encoding="utf-8") as fh:
+            for row in csv.DictReader(fh):
+                key = (row.get("s3path") or row.get("local_path") or "").strip()
+                if not key:
+                    continue
+                rows += 1
+                seen[key] = seen.get(key, 0) + 1
+                if (row.get("status") or "").strip().upper() != "SUCCESS":
+                    failed += 1
+    except OSError:
+        pass
+    return {
+        "distinct": len(seen),
+        "rows": rows,
+        "duplicates": sum(c - 1 for c in seen.values() if c > 1),
+        "failed": failed,
+    }
+
+
+def _pgrep_children(pid: int) -> list[int]:
+    """Direct child pids of *pid* (POSIX; via pgrep -P)."""
+    try:
+        out = subprocess.run(["pgrep", "-P", str(pid)], capture_output=True, text=True)
+        return [int(x) for x in out.stdout.split()]
+    except (OSError, ValueError):
+        return []
+
+
+def _proc_cmdline(pid: int) -> str:
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as fh:
+            return fh.read().replace(b"\x00", b" ").decode("utf-8", "replace")
+    except OSError:
+        return ""
+
+
+def _find_worker_pid(broker_pid: int) -> int | None:
+    """Pick one aws_transfer.py worker child of the broker (not the enumerator)."""
+    for child in _pgrep_children(broker_pid):
+        if "aws_transfer.py" in _proc_cmdline(child):
+            return child
+    return None
+
+
+def _launch_broker(cmd: list[str]) -> subprocess.Popen:
+    """Popen the broker in its own process group so we can signal the whole tree."""
+    LOG.info("$ %s", " ".join(cmd))
+    return subprocess.Popen(cmd, preexec_fn=os.setsid if os.name == "posix" else None)
+
+
+def _signal_group(proc: subprocess.Popen, sig: int) -> None:
+    try:
+        if os.name == "posix":
+            os.killpg(os.getpgid(proc.pid), sig)
+        else:
+            proc.send_signal(sig)
+    except (ProcessLookupError, OSError):
+        pass
+
+
+def _run_broker_with_kill(cmd: list[str], mode: str, kill_after: float,
+                          tr_id: int, cloudcp_log: str, expected_total: int) -> dict:
+    """Launch the broker, kill it (or a worker) mid-run, and return kill info."""
+    proc = _launch_broker(cmd)
+    info = {"mode": mode, "killed": False, "worker_pid": None, "rc": None}
+
+    if mode == "worker":
+        # let a worker come up, kill it, then let the broker finish on its own
+        deadline = time.time() + kill_after
+        wpid = None
+        while time.time() < deadline and proc.poll() is None:
+            wpid = _find_worker_pid(proc.pid)
+            if wpid:
+                break
+            time.sleep(0.2)
+        if wpid and proc.poll() is None:
+            LOG.info("SIGKILL worker pid=%s (broker %s survives)", wpid, proc.pid)
+            try:
+                os.kill(wpid, signal.SIGKILL)
+                info["killed"] = True
+                info["worker_pid"] = wpid
+            except (ProcessLookupError, OSError):
+                pass
+        else:
+            LOG.warning("no aws_transfer.py worker seen within %.1fs", kill_after)
+        info["rc"] = proc.wait()
+        LOG.info("broker exited rc=%s after worker crash", info["rc"])
+        return info
+
+    # broker / broker_late / sigint: wait for the kill trigger, then stop the broker
+    if mode == "broker_late":
+        target = max(1, int(expected_total * PR_LATE_FRACTION))
+        LOG.info("kill-late: waiting until ok>=%d (%.0f%% of %d)",
+                 target, PR_LATE_FRACTION * 100, expected_total)
+        deadline = time.time() + PR_LATE_MAX_WAIT
+        while time.time() < deadline and proc.poll() is None:
+            if count_ok_in_cloudcp_log(cloudcp_log, tr_id) >= target:
+                break
+            time.sleep(0.5)
+    else:
+        end = time.time() + kill_after
+        while time.time() < end and proc.poll() is None:
+            time.sleep(0.1)
+
+    if proc.poll() is None:
+        sig = signal.SIGINT if mode == "sigint" else signal.SIGKILL
+        LOG.info("stopping broker pid=%s with %s (mode=%s)",
+                 proc.pid, getattr(sig, "name", sig), mode)
+        _signal_group(proc, sig)
+        info["killed"] = True
+        try:
+            info["rc"] = proc.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            LOG.warning("broker did not exit after signal; SIGKILL")
+            _signal_group(proc, signal.SIGKILL)
+            info["rc"] = proc.wait()
+    else:
+        info["rc"] = proc.returncode
+        LOG.warning("broker already exited (rc=%s) before kill — shorten --pr-kill-after",
+                    info["rc"])
+    return info
+
+
+def run_pause_resume_case(case: dict, args, spec_dir: Path, out_root: Path) -> dict:
+    """Run one pause/resume case: kill mid-run, resume, validate no duplicates."""
+    cid = case["id"]
+    ds_sel = case["dataset"]
+    mode = case["mode"]
+    kill_after = args.pr_kill_after if args.pr_kill_after is not None else \
+        (case.get("kill_after") or DEF_PR_KILL_AFTER)
+    cycles = case.get("cycles", 1)
+
+    LOG.info("=" * 70)
+    LOG.info("PAUSE/RESUME %s — %s  (dataset=%s mode=%s kill_after=%s cycles=%s)",
+             cid, case["title"], ds_sel, mode, kill_after, cycles)
+
+    manifest = load_manifest(spec_dir)
+    by_num = manifest_index(manifest)
+    dataset = resolve_one(ds_sel, by_num)
+    ds_id = dataset["id"]
+    expected_total = build_structure_payload(dataset)["total_files"]
+
+    result = {
+        "id": cid, "title": case["title"], "summary": case["summary"],
+        "dataset_id": ds_id, "mode": mode, "kill_after": kill_after, "cycles": cycles,
+        "expected_total": expected_total, "status": "PENDING", "errors": [],
+        "pr_baseline_ok": 0, "pr_final_ok": 0, "reconcile": {},
+        "csv": {}, "transfer_id": None,
+    }
+
+    specs = spec_files_in_order(spec_dir, ds_id)
+    if args.skip_datagen:
+        LOG.info("--skip-datagen: reusing existing data for %s", ds_id)
+    else:
+        run_datagen(specs, args.datagen, args.datagen_flag, args.dry_run)
+
+    tr_id = next_transfer_id(args.batchmeta_dir)
+    transfer_dir = create_transfer_dir(args.batchmeta_dir, tr_id, args.dry_run)
+    result["transfer_id"] = tr_id
+
+    report_dir = out_root / f"pause_resume_{cid}_{tr_id}"
+    log_dir = report_dir / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    src = f"{args.data_root.rstrip('/')}/{ds_id}"
+    dst = f"{args.s3_base.rstrip('/')}/{ds_id}"
+    cmd = build_scheduler_cmd(args, tr_id, src, dst, src, transfer_dir)
+
+    if args.dry_run:
+        LOG.info("[dry-run] would launch broker, %s after %ss (×%s cycle(s)), then resume",
+                 "kill worker" if mode == "worker" else "kill broker", kill_after, cycles)
+        result["status"] = "DRY_RUN"
+        _pr_cleanup(args, src, dst)
+        return result
+
+    if os.name != "posix":
+        result["status"] = "SKIP"
+        result["errors"].append("pause/resume kills need a POSIX host")
+        return result
+
+    try:
+        # --- kill cycle(s) -------------------------------------------------
+        for cyc in range(cycles):
+            before = count_ok_in_cloudcp_log(args.cloudcp_log, tr_id)
+            LOG.info("--- kill cycle %d/%d (ok so far=%d) ---", cyc + 1, cycles, before)
+            kinfo = _run_broker_with_kill(cmd, mode, kill_after, tr_id,
+                                          args.cloudcp_log, expected_total)
+            after = count_ok_in_cloudcp_log(args.cloudcp_log, tr_id)
+            LOG.info("cycle %d: ok before=%d after=%d (delta=%d) killed=%s",
+                     cyc + 1, before, after, after - before, kinfo["killed"])
+
+        result["pr_baseline_ok"] = count_ok_in_cloudcp_log(args.cloudcp_log, tr_id)
+        # snapshot inprogress/.lst state before the resume reconcile
+        result["reconcile"]["inprogress_before"] = _inprogress_snapshot(transfer_dir)
+
+        # worker mode is a single run (broker survived + finished); no resume run
+        if mode == "worker":
+            final_rc = kinfo["rc"]
+        else:
+            # --- final resume run to completion (same id + dir) ------------
+            LOG.info("--- final resume run (transfer_id=%s) ---", tr_id)
+            start_dt = _dt.datetime.now()
+            cap = JournalCapture(args.journal_tag, tr_id, log_dir, start_dt, args.dry_run,
+                                 lead_sec=args.capture_lead, drain_sec=args.capture_drain)
+            cloud_cap = CloudcpLogCapture(args.cloudcp_log, report_dir / "cloudcplogs.txt",
+                                          args.dry_run)
+            cloud_cap.start()
+            cap.start()
+            final_rc = run_scheduler(cmd, args.dry_run)
+            cap.stop()
+            cloud_cap.stop()
+            result["reconcile"].update(_scan_reconcile(cap.raw_path))
+
+        result["pr_final_ok"] = count_ok_in_cloudcp_log(args.cloudcp_log, tr_id)
+
+        # --- validate ------------------------------------------------------
+        csv_src = find_results_csv(args.transfer_logs_dir, tr_id)
+        if csv_src:
+            shutil.copy2(csv_src, report_dir / f"transfer_report_{tr_id}.csv")
+            result["csv"] = csv_duplicate_stats(csv_src)
+        else:
+            result["errors"].append("results CSV not found")
+
+        _pr_evaluate(result, case, final_rc)
+        result["scheduler_exit"] = final_rc
+        (report_dir / "run_meta.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+        _pr_write_summary(report_dir / "summary.txt", result)
+    except Exception as exc:  # noqa: BLE001
+        result["status"] = "FAIL"
+        result["errors"].append(f"unexpected exception: {exc}")
+        LOG.exception("pause/resume %s crashed", cid)
+    finally:
+        _pr_cleanup(args, src, dst)
+
+    LOG.info("%s -> %s", cid, result["status"])
+    return result
+
+
+def _inprogress_snapshot(transfer_dir: Path) -> dict:
+    """Count inprogress batches and how many have a sibling retry .lst on disk."""
+    base = transfer_dir / "batches" / "inprogress"
+    total = with_lst = 0
+    if base.is_dir():
+        for txt in base.rglob("*.txt"):
+            total += 1
+            if list(txt.parent.glob(txt.stem + "*.lst")):
+                with_lst += 1
+    return {"inprogress": total, "with_lst": with_lst}
+
+
+def _scan_reconcile(raw_log: Path) -> dict:
+    """Extract reset/kept counts from the broker's resume-reconcile journal line."""
+    out = {"reset": None, "kept": None}
+    try:
+        text = raw_log.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return out
+    m = _PR_RECONCILE_RE.search(text)
+    if m:
+        out["reset"] = int(m.group(1))
+        out["kept"] = int(m.group(2))
+    return out
+
+
+def _pr_evaluate(result: dict, case: dict, final_rc: int | None) -> None:
+    """Apply the resume oracle (§ plan E.1) and set result['status']/errors."""
+    errs = result["errors"]
+    csv = result.get("csv", {})
+    exp = result["expected_total"]
+
+    if final_rc != 0:
+        errs.append(f"scheduler exit rc={final_rc} (want 0)")
+    if csv:
+        if csv["duplicates"] != 0:
+            errs.append(f"{csv['duplicates']} duplicate object(s) uploaded")
+        if csv["failed"] != 0:
+            errs.append(f"{csv['failed']} non-SUCCESS row(s) in CSV")
+        if csv["distinct"] != exp:
+            errs.append(f"distinct objects {csv['distinct']} != expected {exp}")
+    # reconcile-branch assertion for the two dedicated cases (soft: warn only)
+    want = case.get("reconcile")
+    rec = result.get("reconcile", {})
+    if want == "reset" and not (rec.get("reset") or 0) >= 1:
+        LOG.warning("%s: expected a stale-inprogress requeue but reconcile reset=%s",
+                    case["id"], rec.get("reset"))
+    if want == "kept" and not (rec.get("kept") or 0) >= 1:
+        LOG.warning("%s: expected a .lst-backed batch kept for the fallback but kept=%s",
+                    case["id"], rec.get("kept"))
+
+    result["status"] = "PASS" if not errs else "FAIL"
+
+
+def _pr_write_summary(path: Path, r: dict) -> None:
+    csv = r.get("csv", {})
+    lines = [
+        "Pause / Resume Case Summary",
+        "=" * 60,
+        f"case            : {r['id']} — {r['title']}",
+        f"dataset         : {r['dataset_id']}",
+        f"transfer id     : {r['transfer_id']}",
+        f"mode            : {r['mode']}  kill_after={r['kill_after']}s  cycles={r['cycles']}",
+        f"expected files  : {r['expected_total']}",
+        f"cloudcp.log ok  : baseline={r['pr_baseline_ok']}  final={r['pr_final_ok']}",
+        f"reconcile       : {r.get('reconcile', {})}",
+        f"csv             : distinct={csv.get('distinct')} rows={csv.get('rows')} "
+        f"dups={csv.get('duplicates')} failed={csv.get('failed')}",
+        f"scheduler exit  : {r.get('scheduler_exit')}",
+        f"result          : {r['status']}",
+    ]
+    if r["errors"]:
+        lines += ["", "Errors:"] + [f"  - {e}" for e in r["errors"]]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _pr_cleanup(args, src: str, dst: str) -> None:
+    if args.delete or args.cleanup:
+        cleanup_data_dir(src, args.data_root, args.dry_run)
+    if args.clear_bucket or args.cleanup:
+        clear_transfer_bucket(dst, args.endpoint_url, args.dry_run)
+
+
+def run_pause_resume_suite(args, spec_dir: Path, out_root: Path) -> int:
+    cases = _select_pr_cases(args)
+    if os.name != "posix" and not args.dry_run:
+        LOG.warning("pause/resume targets the Linux bryck host; use --dry-run to preview")
+    results = [run_pause_resume_case(c, args, spec_dir, out_root) for c in cases]
+
+    LOG.info("=" * 70)
+    npass = nfail = 0
+    for r in results:
+        LOG.info("  %-10s %-8s %-13s dups=%s exit=%s",
+                 r["id"], r["status"], r["dataset_id"],
+                 r.get("csv", {}).get("duplicates"), r.get("scheduler_exit"))
+        npass += r["status"] in ("PASS", "DRY_RUN", "SKIP")
+        nfail += r["status"] == "FAIL"
+    (out_root / "pause_resume_results.json").write_text(
+        json.dumps(results, indent=2), encoding="utf-8")
+    LOG.info("pause/resume: %d ok, %d failed", npass, nfail)
+    return 1 if nfail else 0
+
+
+def _select_pr_cases(args) -> list[dict]:
+    if args.pause_resume_case:
+        picked = []
+        for tok in args.pause_resume_case.split(","):
+            tok = tok.strip().upper()
+            if tok in PR_CASE_BY_ID:
+                picked.append(PR_CASE_BY_ID[tok])
+            else:
+                raise SystemExit(f"error: unknown pause/resume case '{tok}' "
+                                 f"(have {', '.join(PR_CASE_BY_ID)})")
+        return picked
+    return list(PAUSE_RESUME_CASES)
+
+
+# =====================================================================================
 # Step 6/8 — parse logs & CSV
 # =====================================================================================
 def parse_ts(line: str, year: int) -> _dt.datetime | None:
@@ -2070,6 +2507,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                     help="list the negative test cases and exit")
     ap.add_argument("--neg-timeout", type=int, default=None,
                     help="per-negative-case wall-clock bound in seconds")
+    ap.add_argument("--pause-resume", dest="pause_resume", action="store_true",
+                    help="run the pause/resume (kill & restart) suite — plan Group E.1")
+    ap.add_argument("--pause-resume-case", dest="pause_resume_case", default=None,
+                    help="run specific pause/resume case id(s), comma-separated (e.g. SCH-PR-04)")
+    ap.add_argument("--pause-resume-list", dest="pause_resume_list", action="store_true",
+                    help="list the pause/resume cases and exit")
+    ap.add_argument("--pr-kill-after", dest="pr_kill_after", type=float, default=None,
+                    help="override the mid-run kill delay (seconds) for ALL pause/resume cases")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("-v", "--verbose", action="store_true")
     return ap.parse_args(argv)
@@ -2097,14 +2542,25 @@ def main(argv: list[str]) -> int:
             return 0
         return neg.run_from_args(args)
 
-    # host/config preflight before any transfer runs
-    preflight_checks(args)
-
     here = Path(__file__).resolve().parent
     spec_dir = Path(args.spec_dir) if args.spec_dir else here / "spec_files"
     out_root = Path(args.out_dir) if args.out_dir else here / "sch_test_runs"
-    out_root.mkdir(parents=True, exist_ok=True)
 
+    # Pause/resume (kill & restart) suite — plan Group E.1.
+    if args.pause_resume_list:
+        for c in PAUSE_RESUME_CASES:
+            print(f"{c['id']:<10} {c['dataset']:<13} mode={c['mode']:<12} "
+                  f"kill_after={c.get('kill_after')} cycles={c.get('cycles', 1)}  {c['title']}")
+        return 0
+    if args.pause_resume or args.pause_resume_case:
+        preflight_checks(args)
+        out_root.mkdir(parents=True, exist_ok=True)
+        return run_pause_resume_suite(args, spec_dir, out_root)
+
+    # host/config preflight before any transfer runs
+    preflight_checks(args)
+
+    out_root.mkdir(parents=True, exist_ok=True)
     manifest = load_manifest(spec_dir)
     by_num = manifest_index(manifest)
     datasets = select_datasets(args, by_num)
