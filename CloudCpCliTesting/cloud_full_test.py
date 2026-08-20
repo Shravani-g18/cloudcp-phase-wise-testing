@@ -676,12 +676,18 @@ def build_catalog() -> List[dict]:
 
 
 
+def run_command_for(entry: dict) -> str:
+    """The exact CLI invocation that runs this one catalog entry by itself."""
+    flag = "--one" if entry["kind"] == "transfer" else "--negative-case"
+    return f"python3 cloud_full_test.py {flag} {entry['id']}"
+
+
 def print_catalog(catalog: List[dict]) -> None:
-    print(f"{'[n]':>6} {'ID':<28}{'KIND':<10}{'STATUS':<12}NAME")
-    print("-" * 110)
+    print(f"{'[n]':>6} {'ID':<28}{'KIND':<10}{'STATUS':<12}{'COMMAND':<66}NAME")
+    print("-" * 170)
     for i, e in enumerate(catalog, start=1):
         status = "IMPLEMENTED" if e["implemented"] else "stub"
-        print(f"[{i:>4}] {e['id']:<28}{e['kind']:<10}{status:<12}{e['name']}")
+        print(f"[{i:>4}] {e['id']:<28}{e['kind']:<10}{status:<12}{run_command_for(e):<66}{e['name']}")
     n_transfer = sum(1 for e in catalog if e["kind"] == "transfer")
     n_negative = sum(1 for e in catalog if e["kind"] == "negative")
     print(f"\n{len(catalog)} total case(s): {n_transfer} transfer + {n_negative} negative.")
@@ -699,6 +705,19 @@ def _resolve_token(token: str, catalog: List[dict], id_index: dict) -> int:
     if token not in id_index:
         raise SystemExit(f"ERROR: unknown case id {token!r}. Use --list to see valid IDs.")
     return id_index[token]
+
+
+def _split_range_spec(spec: str, catalog: List[dict], id_index: dict) -> tuple[str, str]:
+    """Split a '--range FROM-TO' spec on '-', trying every split point so
+    hyphenated case ids (e.g. TRANSFER-DS-P1-01-UPLOAD, bryck-info-trigger)
+    still resolve correctly on both sides."""
+    parts = spec.split("-")
+    for i in range(1, len(parts)):
+        left, right = "-".join(parts[:i]), "-".join(parts[i:])
+        if (left.strip().isdigit() or left.strip() in id_index) and \
+           (right.strip().isdigit() or right.strip() in id_index):
+            return left.strip(), right.strip()
+    raise SystemExit(f"ERROR: could not parse --range {spec!r} as FROM-TO; use --from/--to instead if ambiguous.")
 
 
 def resolve_selection(args: argparse.Namespace, catalog: List[dict]) -> List[dict]:
@@ -720,6 +739,17 @@ def resolve_selection(args: argparse.Namespace, catalog: List[dict]) -> List[dic
     if args.one:
         wanted = [t.strip() for t in args.one.split(",") if t.strip()]
         return [catalog[_resolve_token(t, catalog, id_index)] for t in wanted]
+
+    if args.order:
+        return [catalog[_resolve_token(args.order, catalog, id_index)]]
+
+    if args.range_spec:
+        from_id, to_id = _split_range_spec(args.range_spec, catalog, id_index)
+        start = _resolve_token(from_id, catalog, id_index)
+        end = _resolve_token(to_id, catalog, id_index)
+        if start > end:
+            start, end = end, start
+        return catalog[start:end + 1]
 
     if args.from_id or args.to_id:
         if not (args.from_id and args.to_id):
@@ -876,8 +906,12 @@ def parse_args(argv: Optional[list] = None) -> argparse.Namespace:
     sel = p.add_argument_group("selection")
     sel.add_argument("--all", action="store_true", help="Run every case (transfer + negative).")
     sel.add_argument("--one", default=None, help="Run one case, or a comma-separated list, by # index or case id.")
+    sel.add_argument("--order", default=None,
+                     help="Run exactly one case by its # index or case id (same resolution as --one).")
     sel.add_argument("--from", dest="from_id", default=None, help="Start case (# index or id, inclusive).")
     sel.add_argument("--to", dest="to_id", default=None, help="End case (# index or id, inclusive).")
+    sel.add_argument("--range", dest="range_spec", default=None,
+                     help="Inclusive range as FROM-TO (# index or id on each side), e.g. --range 1-9 or --range CLI-01-CLI-09.")
     sel.add_argument("--negative", action="store_true", help="Run only the negative-catalog cases.")
     sel.add_argument("--negative-case", default=None,
                      help="Run one/comma-separated negative case(s) by # index or id.")
@@ -980,7 +1014,8 @@ def main(argv: Optional[list] = None) -> int:
 
     selected = resolve_selection(args, catalog)
     if not selected:
-        print("Use --list, --all, --one <id[,id...]>, --from/--to, --negative, or --negative-case.")
+        print("Use --list, --all, --one <id[,id...]>, --order <id>, --from/--to, --range FROM-TO, "
+              "--negative, or --negative-case.")
         return 2
 
     run_id = args.run_id or f"full_test_{dt.datetime.now():%Y%m%d_%H%M%S}"

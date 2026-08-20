@@ -2161,6 +2161,14 @@ def handle_fault(case_id: str, desc: str, mgr: EnvironmentManager, args, work: P
     if case_id in {"FAULT-02", "FAULT-03"}:
         if not args.live:
             return blocked(case_id, "FAULT", desc, baseline, "requires --live against the dedicated Bryck device", mgr=mgr)
+        # Fault-injection runs against a real background transfer (small, <=2GB dataset) so this
+        # case also proves the fault never disturbs a transfer that is actually in flight.
+        if not (mgr.ensure_mounted() and mgr.ensure_cloud_configured() and mgr.ensure_dataset()):
+            return blocked(case_id, "FAULT", desc, baseline, "could not establish mounted+configured+dataset baseline", mgr=mgr)
+        env_before = mgr.snapshot(f"{case_id}:before")
+        tid = mgr.create_transfer("upload", "IN_PROGRESS")
+        if not tid:
+            return blocked(case_id, "FAULT", desc, baseline, "could not establish a background active transfer", env_before, mgr)
         from fault_proxy import FaultProxy
         login_cfg = json.loads(ctx.login_json.read_text(encoding="utf-8"))
         proxy = FaultProxy(
@@ -2196,7 +2204,13 @@ def handle_fault(case_id: str, desc: str, mgr: EnvironmentManager, args, work: P
                 expected = "A malformed (non-JSON) 200 response is surfaced as a controlled parse failure; no traceback."
         finally:
             proxy.stop()
-        return result_from_step(case_id, "FAULT", desc, baseline, None, sr, mgr, expected=expected)
+        status_sr = mgr.cap(f"{case_id}:status_unaffected", ctx.transfer_status(tid, f"{case_id} background transfer status after fault window"))
+        combined = dataclasses.replace(sr, passed=(sr.passed and status_sr.passed))
+        expected += " The background transfer remains observable and unaffected throughout."
+        cleanup_detail = mgr.cleanup_transfer(tid)
+        env_after = mgr.snapshot(f"{case_id}:after")
+        return result_from_step(case_id, "FAULT", desc, baseline, env_before, combined, mgr, expected=expected,
+                                cleanup_status="performed", cleanup_detail=cleanup_detail, env_after=env_after)
     return blocked(case_id, "FAULT", desc, baseline,
                    "requires an approved API mock/proxy for HTTP-status/malformed-response/mid-transfer fault injection", mgr=mgr)
 
@@ -2602,50 +2616,56 @@ def handle_mgmt(case_id: str, desc: str, mgr: EnvironmentManager, args, work: Pa
                                 expected="Network info remains queryable while the Bryck is ejected/unmounted.",
                                 env_after=mgr.snapshot(f"{case_id}:after"))
 
-    if case_id == "MGMT-02":
+    # MGMT-02..06 and MGMT-10 run against a real background transfer (small, <=2GB dataset) so
+    # they also verify the invalid/duplicate management call never disturbs a transfer in flight.
+    if case_id in {"MGMT-02", "MGMT-03", "MGMT-04", "MGMT-05", "MGMT-06", "MGMT-10"}:
+        if not (mgr.ensure_mounted() and mgr.ensure_cloud_configured() and mgr.ensure_dataset()):
+            return blocked(case_id, "MGMT", desc, baseline, "could not establish mounted+configured+dataset baseline", mgr=mgr)
         env_before = mgr.snapshot(f"{case_id}:before")
-        p = mgr.build_fixture(CHANGE_IP_PARAMS_JSON, {"ip": "999.999.999.999"}, work, f"{case_id}.json")
-        sr = mgr.cap(case_id, ctx.run_py(desc, "change_ip.py", "--login", str(ctx.login_json),
-                                         "--params", str(p), timeout=180, expect_fail=True))
-        return result_from_step(case_id, "MGMT", desc, baseline, env_before, sr, mgr,
-                                expected="An invalid/malformed IP address is rejected before any network change is applied.",
-                                env_after=mgr.snapshot(f"{case_id}:after"))
+        tid = mgr.create_transfer("upload", "IN_PROGRESS")
+        if not tid:
+            return blocked(case_id, "MGMT", desc, baseline, "could not establish a background active transfer", env_before, mgr)
 
-    if case_id == "MGMT-03":
-        env_before = mgr.snapshot(f"{case_id}:before")
-        p = mgr.build_fixture(CHANGE_IP_PARAMS_JSON, {"netmask": "not-a-netmask"}, work, f"{case_id}.json")
-        sr = mgr.cap(case_id, ctx.run_py(desc, "change_ip.py", "--login", str(ctx.login_json),
-                                         "--params", str(p), timeout=180, expect_fail=True))
-        return result_from_step(case_id, "MGMT", desc, baseline, env_before, sr, mgr,
-                                expected="An invalid netmask is rejected before any network change is applied.",
-                                env_after=mgr.snapshot(f"{case_id}:after"))
+        if case_id == "MGMT-02":
+            p = mgr.build_fixture(CHANGE_IP_PARAMS_JSON, {"ip": "999.999.999.999"}, work, f"{case_id}.json")
+            mgmt_sr = mgr.cap(f"{case_id}:mgmt", ctx.run_py(desc, "change_ip.py", "--login", str(ctx.login_json),
+                                                            "--params", str(p), timeout=180, expect_fail=True))
+            expected = "An invalid/malformed IP address is rejected before any network change is applied."
+        elif case_id == "MGMT-03":
+            p = mgr.build_fixture(CHANGE_IP_PARAMS_JSON, {"netmask": "not-a-netmask"}, work, f"{case_id}.json")
+            mgmt_sr = mgr.cap(f"{case_id}:mgmt", ctx.run_py(desc, "change_ip.py", "--login", str(ctx.login_json),
+                                                            "--params", str(p), timeout=180, expect_fail=True))
+            expected = "An invalid netmask is rejected before any network change is applied."
+        elif case_id == "MGMT-04":
+            p = mgr.build_fixture(ctx.change_time_json, {"option": "NTP", "ntp_server": "not a valid host!!"}, work, f"{case_id}.json")
+            mgmt_sr = mgr.cap(f"{case_id}:mgmt", ctx.run_py(desc, "change_time.py", "--login", str(ctx.login_json),
+                                                            "--params", str(p), timeout=180, expect_fail=True))
+            expected = "An invalid/unreachable NTP server is rejected with a controlled error."
+        elif case_id == "MGMT-05":
+            p = mgr.build_fixture(ctx.change_time_json, {"date": "13/45/9999"}, work, f"{case_id}.json")
+            mgmt_sr = mgr.cap(f"{case_id}:mgmt", ctx.run_py(desc, "change_time.py", "--login", str(ctx.login_json),
+                                                            "--params", str(p), timeout=120, expect_fail=True))
+            expected = "An invalid calendar date is rejected without corrupting the current time."
+        elif case_id == "MGMT-06":
+            p = mgr.build_fixture(ctx.change_time_json, {"time": "99:99:99"}, work, f"{case_id}.json")
+            mgmt_sr = mgr.cap(f"{case_id}:mgmt", ctx.run_py(desc, "change_time.py", "--login", str(ctx.login_json),
+                                                            "--params", str(p), timeout=120, expect_fail=True))
+            expected = "An invalid time-of-day is rejected without corrupting the current time."
+        else:  # MGMT-10: duplicate NTP configuration must be idempotent, not crash
+            p = mgr.build_fixture(ctx.change_time_json, {"option": "NTP", "ntp_server": "pool.ntp.org"}, work, f"{case_id}.json")
+            mgr.cap(f"{case_id}:first", ctx.run_py(desc, "change_time.py", "--login", str(ctx.login_json),
+                                                   "--params", str(p), timeout=180))
+            mgmt_sr = mgr.cap(f"{case_id}:second", ctx.run_py(desc, "change_time.py", "--login", str(ctx.login_json),
+                                                              "--params", str(p), timeout=180))
+            expected = "A duplicate/idempotent NTP configuration call succeeds without crashing or corrupting state."
 
-    if case_id == "MGMT-04":
-        env_before = mgr.snapshot(f"{case_id}:before")
-        p = mgr.build_fixture(ctx.change_time_json, {"option": "NTP", "ntp_server": "not a valid host!!"}, work, f"{case_id}.json")
-        sr = mgr.cap(case_id, ctx.run_py(desc, "change_time.py", "--login", str(ctx.login_json),
-                                         "--params", str(p), timeout=180, expect_fail=True))
-        return result_from_step(case_id, "MGMT", desc, baseline, env_before, sr, mgr,
-                                expected="An invalid/unreachable NTP server is rejected with a controlled error.",
-                                env_after=mgr.snapshot(f"{case_id}:after"))
-
-    if case_id == "MGMT-05":
-        env_before = mgr.snapshot(f"{case_id}:before")
-        p = mgr.build_fixture(ctx.change_time_json, {"date": "13/45/9999"}, work, f"{case_id}.json")
-        sr = mgr.cap(case_id, ctx.run_py(desc, "change_time.py", "--login", str(ctx.login_json),
-                                         "--params", str(p), timeout=120, expect_fail=True))
-        return result_from_step(case_id, "MGMT", desc, baseline, env_before, sr, mgr,
-                                expected="An invalid calendar date is rejected without corrupting the current time.",
-                                env_after=mgr.snapshot(f"{case_id}:after"))
-
-    if case_id == "MGMT-06":
-        env_before = mgr.snapshot(f"{case_id}:before")
-        p = mgr.build_fixture(ctx.change_time_json, {"time": "99:99:99"}, work, f"{case_id}.json")
-        sr = mgr.cap(case_id, ctx.run_py(desc, "change_time.py", "--login", str(ctx.login_json),
-                                         "--params", str(p), timeout=120, expect_fail=True))
-        return result_from_step(case_id, "MGMT", desc, baseline, env_before, sr, mgr,
-                                expected="An invalid time-of-day is rejected without corrupting the current time.",
-                                env_after=mgr.snapshot(f"{case_id}:after"))
+        status_sr = mgr.cap(f"{case_id}:status_unaffected", ctx.transfer_status(tid, f"{case_id} background transfer status"))
+        combined = dataclasses.replace(mgmt_sr, passed=(mgmt_sr.passed and status_sr.passed))
+        expected += " The background transfer remains observable and unaffected throughout."
+        cleanup_detail = mgr.cleanup_transfer(tid)
+        env_after = mgr.snapshot(f"{case_id}:after")
+        return result_from_step(case_id, "MGMT", desc, baseline, env_before, combined, mgr, expected=expected,
+                                cleanup_status="performed", cleanup_detail=cleanup_detail, env_after=env_after)
 
     if case_id == "MGMT-07":
         baseline = {"bryck": "ejected/unmounted"}
@@ -2687,16 +2707,7 @@ def handle_mgmt(case_id: str, desc: str, mgr: EnvironmentManager, args, work: Pa
                                 cleanup_detail="remounted" if remounted else "could not remount after scan",
                                 env_after=env_after)
 
-    # MGMT-10: duplicate NTP configuration must be idempotent, not crash
-    env_before = mgr.snapshot(f"{case_id}:before")
-    p = mgr.build_fixture(ctx.change_time_json, {"option": "NTP", "ntp_server": "pool.ntp.org"}, work, f"{case_id}.json")
-    mgr.cap(f"{case_id}:first", ctx.run_py(desc, "change_time.py", "--login", str(ctx.login_json),
-                                           "--params", str(p), timeout=180))
-    second = mgr.cap(case_id, ctx.run_py(desc, "change_time.py", "--login", str(ctx.login_json),
-                                         "--params", str(p), timeout=180))
-    return result_from_step(case_id, "MGMT", desc, baseline, env_before, second, mgr,
-                            expected="A duplicate/idempotent NTP configuration call succeeds without crashing or corrupting state.",
-                            env_after=mgr.snapshot(f"{case_id}:after"))
+    return blocked(case_id, "MGMT", desc, baseline, "no automated case registered for this management operation", mgr=mgr)
 
 
 SVC_SERVICES = [
@@ -2796,30 +2807,43 @@ def handle_svc(case_id: str, desc: str, mgr: EnvironmentManager, args, work: Pat
         return result_from_step(case_id, "SVC", desc, baseline, env_before, combined, mgr, expected=expected,
                                 cleanup_status="performed", cleanup_detail=cleanup_detail, env_after=env_after)
 
-    # stop_before_mgmt_op -- same atomic-restart safety guarantee as stop_active_transfer above.
+    # stop_before_mgmt_op -- same atomic-restart safety guarantee as stop_active_transfer above,
+    # but with an active transfer running throughout so the management probe is exercised against
+    # a real in-flight transfer rather than an idle device.
+    if not (mgr.ensure_mounted() and mgr.ensure_cloud_configured() and mgr.ensure_dataset(spec="priority_2gb.yaml")):
+        return blocked(case_id, "SVC", desc, baseline, "could not establish mounted+configured+dataset baseline", mgr=mgr)
     env_before = mgr.snapshot(f"{case_id}:before")
+    tid = mgr.create_transfer("upload", "IN_PROGRESS")
+    if not tid:
+        return blocked(case_id, "SVC", desc, baseline, "could not establish an active transfer", env_before, mgr)
+
     try:
         fault_sr = svc_restart()
         mgmt_sr = mgr.cap(f"{case_id}:mgmt_probe", ctx.bryck_info(f"management probe while {service} was restarting"))
+        status_sr = mgr.cap(f"{case_id}:status_during_fault", ctx.transfer_status(tid, f"{case_id} during outage"))
     finally:
         recover_sr = svc_restart()
     active_check = svc_is_active()
     mgmt_after_sr = mgr.cap(f"{case_id}:mgmt_probe_after", ctx.bryck_info(f"management probe after {service} restarted"))
-    passed = (fault_sr.passed and recover_sr.passed and active_check.passed
-             and mgmt_after_sr.passed and no_traceback(mgmt_sr))
+    passed = (fault_sr.passed and recover_sr.passed and active_check.passed and mgmt_after_sr.passed
+             and no_traceback(mgmt_sr) and no_traceback(status_sr))
     combined = ctr.StepResult(
-        step=0, name=desc, command=f"{fault_sr.command}; {mgmt_sr.command}; {mgmt_after_sr.command}",
-        stdout=f"{fault_sr.stdout}\n{mgmt_sr.stdout}\n{mgmt_after_sr.stdout}",
-        stderr=f"{fault_sr.stderr}\n{mgmt_sr.stderr}\n{mgmt_after_sr.stderr}",
+        step=0, name=desc, command=f"{fault_sr.command}; {mgmt_sr.command}; {status_sr.command}; {mgmt_after_sr.command}",
+        stdout=f"{fault_sr.stdout}\n{mgmt_sr.stdout}\n{status_sr.stdout}\n{mgmt_after_sr.stdout}",
+        stderr=f"{fault_sr.stderr}\n{mgmt_sr.stderr}\n{status_sr.stderr}\n{mgmt_after_sr.stderr}",
         returncode=0 if passed else 1,
-        duration_sec=fault_sr.duration_sec + mgmt_sr.duration_sec + mgmt_after_sr.duration_sec, passed=passed,
+        duration_sec=(fault_sr.duration_sec + mgmt_sr.duration_sec + status_sr.duration_sec
+                     + mgmt_after_sr.duration_sec), passed=passed,
     )
+    cleanup_detail = mgr.cleanup_transfer(tid)
     env_after = mgr.snapshot(f"{case_id}:after")
-    expected = (f"A management operation attempted while {service} is stopped produces a bounded, traceback-free "
-               f"result, and management operations succeed again once {service} is restarted.")
+    expected = (f"A management operation attempted while {service} is stopped -- with a transfer actively in "
+               f"progress -- produces a bounded, traceback-free result, the transfer itself is not corrupted, "
+               f"and management operations succeed again once {service} is restarted.")
     return result_from_step(case_id, "SVC", desc, baseline, env_before, combined, mgr, expected=expected,
                             cleanup_status="performed",
-                            cleanup_detail=f"{service} restarted; is-active={active_check.passed}", env_after=env_after)
+                            cleanup_detail=f"{cleanup_detail}; {service} restarted; is-active={active_check.passed}",
+                            env_after=env_after)
 
 
 # =============================================================================
@@ -3139,13 +3163,14 @@ def handle_combo(case_id: str, desc: str, mgr: EnvironmentManager, args, work: P
             mgr.cleanup_transfer(tid)
         return combined_result("Concurrent transfers are isolated: pausing/cancelling one does not corrupt the other.")
 
-    if case_id in {"F-17", "F-18", "F-19", "F-20"}:
+    if case_id in {"F-15", "F-16", "F-17", "F-18", "F-19", "F-20"}:
         tid = mgr.create_transfer("upload", "IN_PROGRESS")
         if not tid:
             return blocked(case_id, "F", desc, baseline, "could not establish an active upload", env_before, mgr)
-        if case_id in {"F-18"}:
+        if case_id in {"F-16", "F-18"}:
             mgr.cap(f"{case_id}:pause_setup", ctx.pause_transfer(tid))
         pair = {
+            "F-15": ("pause", "deconfigure"), "F-16": ("resume", "deconfigure"),
             "F-17": ("pause", "cancel"), "F-18": ("resume", "cancel"),
             "F-19": ("eject", "cancel"), "F-20": ("format", "cancel"),
         }[case_id]
@@ -3155,6 +3180,7 @@ def handle_combo(case_id: str, desc: str, mgr: EnvironmentManager, args, work: P
             "cancel": lambda: ctx.cancel_transfer(tid),
             "eject": lambda: ctx.eject_bryck(expect_fail=True),
             "format": lambda: invert_result(ctx.format_bryck()),
+            "deconfigure": lambda: ctx.deconfigure_cloud(expect_fail=True),
         }
         barrier = threading.Barrier(2)
 
@@ -3170,6 +3196,31 @@ def handle_combo(case_id: str, desc: str, mgr: EnvironmentManager, args, work: P
         step("final_status", ctx.transfer_status(tid, f"{case_id} final status"))
         mgr.cleanup_transfer(tid)
         return combined_result(f"{pair[0]}+{pair[1]} racing against each other yields exactly one valid final state.")
+
+    if case_id in {"F-23", "F-24"}:
+        # Service Restart During Upload/Pause: same real systemd restart already used by SVC's
+        # stop_active_transfer, run here as a combo flow against the small background transfer.
+        if not args.allow_service_faults:
+            return blocked(case_id, "F", desc, baseline,
+                           "requires --allow-service-faults (restarts a real systemd service on the device)",
+                           env_before, mgr)
+        service = "bcloud.service"
+        if case_id == "F-23":
+            tid = mgr.create_transfer("upload", "IN_PROGRESS")
+        else:
+            tid = mgr.create_transfer_at("upload", "PAUSED")
+        if not tid:
+            return blocked(case_id, "F", desc, baseline, "could not establish the required transfer fixture", env_before, mgr)
+        try:
+            step("service_restart", mgr.run_ssh(f"{case_id}:restart:{service}", f"sudo systemctl restart {service}", timeout=90))
+        finally:
+            step("service_restart_recover", mgr.run_ssh(f"{case_id}:restart2:{service}", f"sudo systemctl restart {service}", timeout=90))
+        step("status_after_restart", ctx.transfer_status(tid, f"{case_id} status after service restart"))
+        step("is_active", mgr.run_ssh(f"{case_id}:is-active:{service}", f"systemctl is-active {service}", timeout=30))
+        mgr.cleanup_transfer(tid)
+        state_label = "IN_PROGRESS" if case_id == "F-23" else "PAUSED"
+        return combined_result(f"Restarting {service} while the transfer is {state_label} produces a bounded, "
+                               f"traceback-free result; the transfer remains observable afterward and {service} is active again.")
 
     if case_id in {"F-34", "F-35"}:
         if case_id == "F-34":
