@@ -121,10 +121,12 @@ def build_component_catalog() -> list[CompCase]:
     # Worker break conditions
     cases.append(CompCase(
         cid="CFW-N-02", mechanism="worker", group="NEGATIVE", dataset="tiny",
-        transfer_type="upload", fault="bad_lst", expect="fail",
-        desc="B1 — Malformed .lst framing (2 fields/record, no size/error fields): "
-             "read_retry_list misgroups fields; url_parse receives garbage paths and "
-             "returns (None,None); all records fail terminally; no hang/crash."))
+        transfer_type="upload", fault="bad_lst", expect="warn",
+        desc="B1 — Malformed .lst framing (2 fields/record): read_retry_list groups "
+             "10800 fields into 2700 synthetic records where local_path and s3path "
+             "are both valid (every other real record pair). Exactly N/2 files upload "
+             "as FALLBACK_OK; the other N/2 are silently lost. Batch completes "
+             "cleanly with no errors — SILENT DATA LOSS, not terminal failure."))
     cases.append(CompCase(
         cid="CFW-N-03", mechanism="worker", group="NEGATIVE", dataset="tiny",
         transfer_type="upload", fault="bad_bucket", expect="fail",
@@ -460,8 +462,28 @@ class ComponentRunner:
                    "lst_retired": lst_done, "s3_objects": objs}
 
         reasons = []
-        if case.fault in ("bad_lst", "bad_bucket"):
-            # B1/B2: all records fail terminally; batch stays inprogress; .lst not retired.
+        if case.fault == "bad_lst":
+            # B1: 2-field records → read_retry_list produces N/2 valid (path, s3path) pairs.
+            # Exactly half the files upload silently; the other half are lost with no error.
+            expected_ok = count // 2 if count is not None else None
+            ok = (expected_ok is not None
+                  and fallback_ok == expected_ok
+                  and completed
+                  and lst_done)
+            if expected_ok is not None and fallback_ok != expected_ok:
+                reasons.append(f"FALLBACK_OK rows={fallback_ok}, expected {expected_ok} (N/2)")
+            if not completed:
+                reasons.append("batch not completed (expected clean completion with 0 errors)")
+            if not lst_done:
+                reasons.append(".lst not retired")
+            verdict = "PASS" if ok else "FAIL"
+            if ok:
+                reasons = [f"SILENT DATA LOSS confirmed: {fallback_ok}/{count} files uploaded "
+                           f"(N/2); other N/2 silently dropped as size/err fields; "
+                           f"batch completed cleanly with no errors recorded"]
+
+        elif case.fault == "bad_bucket":
+            # B2: all records fail terminally; batch stays inprogress; .lst not retired.
             ok = (fallback_ok == 0 and not completed and not lst_done)
             if fallback_ok != 0:
                 reasons.append(f"expected 0 FALLBACK_OK rows, got {fallback_ok}")
