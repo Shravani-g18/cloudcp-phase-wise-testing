@@ -1167,6 +1167,21 @@ class NegEnvironmentManager:
             state = payload["bryck_info"].get("State")
         return str(state or "UNKNOWN").strip()
 
+    def wait_for_bryck_state(self, targets: set, timeout: int) -> str:
+        """Poll bryck_state() (case-insensitive) until it matches one of `targets`
+        or `timeout` elapses -- used to verify a transition actually completed
+        before the next operation is attempted, instead of assuming it did."""
+        if self.dry_run:
+            return next(iter(targets))
+        state = self.bryck_state()
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if state.strip().lower() in targets:
+                return state
+            time.sleep(self.poll_interval)
+            state = self.bryck_state()
+        return state
+
     def ensure_mounted(self) -> bool:
         if self.dry_run:
             return True
@@ -1193,6 +1208,40 @@ class NegEnvironmentManager:
             return True
         return self._run_py("eject", "bryck_eject_unmount.py", ["--login", self.login],
                             timeout=self.action_timeout).passed
+
+    def format_with_retry(self, deadline_sec: int = 300) -> NegCmd:
+        """A just-ejected device can stay in 'Ejecting' well past action_timeout
+        before format is accepted -- retry on a bounded deadline instead of
+        giving up after one attempt (mirrors the reference master-flow runner)."""
+        cmd = self.format_bryck()
+        if self.dry_run:
+            return cmd
+        deadline = time.time() + deadline_sec
+        while not cmd.passed and time.time() < deadline:
+            time.sleep(self.poll_interval)
+            cmd = self.format_bryck()
+        return cmd
+
+    def mount_with_retry(self, deadline_sec: int = 300) -> NegCmd:
+        """Same stuck-transitional-state race as format_with_retry, for mount."""
+        cmd = self.mount_bryck()
+        if self.dry_run:
+            return cmd
+        deadline = time.time() + deadline_sec
+        while not cmd.passed and time.time() < deadline:
+            time.sleep(self.poll_interval)
+            cmd = self.mount_bryck()
+        return cmd
+
+    def configure_cloud_with_retry(self, tier: str, base_cloud_ops: dict, deadline_sec: int = 120) -> bool:
+        ok = self.configure_cloud(tier, base_cloud_ops)
+        if self.dry_run:
+            return ok
+        deadline = time.time() + deadline_sec
+        while not ok and time.time() < deadline:
+            time.sleep(self.poll_interval)
+            ok = self.configure_cloud(tier, base_cloud_ops)
+        return ok
 
     def configure_cloud(self, tier: str, base_cloud_ops: dict) -> bool:
         cloud_type = str(base_cloud_ops.get("cloud_type", "aws"))
@@ -1617,16 +1666,20 @@ def _neg_master_run_leg(env: NegEnvironmentManager, ctx: NegExecContext, mode: s
     if state == "IN_PROGRESS":
         pause_cmd = env.pause_transfer(tid)
         notes.append(f"pause: {'OK' if pause_cmd.passed else 'FAIL'} (rc={pause_cmd.rc})")
-        paused_state, _ = env.transfer_status(tid)
-        notes.append(f"verify PAUSED: state={paused_state}")
+        paused_state = env.wait_for_state(tid, {"PAUSED"}, timeout=60)
+        notes.append(f"verify PAUSED before proceeding: state={paused_state}")
         env.download_report(tid, str(ctx.work_dir / f"{mode}_paused_report"))
+        if paused_state != "PAUSED":
+            notes.append(f"WARNING: transfer never confirmed PAUSED (state={paused_state!r}); "
+                        f"continuing with reduced confidence in the pause/resume steps below")
 
         pause_again = env.pause_transfer(tid)
         notes.append(f"pause again (idempotence check): rc={pause_again.rc}")
 
         resume_cmd = env.resume_transfer(tid)
         notes.append(f"resume: {'OK' if resume_cmd.passed else 'FAIL'} (rc={resume_cmd.rc})")
-        env.wait_for_state(tid, {"IN_PROGRESS", "COMPLETED"}, timeout=120)
+        resumed_state = env.wait_for_state(tid, {"IN_PROGRESS", "COMPLETED"}, timeout=120)
+        notes.append(f"verify IN_PROGRESS/COMPLETED after resume: state={resumed_state}")
         env.download_report(tid, str(ctx.work_dir / f"{mode}_resumed_report"))
 
         # Destructive/lifecycle attempts while the transfer is active -- every one of
@@ -1639,7 +1692,9 @@ def _neg_master_run_leg(env: NegEnvironmentManager, ctx: NegExecContext, mode: s
         notes.append(f"attempt MOUNT during active transfer: rc={mount_attempt.rc}")
         deconf_attempt = env.deconfigure_cloud()
         notes.append(f"attempt AWS DECONFIGURE during active transfer: rejected={not deconf_attempt.passed} (rc={deconf_attempt.rc})")
-        notes.append(f"post-attempt integrity check: bryck_state={env.bryck_state()!r}")
+        integrity_state = env.wait_for_bryck_state({"mounted"}, timeout=env.action_timeout)
+        notes.append(f"post-attempt integrity check: bryck_state={integrity_state!r} "
+                    f"(expected still 'Mounted' -- rejected attempts must not have changed device state)")
 
     final_state = env.wait_for_terminal(tid, timeout=7200)
     notes.append(f"wait for completion: final_state={final_state}")
@@ -1658,28 +1713,63 @@ def _neg_master_handler(direction: str) -> Callable:
 
         def fail(reason: str) -> NegResult:
             return NegResult(test_id=tc.id, section="MASTER", name=tc.name, status="FAIL",
-                             expected="Format/mount/configure baseline is established before the transfer leg(s).",
+                             expected="Each step's resulting Bryck state is verified before the next step runs "
+                                     "(no operation is issued against an unconfirmed/transitional state).",
                              actual="; ".join(notes), reason=reason, commands=[c.as_dict() for c in env.commands])
 
-        if env.bryck_state().strip().lower() == "mounted":
-            notes.append(f"eject (baseline): rc={env.eject_bryck().rc}")
+        # 1. Baseline state.
+        baseline_state = env.bryck_state()
+        notes.append(f"baseline bryck_state={baseline_state!r}")
 
-        fmt_cmd = env.format_bryck()
+        # 2. Eject if mounted, then VERIFY the eject actually completed before
+        # doing anything else (format on top of a still-'Ejecting' device is the
+        # #1 cause of spurious format failures -- never assume, always confirm).
+        if baseline_state.strip().lower() == "mounted":
+            eject_cmd = env.eject_bryck()
+            notes.append(f"eject (baseline): rc={eject_cmd.rc}")
+            ejected_state = env.wait_for_bryck_state({"ejected", "removed"}, timeout=env.action_timeout)
+            notes.append(f"verify NOT mounted after eject: bryck_state={ejected_state!r}")
+            if ejected_state.strip().lower() not in {"ejected", "removed"}:
+                return fail(f"device never reached Ejected/Removed after eject (stuck at {ejected_state!r})")
+
+        # 3. Format, retried on a bounded deadline (a just-ejected device can stay
+        # in 'Ejecting' well past action_timeout), then VERIFY it is not mounted
+        # immediately afterward before attempting mount.
+        fmt_cmd = env.format_with_retry(deadline_sec=300)
         notes.append(f"format: {'OK' if fmt_cmd.passed else 'FAIL'} (rc={fmt_cmd.rc})")
         if not fmt_cmd.passed:
-            return fail("format step failed")
+            return fail("format step failed (device never accepted format within the 300s retry deadline)")
+        post_format_state = env.wait_for_bryck_state({"ejected", "removed"}, timeout=60)
+        notes.append(f"verify NOT mounted after format: bryck_state={post_format_state!r}")
+        if post_format_state.strip().lower() not in {"ejected", "removed"}:
+            return fail(f"device not in Ejected/Removed immediately after format (state={post_format_state!r})")
 
-        mount_cmd = env.mount_bryck()
+        # 4. Mount, retried on a bounded deadline, then VERIFY Mounted before
+        # configuring cloud or generating any dataset (never generate data
+        # against an unconfirmed mount state).
+        mount_cmd = env.mount_with_retry(deadline_sec=300)
         notes.append(f"mount: {'OK' if mount_cmd.passed else 'FAIL'} (rc={mount_cmd.rc})")
         if not mount_cmd.passed:
-            return fail("mount step failed")
+            return fail("mount step failed (device never accepted mount within the 300s retry deadline)")
+        mounted_state = env.wait_for_bryck_state({"mounted"}, timeout=env.action_timeout)
+        notes.append(f"verify Mounted after mount: bryck_state={mounted_state!r}")
+        if mounted_state.strip().lower() != "mounted":
+            return fail(f"device never reached Mounted after mount (state={mounted_state!r})")
 
+        # 5. Configure AWS, retried on a bounded deadline, then VERIFY via
+        # bryck_cloud_show.py before starting any transfer leg.
         tier = env.datasets.resolve(ctx.args.dataset_requirement)
-        configured = env.configure_cloud(tier, ctx.cloud_ops_cfg)
+        configured = env.configure_cloud_with_retry(tier, ctx.cloud_ops_cfg, deadline_sec=120)
         notes.append(f"configure AWS: {'OK' if configured else 'FAIL'}")
         if not configured:
-            return fail("cloud configure step failed")
+            return fail("cloud configure step failed within the 120s retry deadline")
+        show_cmd = env.show_cloud()
+        notes.append(f"verify cloud configured: rc={show_cmd.rc}")
+        if not show_cmd.passed:
+            return fail("bryck_cloud_show.py could not confirm the cloud configuration actually took effect")
 
+        # 6. Transfer leg(s) -- each already verifies IN_PROGRESS/PAUSED/terminal
+        # state before proceeding to its own next step (see _neg_master_run_leg).
         upload_tid = download_tid = None
         if direction in ("upload", "both"):
             upload_tid = _neg_master_run_leg(env, ctx, "upload", notes, generate=True)
@@ -1689,10 +1779,13 @@ def _neg_master_handler(direction: str) -> Callable:
                 _neg_master_run_leg(env, ctx, "upload", notes, generate=True)
             download_tid = _neg_master_run_leg(env, ctx, "download", notes, generate=False)
 
+        # 7. Cleanup -- deconfigure/eject, each followed by its own state check
+        # (best-effort: recorded but never overrides the flow's own PASS/FAIL).
         env.deconfigure_cloud()
         notes.append("deconfigure (cleanup): done")
-        env.eject_bryck()
-        notes.append("eject (cleanup): done")
+        eject_cleanup = env.eject_bryck()
+        final_state = env.wait_for_bryck_state({"ejected", "removed"}, timeout=env.action_timeout)
+        notes.append(f"eject (cleanup): rc={eject_cleanup.rc}; final bryck_state={final_state!r}")
         for t in (upload_tid, download_tid):
             if t:
                 env.cleanup_transfer(t)
