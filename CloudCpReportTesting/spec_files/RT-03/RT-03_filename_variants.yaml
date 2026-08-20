@@ -1,0 +1,26 @@
+version: 1
+mode: flat
+root: /bryck/report_testing/RT-03
+threads: 8
+seed: 1003
+
+content:
+  type: random
+  buffer_size: 1MB
+  direct_io: { enabled: false }
+  fsync: false
+
+naming:
+  charset: mixed
+  variants:
+    - spaces
+    - parentheses
+    - brackets
+    - commas
+    - periods
+    - unicode_cjk_subset
+
+files:
+  count: 60
+  size: { min: 1MB, max: 10MB }
+  extensions: [.dat, .txt]

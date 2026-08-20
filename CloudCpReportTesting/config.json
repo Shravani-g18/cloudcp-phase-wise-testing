@@ -1,0 +1,15 @@
+{
+  "cli_dir": "../CloudCpCliTesting/bryckclient-cli",
+  "login_json": "../CloudCpCliTesting/bryckclient-cli/login.json",
+  "cloud_type": "aws",
+  "datagen_binary": "/home/bryck/rperiyas/datagen",
+  "bryck_local_root": "/bryck/report_testing",
+  "s3_bucket_prefix": "s3://vijay/report_testing",
+  "s3_endpoint_url": "https://10.10.10.103:9000",
+  "aws_cli_path": "aws",
+  "transfer_poll_interval_sec": 15,
+  "transfer_poll_timeout_sec": 3600,
+  "report_download_dir": "reports/zips",
+  "cleanup_local": true,
+  "cleanup_s3": true
+}

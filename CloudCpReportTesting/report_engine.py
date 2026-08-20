@@ -6,6 +6,9 @@ has no knowledge of any specific case, so it never needs to change when a new
 case is added.
 """
 import csv
+import json
+import re
+import zipfile
 from pathlib import Path
 
 REPORT_FIELDS = ["AbsoluteFilePath", "S3Path", "FileSize", "ETag", "Status"]
@@ -156,8 +159,120 @@ def read_transfer_state(manifest_path):
     for the same P4-02/P4-03 ordering guards used against synthetic fixtures.
     Read-only. Missing keys default to values that allow verification to proceed.
     """
-    import json
     with open(manifest_path, encoding="utf-8") as f:
         data = json.load(f)
     return data.get("scan_state", "complete"), bool(data.get("pause_requested", False))
+
+
+# ---------------------------------------------------------------------------
+# Live-mode report ZIP parsing (RT-* live cases, see cloud_cp_report_test_case_plan.md)
+# ---------------------------------------------------------------------------
+def unzip_report(zip_path, out_dir):
+    """Extract a downloaded cloud_transfer_<id>.zip into out_dir. Read-only on
+    the zip itself; returns the extraction directory."""
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(zip_path) as zf:
+        zf.extractall(out_dir)
+    return out_dir
+
+
+def find_report_files(extracted_dir):
+    """Locate the known report artifacts inside an extracted report dir
+    (searched recursively since the zip may nest one level under
+    cloud_transfer_<id>/). Missing files are simply absent from the result."""
+    extracted_dir = Path(extracted_dir)
+    files = {}
+    for p in sorted(extracted_dir.rglob("*")):
+        if not p.is_file():
+            continue
+        name = p.name
+        if name.startswith("transfer_report_") and name.endswith(".csv"):
+            files.setdefault("report_csv", p)
+        elif name == "transfer_summary.txt":
+            files.setdefault("summary_txt", p)
+        elif name == "final_report.json":
+            files.setdefault("final_report_json", p)
+        elif name.startswith("cloud_transfer_txhistory_"):
+            files.setdefault("txhistory_log", p)
+        elif name.startswith("cloud_transfer_") and name.endswith(".log"):
+            files.setdefault("debug_log", p)
+    return files
+
+
+def parse_transfer_report_csv(path):
+    """Parse a real transfer_report_<id>.csv into a list of row dicts
+    (local_path, s3path, size, etag, status, attempt, finished_at)."""
+    with open(path, newline="", encoding="utf-8-sig", errors="surrogateescape") as f:
+        return list(csv.DictReader(f))
+
+
+_SUMMARY_LINE_RE = re.compile(r"^-?\s*([A-Za-z][A-Za-z0-9 /()\.]*?)\s*:\s*(.+?)\s*$")
+
+
+def parse_transfer_summary_txt(path):
+    """Parse transfer_summary.txt into a flat dict of label -> raw string value
+    (e.g. {'Transfer status': 'Completed', 'Number of files': '120', ...})."""
+    result = {}
+    with open(path, encoding="utf-8", errors="surrogateescape") as f:
+        for line in f:
+            m = _SUMMARY_LINE_RE.match(line.rstrip("\n"))
+            if m:
+                result[m.group(1).strip()] = m.group(2).strip()
+    return result
+
+
+def summary_int(summary, *labels):
+    """Pull the first integer found among candidate summary labels - handles
+    label-naming variance across builds (e.g. 'Number of files' vs 'Total files')."""
+    for label in labels:
+        raw = summary.get(label)
+        if raw is None:
+            continue
+        m = re.search(r"[\d,]+", raw)
+        if m:
+            return int(m.group(0).replace(",", ""))
+    return None
+
+
+def parse_final_report_json(path):
+    """Parse the optional final_report.json S3 snapshot
+    (AbsoluteFilePath, S3Path, FileSize, ETag rows)."""
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def cross_cutting_checks(report_rows, summary):
+    """The checks in plan §8, applied identically to every live RT-* case
+    regardless of its own case-specific assertions."""
+    local_paths = [r.get("local_path", "") for r in report_rows]
+    s3_paths = [r.get("s3path", "") for r in report_rows]
+    sizes = [r.get("size", "") for r in report_rows]
+
+    def _is_valid_size(v):
+        try:
+            return int(v) >= 0
+        except (TypeError, ValueError):
+            return False
+
+    no_dup_paths = len(set(local_paths)) == len(local_paths) if local_paths else True
+    no_null_local = all(bool(p) for p in local_paths)
+    no_null_s3 = all(bool(p) for p in s3_paths)
+    no_null_size = all(_is_valid_size(s) for s in sizes)
+    transfer_completed = summary.get("Transfer status", "").lower() == "completed"
+    number_of_files = summary_int(summary, "Number of files", "Total files")
+    summary_count_matches = (number_of_files is not None
+                              and number_of_files == len(report_rows))
+    missing = summary_int(summary, "Number of missing files/objects")
+    summary_missing_zero = missing == 0
+
+    return {
+        "no_duplicate_paths": no_dup_paths,
+        "no_null_local_path": no_null_local,
+        "no_null_s3path": no_null_s3,
+        "no_null_size": no_null_size,
+        "transfer_status_completed": transfer_completed,
+        "summary_count_matches_report": summary_count_matches,
+        "summary_missing_zero": summary_missing_zero,
+    }
 

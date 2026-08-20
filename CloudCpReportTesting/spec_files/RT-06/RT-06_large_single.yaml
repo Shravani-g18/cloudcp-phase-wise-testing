@@ -1,0 +1,20 @@
+version: 1
+mode: flat
+root: /bryck/report_testing/RT-06
+threads: 8
+seed: 1006
+
+content:
+  type: random
+  buffer_size: 8MB
+  direct_io: { enabled: false }
+  fsync: false
+
+naming:
+  charset: ascii
+  alphabet: [lower, digit, dash]
+
+files:
+  count: 1
+  size: { min: 600MB, max: 1GB }
+  extensions: [.bin]
