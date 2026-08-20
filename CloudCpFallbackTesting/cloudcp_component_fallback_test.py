@@ -116,6 +116,66 @@ def build_component_catalog() -> list[CompCase]:
         transfer_type="upload", fault="missing", expect="fail",
         desc="retry_whole_batch() with the source files deleted after staging — "
              "every record fails the stat/upload, failed==N and ok==0."))
+
+    # ---- Break-condition / vulnerability coverage (B1-B9) -------------------
+    # Worker break conditions
+    cases.append(CompCase(
+        cid="CFW-N-02", mechanism="worker", group="NEGATIVE", dataset="tiny",
+        transfer_type="upload", fault="bad_lst", expect="fail",
+        desc="B1 — Malformed .lst framing (2 fields/record, no size/error fields): "
+             "read_retry_list misgroups fields; url_parse receives garbage paths and "
+             "returns (None,None); all records fail terminally; no hang/crash."))
+    cases.append(CompCase(
+        cid="CFW-N-03", mechanism="worker", group="NEGATIVE", dataset="tiny",
+        transfer_type="upload", fault="bad_bucket", expect="fail",
+        desc="B2 — Valid .lst but s3path references a nonexistent bucket: all "
+             "uploads fail with NoSuchBucket after max_attempts retries; batch "
+             "stays inprogress; .lst not retired; no hang/crash."))
+    cases.append(CompCase(
+        cid="CFW-N-04", mechanism="worker", group="NEGATIVE", dataset="tiny",
+        transfer_type="upload", fault="late_lst", expect="ok",
+        desc="B3 — Done marker written BEFORE the .lst (reversed staging order): "
+             "worker must still drain the list on its first poll pass and complete "
+             "the batch cleanly (resilience to early-marker race)."))
+    cases.append(CompCase(
+        cid="CFW-N-05", mechanism="worker", group="NEGATIVE", dataset="tiny",
+        transfer_type="upload", fault="no_batch", expect="warn",
+        desc="B4 — .lst staged but the batch file is deleted before the worker "
+             "runs: files are uploaded (FALLBACK_OK) and .lst is retired, but "
+             "batch_state.complete() finds nothing to rename — state tree is "
+             "inconsistent (no file in completed/)."))
+    cases.append(CompCase(
+        cid="CFW-N-06", mechanism="worker", group="NEGATIVE", dataset="tiny",
+        transfer_type="upload", fault="empty_lst", expect="ok",
+        desc="B5 — .lst truncated to 0 bytes after creation: worker sees zero "
+             "records and immediately completes the batch + retires the .lst "
+             "without uploading anything."))
+    # MP break conditions
+    cases.append(CompCase(
+        cid="CMP-N-03", mechanism="mp", group="NEGATIVE", dataset="tiny",
+        transfer_type="upload", fault="empty_batch", expect="ok",
+        desc="B6 — Empty (0-record) batch file: retry_whole_batch returns (0,0,0) "
+             "silently; the caller cannot distinguish this from a normal 0-file "
+             "dataset — a silent no-op."))
+    cases.append(CompCase(
+        cid="CMP-N-04", mechanism="mp", group="NEGATIVE", dataset="tiny",
+        transfer_type="upload", fault="bad_bucket", expect="fail",
+        desc="B7 — Nonexistent bucket passed to retry_whole_batch: every upload "
+             "fails with NoSuchBucket after max_attempts retries; ok==0, "
+             "failed==count; no hang/crash."))
+    cases.append(CompCase(
+        cid="CMP-N-05", mechanism="mp", group="NEGATIVE", dataset="tiny",
+        transfer_type="upload", fault="bad_fsp", expect="ok",
+        desc="B8 — Wrong fs_prefix: compose_s3_key falls back to basename-only "
+             "keys; uploads succeed but files with the same basename in different "
+             "sub-directories collide to the same S3 key (last-writer-wins); "
+             "ok==count but s3_objects may be < count."))
+    cases.append(CompCase(
+        cid="CMP-N-06", mechanism="mp", group="NEGATIVE", dataset="tiny",
+        transfer_type="upload", fault="resume", expect="ok",
+        desc="B9 — retry_whole_batch called twice for the same transfer_id: second "
+             "call returns (0,0,0) because load_completed deduplicates all files "
+             "already in the transfer report (idempotency / resume safety)."))
     return cases
 
 
@@ -325,19 +385,50 @@ class ComponentRunner:
         batch_file = staged.get("batch_file", f"{td}/batches/inprogress/{tier}/{BATCH_NAME}")
         count = staged.get("count")
 
-        lst = self._stage(
-            rec, "make retry .lst",
-            f"make-lst --batch {batch_file} --transfer-id {transfer_id} "
-            f"--bucket {self.bucket} --prefix {prefix} --fs-prefix {src}")
+        # B3 — write done marker BEFORE .lst so the worker starts with it already set.
+        if case.fault == "late_lst":
+            self._stage(rec, "write done marker (before .lst \u2014 B3 fault injection)",
+                        f"done-marker --transfer-dir {td}")
 
+        # Build the .lst — normal, malformed (B1), or with a bad bucket (B2).
+        if case.fault == "bad_lst":
+            lst = self._stage(
+                rec, "make malformed .lst (B1: 2 fields/record, no size/error)",
+                f"make-bad-lst --batch {batch_file} --transfer-id {transfer_id} "
+                f"--bucket {self.bucket} --prefix {prefix} --fs-prefix {src}")
+        elif case.fault == "bad_bucket":
+            lst = self._stage(
+                rec, "make .lst with nonexistent bucket (B2)",
+                f"make-lst --batch {batch_file} --transfer-id {transfer_id} "
+                f"--bucket nonexistent-bucket-xyz --prefix {prefix} "
+                f"--fs-prefix {src}")
+        else:
+            lst = self._stage(
+                rec, "make retry .lst",
+                f"make-lst --batch {batch_file} --transfer-id {transfer_id} "
+                f"--bucket {self.bucket} --prefix {prefix} --fs-prefix {src}")
+
+        # Per-fault file-system injections applied after .lst is written.
         if case.fault == "missing":
-            # Delete the sources so every record fails terminally (sizes were
-            # already captured into the .lst before deletion).
+            # Sizes are already captured in the .lst; delete sources so every
+            # _transfer_one stat/upload fails terminally.
             self.host.run(rec, "inject fault: delete sources",
                           f"find {src} -type f -delete", check=False)
+        elif case.fault == "no_batch":
+            # B4 — batch file removed; complete() will find nothing to rename.
+            self.host.run(rec, "inject fault: delete staged batch (B4)",
+                          f"rm -f {batch_file}", check=False)
+        elif case.fault == "empty_lst":
+            # B5 — truncate the .lst to 0 bytes; worker sees zero records.
+            lst_path = lst.get("lst_path", "")
+            if lst_path:
+                self.host.run(rec, "inject fault: truncate .lst to 0 bytes (B5)",
+                              f"truncate -s 0 {lst_path}", check=False)
 
-        self._stage(rec, "write done marker",
-                    f"done-marker --transfer-dir {td}")
+        # Done marker in normal order (late_lst already wrote it above).
+        if case.fault != "late_lst":
+            self._stage(rec, "write done marker",
+                        f"done-marker --transfer-dir {td}")
 
         self.host.run(
             rec, "run fallback worker",
@@ -369,22 +460,74 @@ class ComponentRunner:
                    "lst_retired": lst_done, "s3_objects": objs}
 
         reasons = []
-        ok = True
-        if count is not None and fallback_ok != count:
-            ok = False
-            reasons.append(f"FALLBACK_OK rows={fallback_ok} != file count={count}")
-        if not completed:
-            ok = False
-            reasons.append("batch not moved to completed/")
-        if not lst_done:
-            ok = False
-            reasons.append(".lst not retired to .lst.done")
-        if objs is not None and count is not None and objs < count:
-            ok = False
-            reasons.append(f"s3 objects={objs} < file count={count}")
-        verdict = "PASS" if ok else "FAIL"
-        if ok:
-            reasons = [f"drained {fallback_ok} file(s) via fallback; batch completed"]
+        if case.fault in ("bad_lst", "bad_bucket"):
+            # B1/B2: all records fail terminally; batch stays inprogress; .lst not retired.
+            ok = (fallback_ok == 0 and not completed and not lst_done)
+            if fallback_ok != 0:
+                reasons.append(f"expected 0 FALLBACK_OK rows, got {fallback_ok}")
+            if completed:
+                reasons.append("batch unexpectedly moved to completed/")
+            if lst_done:
+                reasons.append(".lst unexpectedly retired (should stay inprogress for resume)")
+            verdict = "PASS" if ok else "FAIL"
+            if ok:
+                reasons = [f"all {count} record(s) failed terminally as expected; "
+                           f"batch inprogress; .lst not retired"]
+
+        elif case.fault == "no_batch":
+            # B4: files upload OK, .lst retired, but no batch file moved to completed/.
+            ok = (fallback_ok == count and lst_done and not completed)
+            if fallback_ok != count:
+                reasons.append(f"FALLBACK_OK rows={fallback_ok} != count={count}")
+            if not lst_done:
+                reasons.append(".lst not retired")
+            if completed:
+                reasons.append("batch unexpectedly found in completed/ (no batch was staged)")
+            verdict = "PASS" if ok else "FAIL"
+            if ok:
+                reasons = [f"{fallback_ok} file(s) uploaded; .lst retired; "
+                           f"batch_state.complete() silently no-op'd (no file to move) \u2014 expected"]
+
+        elif case.fault == "empty_lst":
+            # B5: 0 records → immediate complete + retire; 0 uploads.
+            ok = (fallback_ok == 0 and completed and lst_done)
+            if fallback_ok != 0:
+                reasons.append(f"expected 0 FALLBACK_OK rows, got {fallback_ok}")
+            if not completed:
+                reasons.append("batch not moved to completed/ (expected immediate complete)")
+            if not lst_done:
+                reasons.append(".lst not retired")
+            verdict = "PASS" if ok else "FAIL"
+            if ok:
+                reasons = ["0-record .lst \u2192 batch immediately completed; .lst retired; 0 uploads"]
+
+        else:
+            # Normal, late_lst, missing: standard verdict.
+            ok = True
+            if case.fault == "missing":
+                # All transfers fail → batch stays inprogress, .lst not retired.
+                if completed:
+                    ok = False
+                    reasons.append("batch unexpectedly completed (sources were missing)")
+                if lst_done:
+                    ok = False
+                    reasons.append(".lst retired despite terminal failures")
+            else:
+                if count is not None and fallback_ok != count:
+                    ok = False
+                    reasons.append(f"FALLBACK_OK rows={fallback_ok} != file count={count}")
+                if not completed:
+                    ok = False
+                    reasons.append("batch not moved to completed/")
+                if not lst_done:
+                    ok = False
+                    reasons.append(".lst not retired to .lst.done")
+                if objs is not None and count is not None and objs < count:
+                    ok = False
+                    reasons.append(f"s3 objects={objs} < file count={count}")
+            verdict = "PASS" if ok else "FAIL"
+            if ok:
+                reasons = [f"drained {fallback_ok} file(s) via fallback; batch completed"]
         return verdict, reasons, capture, transfer_id
 
     # -- whole-batch retry --------------------------------------------------
@@ -399,24 +542,42 @@ class ComponentRunner:
         transfer_id = alloc.get("transfer_id") if not self.host.dry_run else "<id>"
         td = f"{self.batchmeta}/transfer_{transfer_id}"
 
+        # B6 — empty_batch: stage a 0-record batch so retry_whole_batch returns (0,0,0).
+        empty_flag = "--empty " if case.fault == "empty_batch" else ""
         staged = self._stage(
             rec, "stage batch",
-            f"stage-batch --src {src} --transfer-dir {td} --tier {tier} "
-            f"--name {BATCH_NAME}")
+            f"stage-batch {empty_flag}--src {src} --transfer-dir {td} "
+            f"--tier {tier} --name {BATCH_NAME}")
         batch_file = staged.get("batch_file", f"{td}/batches/inprogress/{tier}/{BATCH_NAME}")
-        count = staged.get("count")
+        count = staged.get("count")  # 0 for empty_batch
 
         if case.fault == "missing":
             self.host.run(rec, "inject fault: delete sources",
                           f"find {src} -type f -delete", check=False)
 
+        # Resolve effective bucket / fs_prefix per fault type.
+        run_bucket = "nonexistent-bucket-xyz" if case.fault == "bad_bucket" else self.bucket
+        # B8 — bad_fsp: wrong prefix → compose_s3_key uses basename fallback.
+        run_fsp = "/nonexistent/wrong/fsp" if case.fault == "bad_fsp" else src
+
         result = self._stage(
             rec, "run retry_whole_batch",
             f"run-mp --transfer-id {transfer_id} --batch {batch_file} "
-            f"--bucket {self.bucket} --prefix {prefix} --fs-prefix {src} "
+            f"--bucket {run_bucket} --prefix {prefix} --fs-prefix {run_fsp} "
             f"--endpoint {self.endpoint} --region {self.region} "
             f"--transfer-type {case.transfer_type}",
             timeout=self.args.poll_timeout)
+
+        # B9 — resume: second identical call must return (0,0,0) via load_completed dedup.
+        result2 = None
+        if case.fault == "resume":
+            result2 = self._stage(
+                rec, "run retry_whole_batch (2nd \u2014 B9 resume idempotency)",
+                f"run-mp --transfer-id {transfer_id} --batch {batch_file} "
+                f"--bucket {self.bucket} --prefix {prefix} --fs-prefix {src} "
+                f"--endpoint {self.endpoint} --region {self.region} "
+                f"--transfer-type {case.transfer_type}",
+                timeout=self.args.poll_timeout)
 
         if self.host.dry_run:
             return "PLANNED", ["dry-run: no execution"], {}, transfer_id
@@ -433,7 +594,64 @@ class ComponentRunner:
                    "s3_objects": objs}
 
         reasons = []
-        if case.expect == "ok":
+        if case.fault == "bad_bucket":
+            # B7: all uploads fail with NoSuchBucket after max_attempts retries.
+            good = (ok_n == 0 and failed_n == count)
+            if ok_n != 0:
+                reasons.append(f"ok={ok_n} (expected 0 — nonexistent bucket)")
+            if failed_n != count:
+                reasons.append(f"failed={failed_n} != count={count}")
+            verdict = "PASS" if good else "FAIL"
+            if good:
+                reasons = [f"all {count} record(s) failed after retries "
+                           f"(nonexistent bucket); no hang/crash"]
+
+        elif case.fault == "empty_batch":
+            # B6: (0,0,0) silently; batch_count==0.
+            good = (ok_n == 0 and failed_n == 0 and count == 0)
+            if ok_n != 0 or failed_n != 0:
+                reasons.append(f"expected (ok=0,failed=0) for empty batch; "
+                               f"got ok={ok_n} failed={failed_n}")
+            if count != 0:
+                reasons.append(f"staged batch had {count} records (expected 0 with --empty)")
+            verdict = "PASS" if good else "FAIL"
+            if good:
+                reasons = ["empty batch \u2192 retry_whole_batch returned (0,0,0) silently (expected)"]
+
+        elif case.fault == "bad_fsp":
+            # B8: uploads succeed but keys are basename-only; collisions possible.
+            good = (ok_n == count and failed_n in (0, None))
+            if ok_n != count:
+                reasons.append(f"ok={ok_n} != count={count}")
+            if failed_n not in (0, None):
+                reasons.append(f"failed={failed_n} (expected 0)")
+            verdict = "PASS" if good else "FAIL"
+            if good:
+                reasons = [f"{ok_n} upload(s) succeeded with basename-only keys "
+                           f"(wrong fs_prefix); MP_OK rows={mp_ok}"]
+            if objs is not None and count is not None and objs < count:
+                # Not a FAIL — just confirms the key-collision vulnerability.
+                reasons.append(f"NOTE s3 objects={objs} < count={count}: "
+                               f"key collisions from basename-only keys confirmed (B8)")
+
+        elif case.fault == "resume":
+            # B9: first run uploads all; second run returns (0,0,0) via dedup.
+            ok2 = result2.get("ok") if result2 else None
+            failed2 = result2.get("failed") if result2 else None
+            capture["resume_ok"] = ok2
+            capture["resume_failed"] = failed2
+            good = (ok_n == count and ok2 == 0 and failed2 == 0)
+            if ok_n != count:
+                reasons.append(f"first run: ok={ok_n} != count={count}")
+            if ok2 != 0 or failed2 != 0:
+                reasons.append(f"second run (resume): expected (0,0), "
+                               f"got ok={ok2} failed={failed2}")
+            verdict = "PASS" if good else "FAIL"
+            if good:
+                reasons = [f"first run: {ok_n} upload(s); second run: (0,0,0) "
+                           f"via load_completed dedup (idempotency confirmed)"]
+
+        elif case.expect == "ok":
             good = True
             if count is not None and ok_n != count:
                 good = False
@@ -451,15 +669,15 @@ class ComponentRunner:
             if good:
                 reasons = [f"retry_whole_batch uploaded {ok_n} file(s) (MP_OK)"]
         else:
-            # Negative: expect no successful uploads and a clean (non-crash) return.
+            # Negative: no successful uploads, clean (non-crash) return.
             good = (ok_n == 0)
             if case.fault == "download":
-                if not (failed_n == count):
+                if failed_n != count:
                     good = False
                 reasons.append(f"download not handled: ok={ok_n} failed={failed_n} "
                                f"(expected 0/{count})")
             else:
-                if not (failed_n == count):
+                if failed_n != count:
                     good = False
                 reasons.append(f"all records failed: ok={ok_n} failed={failed_n} "
                                f"(expected 0/{count})")

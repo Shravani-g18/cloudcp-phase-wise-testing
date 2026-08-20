@@ -220,8 +220,53 @@ One case per dataset: stage the batch, call `retry_whole_batch`, expect
 | id        | mechanism | dataset | injected fault                    | expected                                            |
 |-----------|-----------|---------|-----------------------------------|-----------------------------------------------------|
 | CFW-N-01  | worker    | tiny    | source files deleted after stage  | worker records terminal failures; batch left `inprogress`; `.lst` NOT retired |
+| CFW-N-02  | worker    | tiny    | malformed `.lst` (B1: 2 fields/record) | `read_retry_list` misgroups fields; `url_parse(garbage)` → `(None,None)`; all records fail terminally; no hang/crash |
+| CFW-N-03  | worker    | tiny    | bad bucket in `.lst` (B2)         | all uploads fail after `max_attempts` retries; batch stays `inprogress`; `.lst` not retired |
+| CFW-N-04  | worker    | tiny    | done marker before `.lst` (B3)    | worker starts with marker already set; must still drain the list on first poll; PASS = all `FALLBACK_OK`, batch completed |
+| CFW-N-05  | worker    | tiny    | batch deleted after `.lst` (B4)   | files upload OK; `.lst` retired; `batch_state.complete()` silently no-ops (nothing to rename); batch NOT in `completed/` |
+| CFW-N-06  | worker    | tiny    | `.lst` truncated to 0 bytes (B5)  | worker sees zero records; batch immediately completed + `.lst` retired; 0 uploads |
 | CMP-N-01  | mp        | tiny    | `transfer_type = download`        | returns `(0, N, 0)` (download not handled inline); no crash |
 | CMP-N-02  | mp        | tiny    | source files deleted after stage  | `failed == N`, `ok == 0`; per-file `stat` failure recorded |
+| CMP-N-03  | mp        | tiny    | empty (0-record) batch (B6)       | returns `(0, 0, 0)` silently; caller cannot distinguish from a real 0-file dataset |
+| CMP-N-04  | mp        | tiny    | nonexistent bucket (B7)           | all uploads fail with `NoSuchBucket` after retries; `ok==0`, `failed==count`; no hang/crash |
+| CMP-N-05  | mp        | tiny    | wrong `fs_prefix` (B8)            | `compose_s3_key` uses `basename` fallback; uploads succeed but files with identical names in different sub-dirs collide to the same S3 key; `ok==count` but `s3_objects` may be `< count` |
+| CMP-N-06  | mp        | tiny    | resume: call twice (B9)           | second call returns `(0, 0, 0)` via `load_completed` dedup; first-run uploads not repeated |
+
+---
+
+## 6. Break conditions and vulnerability coverage
+
+The cases above were derived by reading the two components as a black box and
+asking: *what inputs can I craft — without modifying any source code — that
+expose unexpected behaviour?*
+
+### 6.1 Fallback worker (`fallback_worker.py`)
+
+| ID | Break condition | Root cause in source | Observable symptom |
+|----|-----------------|----------------------|--------------------|
+| **B1** | Write `.lst` with 2 fields per record instead of 4 | `read_retry_list` groups fields in sets of 4; the s3path of record *N* becomes the local\_path of a phantom record — garbage fed to `url_parse` | `url_parse` returns `(None, None)` → terminal failure for every record; batch stays `inprogress`; `.lst` not retired; no crash |
+| **B2** | `.lst` with `s3://nonexistent-bucket-xyz/key` | `_transfer_one` calls `s3.upload_file` → `NoSuchBucket`; retried `max_attempts` times (exponential back-off) | All records fail terminally after retries; batch stays `inprogress`; `.lst` not retired |
+| **B3** | Write `_fallback_done` marker **before** the `.lst` appears | Exit check: `done_marker exists AND work_queue.empty AND not pending` → one final `_ingest_new_lists()` pass | If `.lst` exists before the worker's first poll iteration it will be picked up; PASS means the resilience holds |
+| **B4** | Delete the staged batch file **after** writing the `.lst` | `batch_state.complete(transfer_dir, batch_name)` calls `_find()` which searches all states/tiers; if nothing found it falls through to `return state_path(COMPLETED, name, tier)` **without renaming anything** — no exception | Files upload OK; `.lst` IS retired (b["failed"]==0 path); but no physical batch file is ever moved; state tree is silently inconsistent |
+| **B5** | Truncate the `.lst` to 0 bytes after creation | `read_retry_list` returns `[]`; worker takes the empty-record fast path: `batch_state.complete()` + `os.rename(.lst → .lst.done)` | Batch immediately completed; `.lst` retired; 0 uploads; 0 `FALLBACK_OK` rows |
+
+### 6.2 Whole-batch retry (`mp_batch_retry.py`)
+
+| ID | Break condition | Root cause in source | Observable symptom |
+|----|-----------------|----------------------|--------------------|
+| **B6** | Stage an empty (0-record) batch | `read_batch_records([])` returns `[]` → early `return 0, 0, 0` | Caller receives `(0, 0, 0)` with no indication that N files were not uploaded — silent no-op |
+| **B7** | Pass a nonexistent bucket to `retry_whole_batch` | `s3.upload_file` raises `NoSuchBucket`; caught per attempt; retried `max_attempts` times | All records fail terminally; `failed==count`, `ok==0`; no crash |
+| **B8** | Pass a wrong `fs_prefix` | `compose_s3_key`: if `abspath` doesn't start with `fs_prefix`, falls back to `os.path.basename(abspath)` | Uploads succeed but keys are basename-only; files in different sub-directories with the same filename collide to the same S3 key; `s3_objects < count` despite `ok==count` |
+| **B9** | Call `retry_whole_batch` twice with the same `transfer_id` | `load_completed` returns all files already in `transfer_report_<id>.csv` → `records` filtered to `[]` → early `return 0, 0, 0` | Second call is a silent no-op identical to B6; caller cannot distinguish "already done" from "nothing to do" |
+
+### 6.3 Notes for remediation (informational — not blocking)
+
+- **B4** (no batch in state tree): callers should verify `completed_batches()` after the worker
+  drains, rather than trusting a clean `.lst` retirement as proof of batch completion.
+- **B6 / B9** (silent `(0,0,0)`): callers should compare `ok + failed` against the batch record
+  count returned by `read_batch_records` to detect a vacuous return.
+- **B8** (wrong `fs_prefix`): the `fs_prefix` passed to `retry_whole_batch` should be validated
+  against the batch paths before launching the pool.
 
 ---
 

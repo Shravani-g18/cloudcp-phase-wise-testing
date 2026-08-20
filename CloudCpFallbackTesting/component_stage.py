@@ -82,7 +82,8 @@ def cmd_alloc_id(args):
 def cmd_stage_batch(args):
     """Write a NUL-framed batch into inprogress/<tier>/<name>; print file count."""
     batch_state.ensure_dirs(args.transfer_dir)
-    paths = list(_iter_files(args.src))
+    # --empty skips the walk so retry_whole_batch gets a 0-record batch (break-condition B6).
+    paths = [] if getattr(args, "empty", False) else list(_iter_files(args.src))
     dest = batch_state.state_path(args.transfer_dir, batch_state.INPROGRESS,
                                   args.name, args.tier)
     os.makedirs(os.path.dirname(dest), exist_ok=True)
@@ -119,6 +120,33 @@ def cmd_make_lst(args):
                 mp_batch_retry.compose_s3_key(abspath, args.fs_prefix, prefix))
             s3path = "s3://{}/{}".format(args.bucket, key)
             f.write(abspath + "\0" + s3path + "\0" + str(size) + "\0" + "\0")
+            count += 1
+    os.replace(tmp, lst_path)
+    _emit({"lst_path": lst_path, "count": count})
+
+
+def cmd_make_bad_lst(args):
+    """Write a malformed .lst with 2 fields/record instead of the required 4.
+
+    read_retry_list groups fields in sets of 4; with 2-field records it pairs
+    the s3path of record N as the local_path of a phantom record — producing
+    garbage paths that make url_parse fail. Tests no-hang/no-crash on bad framing.
+    """
+    config = CloudConfig().bcloud
+    prefix = args.prefix or ""
+    records = batch_state.read_batch_records(args.batch)
+    stem = os.path.splitext(os.path.basename(args.batch))[0]
+    lst_path = upload_report.retry_list_path(args.transfer_id, stem, config)
+    os.makedirs(os.path.dirname(lst_path), exist_ok=True)
+    count = 0
+    tmp = lst_path + ".tmp"
+    with open(tmp, "w", newline="", errors="surrogateescape") as f:
+        for abspath, size in records:
+            key = mp_batch_retry.clean_s3_key(
+                mp_batch_retry.compose_s3_key(abspath, args.fs_prefix, prefix))
+            s3path = "s3://{}/{}".format(args.bucket, key)
+            # Deliberately only 2 of the 4 required fields (no size, no error).
+            f.write(abspath + "\0" + s3path + "\0")
             count += 1
     os.replace(tmp, lst_path)
     _emit({"lst_path": lst_path, "count": count})
@@ -175,6 +203,8 @@ def build_parser():
     a.add_argument("--transfer-dir", required=True)
     a.add_argument("--tier", required=True)
     a.add_argument("--name", required=True)
+    a.add_argument("--empty", action="store_true",
+                   help="Write an empty 0-record batch (break-condition B6).")
     a.set_defaults(func=cmd_stage_batch)
 
     a = sub.add_parser("make-lst")
@@ -184,6 +214,14 @@ def build_parser():
     a.add_argument("--prefix", default="")
     a.add_argument("--fs-prefix", required=True)
     a.set_defaults(func=cmd_make_lst)
+
+    a = sub.add_parser("make-bad-lst")
+    a.add_argument("--batch", required=True)
+    a.add_argument("--transfer-id", type=int, required=True)
+    a.add_argument("--bucket", required=True)
+    a.add_argument("--prefix", default="")
+    a.add_argument("--fs-prefix", required=True)
+    a.set_defaults(func=cmd_make_bad_lst)
 
     a = sub.add_parser("done-marker")
     a.add_argument("--transfer-dir", required=True)
