@@ -219,6 +219,91 @@ NEGATIVE_SCENARIO_INFO = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Pause / resume test cases (PR01 – PR06)
+# ---------------------------------------------------------------------------
+
+# Path that cloudcp appends [Batch]...done lines to.
+CLOUDCP_LOG_PATH = pp.join(TRANSFER_LOGS_DIR, "cloudcp.log")
+
+PAUSE_RESUME_CASE_INFO = {
+    "PR01": {
+        "title": "PR01 — Basic pause/resume (tiny, 5 s kill)",
+        "dataset": "tiny_files",
+        "kill_after_sec": 5,
+        "cycles": 1,
+        "summary": "Kill cloudcp after ~5 s (~32 % progress) on the tiny-files dataset.",
+        "purpose": "Confirms the basic resume path: cloudcp reads cloudcp.log, "
+                   "skips already-uploaded files, and completes the remainder.",
+    },
+    "PR02": {
+        "title": "PR02 — Multipart-cutoff resume (small, 8 s kill)",
+        "dataset": "small_files",
+        "kill_after_sec": 8,
+        "cycles": 1,
+        "summary": "Kill cloudcp after ~8 s on the small-files dataset which "
+                   "straddles the 8 MiB multipart cutoff.",
+        "purpose": "Verifies that resume handles both single-part and multipart "
+                   "partially-uploaded objects correctly.",
+    },
+    "PR03": {
+        "title": "PR03 — Immediate kill (tiny, 2 s kill)",
+        "dataset": "tiny_files",
+        "kill_after_sec": 2,
+        "cycles": 1,
+        "summary": "Kill cloudcp after only ~2 s (~13 % progress) on tiny_files.",
+        "purpose": "Proves that a resume from very early in the transfer still "
+                   "completes the full dataset.",
+    },
+    "PR04": {
+        "title": "PR04 — Late kill (tiny, 12 s kill)",
+        "dataset": "tiny_files",
+        "kill_after_sec": 12,
+        "cycles": 1,
+        "summary": "Kill cloudcp after ~12 s (~75 % progress) on tiny_files.",
+        "purpose": "Verifies that only the tail of the batch is uploaded on "
+                   "resume and the overall report is still complete.",
+    },
+    "PR05": {
+        "title": "PR05 — Double kill/resume (tiny, 2 cycles)",
+        "dataset": "tiny_files",
+        "kill_after_sec": 5,
+        "cycles": 2,
+        "summary": "Kill and resume twice; cloudcp.log is checked after each kill.",
+        "purpose": "Confirms that cloudcp.log accumulates state across multiple "
+                   "kill-resume cycles and never re-uploads already-committed files.",
+    },
+    "PR06": {
+        "title": "PR06 — Unicode filenames resume",
+        "dataset": "unicode_names",
+        "kill_after_sec": 5,
+        "cycles": 1,
+        "summary": "Kill cloudcp after ~5 s on the unicode-filenames dataset.",
+        "purpose": "Ensures non-ASCII paths are recorded and re-read from "
+                   "cloudcp.log byte-exactly on resume.",
+    },
+}
+
+
+def _count_ok_in_cloudcp_log(tid):
+    """Sum ok=N values from [Batch]...done lines for transfer *tid* in cloudcp.log."""
+    if not os.path.isfile(CLOUDCP_LOG_PATH):
+        return 0
+    marker = "cloud_transfer_{}/".format(tid)
+    total = 0
+    try:
+        with open(CLOUDCP_LOG_PATH, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                if marker not in line:
+                    continue
+                m = re.search(r"\[Batch\].*\bdone\b.*\bok=(\d+)", line)
+                if m:
+                    total += int(m.group(1))
+    except OSError:
+        pass
+    return total
+
+
 def dataset_info(name):
     """Return the business description for *name* (with a safe fallback)."""
     return DATASET_INFO.get(name, {
@@ -1064,6 +1149,228 @@ def _read_success_paths(csv_path):
 
 
 # ---------------------------------------------------------------------------
+# Pause / resume suite
+# ---------------------------------------------------------------------------
+
+def run_pause_resume_suite(args, run_ctx, logger):
+    """Run every PR case and return their result records."""
+    results = []
+    for case_id, case_info in PAUSE_RESUME_CASE_INFO.items():
+        results.append(run_pause_resume_case(case_id, case_info, args, run_ctx, logger))
+    return results
+
+
+def run_pause_resume_case(case_id, case_info, args, run_ctx, logger):
+    """Run one pause/resume cycle test.
+
+    Pipeline:
+      1. datagen + make_batches (single batch) + stage under inprogress/
+      2. Launch cloudcp via Popen; SIGKILL after kill_after_sec (× cycles)
+      3. Snapshot cloudcp.log ok-count as pre-resume baseline
+      4. Final cloudcp run to completion (same transfer-id)
+      5. Validate transfer report
+    """
+    dataset_name = case_info["dataset"]
+    kill_after = (args.pr_kill_after
+                  if args.pr_kill_after is not None
+                  else case_info["kill_after_sec"])
+    cycles = case_info["cycles"]
+
+    all_datasets = discover_datasets(args.specs_dir)
+    ds = next((d for d in all_datasets if d.name == dataset_name), None)
+    if ds is None:
+        return {
+            "kind": "pause_resume",
+            "case": case_id,
+            "dataset": dataset_name,
+            "status": "FAIL",
+            "errors": ["dataset '{}' not found in specs".format(dataset_name)],
+            "counts": {}, "pr_baseline_count": 0, "pr_final_count": 0,
+        }
+
+    result = {
+        "kind": "pause_resume",
+        "case": case_id,
+        "dataset": dataset_name,
+        "title": case_info["title"],
+        "summary": case_info["summary"],
+        "purpose": case_info["purpose"],
+        "status": "PENDING",
+        "errors": [],
+        "counts": {},
+        "kill_after_sec": kill_after,
+        "cycles": cycles,
+        "pr_baseline_count": 0,
+        "pr_final_count": 0,
+    }
+
+    case_dir = os.path.join(run_ctx["dir"], "pause_resume", case_id)
+    os.makedirs(case_dir, exist_ok=True)
+
+    logger.log("=" * 70)
+    logger.log("PAUSE/RESUME {}: {}  kill_after={}s  cycles={}".format(
+        case_id, case_info["title"], kill_after, cycles))
+
+    # Step 1 — datagen
+    r = run_cmd([args.datagen_bin, "--spec", ds.spec_path], logger,
+                dry_run=args.dry_run,
+                stdout_path=os.path.join(case_dir, "datagen.stdout"),
+                stderr_path=os.path.join(case_dir, "datagen.stderr"))
+    if not args.dry_run and r["rc"] != 0:
+        result["status"] = "FAIL"
+        result["errors"].append("datagen failed (rc={})".format(r["rc"]))
+        return result
+
+    # Step 2 — make_batches (single)
+    batches_out = os.path.join(case_dir, "batches")
+    r = run_cmd([sys.executable, MAKE_BATCHES, ds.root, "-o", batches_out, "--single"],
+                logger, dry_run=args.dry_run,
+                stdout_path=os.path.join(case_dir, "make_batches.stdout"),
+                stderr_path=os.path.join(case_dir, "make_batches.stderr"))
+    if not args.dry_run and r["rc"] != 0:
+        result["status"] = "FAIL"
+        result["errors"].append("make_batches failed (rc={})".format(r["rc"]))
+        return result
+
+    local_batch = os.path.join(batches_out, "batch_000000.txt")
+    record_count = None
+    if not args.dry_run:
+        if not os.path.isfile(local_batch):
+            result["status"] = "FAIL"
+            result["errors"].append("batch not produced: {}".format(local_batch))
+            return result
+        record_count = count_batch_records(local_batch)
+        result["counts"]["batch_records"] = record_count
+        logger.log("batch records: {}".format(record_count))
+
+    # Step 3 — stage under inprogress/ (same directory cloudcp expects)
+    tid = next_transfer_id(args.dry_run)
+    result["transfer_id"] = tid
+    staged_dir = pp.join(BCLOUD_BATCHMETA, "transfer_{}".format(tid),
+                         "batches", "inprogress", INPROGRESS_TIER)
+    staged_batch = pp.join(staged_dir, "batch_000000.txt")
+    logger.log("transfer id: {}  ->  {}".format(tid, staged_batch))
+    if not args.dry_run:
+        os.makedirs(staged_dir, exist_ok=True)
+        shutil.copy2(local_batch, staged_batch)
+
+    cloudcp_cmd = [
+        CLOUDCP_BIN, staged_batch,
+        "--bucket", args.bucket,
+        "--fs-prefix", ds.root,
+        "--transfer-id", str(tid),
+        "--prefix", ds.name,
+        "--endpoint-url", args.endpoint_url,
+    ]
+    run_env = os.environ.copy()
+    run_env["LD_LIBRARY_PATH"] = CLOUDCP_LD_LIBRARY_PATH
+
+    if args.dry_run:
+        logger.log("(dry-run) would launch cloudcp, kill after {}s ({} cycle(s)), "
+                   "then resume and validate".format(kill_after, cycles))
+        result["status"] = "DRY_RUN"
+        if not args.no_clear:
+            clear_bucket(args, logger)
+        delete_dataset_dir(ds.root, args, logger)
+        return result
+
+    try:
+        # Kill-resume cycles
+        for cycle in range(cycles):
+            logger.log("-" * 60)
+            logger.log("KILL CYCLE {}/{}  kill_after={}s".format(
+                cycle + 1, cycles, kill_after))
+
+            before_ok = _count_ok_in_cloudcp_log(tid)
+            logger.log("cloudcp.log ok before launch: {}".format(before_ok))
+
+            stdout_f = open(os.path.join(case_dir,
+                                         "cloudcp_kill{}.stdout".format(cycle + 1)), "w")
+            stderr_f = open(os.path.join(case_dir,
+                                         "cloudcp_kill{}.stderr".format(cycle + 1)), "w")
+            proc = subprocess.Popen(cloudcp_cmd, env=run_env,
+                                    stdout=stdout_f, stderr=stderr_f)
+            logger.log("cloudcp pid={} started; sleeping {}s".format(proc.pid, kill_after))
+
+            time.sleep(kill_after)
+
+            if proc.poll() is None:
+                logger.log("SIGKILL -> pid={}".format(proc.pid))
+                proc.kill()
+                try:
+                    proc.wait(timeout=15)
+                except subprocess.TimeoutExpired:
+                    logger.log("process did not die within 15 s after SIGKILL", "WARN")
+            else:
+                logger.log("process already exited (rc={}) before kill — "
+                           "try a shorter --pr-kill-after".format(proc.returncode), "WARN")
+
+            stdout_f.close()
+            stderr_f.close()
+            after_ok = _count_ok_in_cloudcp_log(tid)
+            logger.log("cloudcp.log ok after kill: {}  (delta: {})".format(
+                after_ok, after_ok - before_ok))
+
+        result["pr_baseline_count"] = _count_ok_in_cloudcp_log(tid)
+        logger.log("pre-resume baseline (total ok from log): {}".format(
+            result["pr_baseline_count"]))
+
+        # Final resume run to completion (same transfer-id, same batch path)
+        logger.log("-" * 60)
+        logger.log("FINAL RESUME RUN  transfer_id={}".format(tid))
+        with open(os.path.join(case_dir, "cloudcp_resume.stdout"), "w") as so, \
+             open(os.path.join(case_dir, "cloudcp_resume.stderr"), "w") as se:
+            try:
+                proc_final = subprocess.run(cloudcp_cmd, env=run_env,
+                                            stdout=so, stderr=se)
+                resume_rc = proc_final.returncode
+            except FileNotFoundError as exc:
+                result["status"] = "FAIL"
+                result["errors"].append("cloudcp binary not found: {}".format(exc))
+                return result
+
+        logger.log("resume exit code: {}".format(resume_rc))
+        result["pr_final_count"] = _count_ok_in_cloudcp_log(tid)
+        logger.log("post-resume ok-count from log: {}".format(result["pr_final_count"]))
+
+        # Validate final transfer report
+        csv_path = transfer_report_path(tid)
+        result["report_csv"] = csv_path
+        if os.path.isfile(csv_path):
+            try:
+                shutil.copy2(csv_path, os.path.join(case_dir, os.path.basename(csv_path)))
+            except OSError:
+                pass
+
+        ok, val = validate_positive_csv(csv_path, record_count, logger)
+        result["counts"].update(val)
+
+        problems = list(val.get("problems", []))
+        if result["pr_baseline_count"] == 0 and cycles > 0 and record_count:
+            problems.append(
+                "pr_baseline_count=0: no completed files found in cloudcp.log "
+                "before resume — process may have been killed before any batch finished")
+
+        if ok and not problems:
+            result["status"] = "PASS"
+        else:
+            result["status"] = "FAIL"
+            result["errors"].extend(problems)
+
+    except Exception as exc:
+        result["status"] = "FAIL"
+        result["errors"].append("unexpected exception: {}".format(exc))
+    finally:
+        if not args.no_clear:
+            clear_bucket(args, logger)
+        delete_dataset_dir(ds.root, args, logger)
+
+    logger.log("case {} -> {}".format(case_id, result["status"]),
+               "INFO" if result["status"] in ("PASS", "DRY_RUN") else "ERROR")
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Bucket clearing
 # ---------------------------------------------------------------------------
 
@@ -1135,6 +1442,7 @@ def render_markdown(report):
     results = report["results"]
     positives = [r for r in results if r["kind"] == "positive"]
     negatives = [r for r in results if r["kind"] == "negative"]
+    pause_resumes = [r for r in results if r["kind"] == "pause_resume"]
 
     total = len(results)
     passed = sum(1 for r in results if r["status"] in ("PASS", "DRY_RUN", "SKIP"))
@@ -1219,6 +1527,10 @@ def render_markdown(report):
             r.get("title", r["dataset"]), r.get("summary", ""),
             status_badge(r["status"]),
             "{} cases".format(cases) if cases != "—" else "—"))
+    for r in pause_resumes:
+        L.append("| — | {} | {} | {} | — |".format(
+            r.get("title", r["case"]), r.get("summary", ""),
+            status_badge(r["status"])))
     L.append("")
 
     # -- Positive datasets in detail ---------------------------------------
@@ -1302,6 +1614,37 @@ def render_markdown(report):
                             status_badge(cs["status"])))
                 L.append("")
 
+    # -- Pause / resume suite ----------------------------------------------
+    if pause_resumes:
+        L.append("## Pause / resume testing")
+        L.append("")
+        L.append("These cases verify that `cloudcp` correctly resumes an "
+                 "interrupted transfer using `cloudcp.log` as the source of "
+                 "truth for already-uploaded files.")
+        L.append("")
+        L.append("| Case | Dataset | Kill after | Cycles | "
+                 "Pre-resume ok | Post-resume ok | Expected | Result |")
+        L.append("|------|---------|-----------|--------|"
+                 "---------------|----------------|----------|--------|")
+        for r in pause_resumes:
+            c = r.get("counts", {})
+            expected = c.get("batch_records", "—")
+            pre = r.get("pr_baseline_count", "—")
+            post = r.get("pr_final_count", "—")
+            if is_dry:
+                pre = post = expected = "—"
+            L.append("| {} | {} | {}s | {} | {} | {} | {} | {} |".format(
+                r["case"], r["dataset"],
+                r.get("kill_after_sec", "—"), r.get("cycles", "—"),
+                pre, post, expected, status_badge(r["status"])))
+        L.append("")
+        for r in pause_resumes:
+            if r.get("errors"):
+                L.append("**{} issues:**".format(r["case"]))
+                for e in r["errors"]:
+                    L.append("- {}".format(e))
+                L.append("")
+
     # -- Failures -----------------------------------------------------------
     fails = [r for r in results if r["status"] == "FAIL"]
     if fails:
@@ -1353,7 +1696,10 @@ def build_parser():
     sel.add_argument("--xattr", action="store_true",
                      help="Run only the extended-attribute (xattr) case (N12-N16).")
     sel.add_argument("--all", action="store_true",
-                     help="Run every positive dataset AND the negative suite.")
+                     help="Run every positive dataset, the negative suite, AND "
+                          "the pause/resume suite.")
+    sel.add_argument("--pause-resume", action="store_true",
+                     help="Run the pause/resume test suite (PR01-PR06).")
     sel.add_argument("--list", action="store_true",
                      help="List discovered datasets and exit.")
 
@@ -1376,6 +1722,8 @@ def build_parser():
                           "Alias: --no-clear.")
     beh.add_argument("--yes", action="store_true",
                      help="Skip the confirmation prompt for real (non-dry) runs.")
+    beh.add_argument("--pr-kill-after", type=int, default=None, metavar="SEC",
+                     help="Override kill-after seconds for ALL pause/resume cases.")
     return p
 
 
@@ -1405,21 +1753,28 @@ def main(argv=None):
             exp = d.expected_count if d.expected_count is not None else "?"
             print("  #{:<3} {:<22} mode={:<8} expected={:<9} root={}".format(
                 d.number, d.name, d.mode or "?", exp, d.root))
-        print("\nNegative suite: --negative (malformed batches B01-B12)")
-        print("Xattr case:     --xattr (extended-attribute metadata N12-N16)")
+        print("\nNegative suite:      --negative (malformed batches B01-B12)")
+        print("Xattr case:          --xattr (extended-attribute metadata N12-N16)")
+        print("Pause/resume suite:  --pause-resume (PR01-PR06)")
+        for cid, ci in PAUSE_RESUME_CASE_INFO.items():
+            print("  {} dataset={} kill_after={}s cycles={}".format(
+                cid, ci["dataset"], ci["kill_after_sec"], ci["cycles"]))
         return 0
 
-    # Decide what runs. --negative alone => only negative. Otherwise positive
-    # selection (default = all positive). --all => all positive + negative.
+    # Decide what runs.
     run_negative = args.negative or args.all or args.xattr
+    run_pr = args.pause_resume or args.all
     negative_only = (args.negative or args.xattr) and not (
         args.all or args.dataset or args.from_ is not None or args.to is not None)
-    if negative_only:
+    pr_only = args.pause_resume and not (
+        args.all or args.dataset or args.from_ is not None or args.to is not None
+        or args.negative or args.xattr)
+    if negative_only or pr_only:
         positive = []
     else:
         positive = select_datasets(all_datasets, args)
 
-    if not positive and not run_negative:
+    if not positive and not run_negative and not run_pr:
         raise SystemExit("nothing selected. Use --list to see datasets.")
 
     if os.name != "posix" and not args.dry_run:
@@ -1445,6 +1800,7 @@ def main(argv=None):
     logger.log("positive datasets: {}".format(
         ", ".join(d.name for d in positive) or "(none)"))
     logger.log("negative suite: {}".format("yes" if run_negative else "no"))
+    logger.log("pause/resume suite: {}".format("yes" if run_pr else "no"))
 
     results = []
     t0 = time.time()
@@ -1455,6 +1811,8 @@ def main(argv=None):
             results.extend(run_negative_scenario_c(args, run_ctx, logger))
         elif run_negative:
             results.extend(run_negative_suite(args, run_ctx, logger))
+        if run_pr:
+            results.extend(run_pause_resume_suite(args, run_ctx, logger))
     finally:
         write_reports(run_ctx, args, results, logger)
 

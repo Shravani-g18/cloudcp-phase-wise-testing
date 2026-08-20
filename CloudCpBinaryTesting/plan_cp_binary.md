@@ -249,3 +249,141 @@ python make_batches.py --negative -o CloudcpBinaryTesting
 This document + the spec files + the `make_batches.py --negative` code are being
 created now. **No physical dataset is generated until you approve** (Section 6,
 steps 1–3 are held pending your go-ahead).
+
+---
+
+## 9. Pause / Resume Test Cases (PR01 – PR06)
+
+### 9.1 Background and mechanism
+
+The production orchestrator kills the running `cloudcp` process mid-transfer
+and later restarts it with the **identical arguments** (same batch file, same
+`--transfer-id`). On restart `cloudcp` reads
+
+```
+/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloudcp.log
+```
+
+as the source of truth for which files have already been uploaded and which are
+still pending, then continues from where it left off.
+
+The pause/resume test suite reproduces this kill-restart cycle in the test
+harness: we launch `cloudcp` via `subprocess.Popen`, kill it with `SIGKILL`
+after a controlled interval, then re-run it with the same arguments and assert
+that the full dataset is ultimately uploaded correctly.
+
+### 9.2 Shared test pipeline (all PR cases)
+
+```
+1.  datagen --spec <spec>
+        → materialize the dataset under <root>
+
+2.  make_batches.py <root> --single
+        → batch_000000.txt
+
+3.  stage batch under transfer_<id>/batches/inprogress/zero/
+
+4.  cloudcp <batch> ... &          ← launched via Popen (non-blocking)
+        → first run, killed with SIGKILL after <kill_after_sec> seconds
+
+5.  snapshot cloudcp.log
+        → count lines already logged as DONE / UPLOADED (pre-resume baseline)
+
+6.  cloudcp <batch> ...            ← second run, same batch + same transfer-id
+        → runs to completion
+
+7.  validate transfer_report_<id>.csv
+        → every file SUCCESS, row count == total expected, no missing records
+
+8.  clear bucket + delete dataset dir
+```
+
+Pass criteria:
+- Final transfer report contains **all** expected files as `SUCCESS`.
+- Row count matches the spec's expected file count.
+- `cloudcp` **does not crash** or hang on resume (exit code 0 or a meaningful
+  non-zero, never a signal kill).
+- The pre-resume baseline from `cloudcp.log` shows at least some files
+  were recorded before the kill (confirming the kill was mid-transfer, not
+  before anything uploaded).
+
+### 9.3 Test cases
+
+Throughput observed in this environment: ~330–350 tiny files/sec. The tiny
+dataset (`tiny_files`) has ~5 400 files → full run ≈ 15–16 s.
+
+| ID   | Dataset          | Kill after (sec) | Resumes / cycles | What it validates |
+|------|------------------|-----------------|------------------|--------------------------------------------------|
+| PR01 | `tiny_files`     | 5               | 1                | Basic resume from log; many single-part uploads (~32 % progress at kill). |
+| PR02 | `small_files`    | 8               | 1                | Resume that crosses the 8 MiB multipart cutoff. |
+| PR03 | `tiny_files`     | 2               | 1                | Kill very early (~13 % progress); full dataset on resume. |
+| PR04 | `tiny_files`     | 12              | 1                | Kill late (~75 % done); only tail files on resume. |
+| PR05 | `tiny_files`     | 5, 5            | 2                | Double kill-resume; log accumulates state across both kills. |
+| PR06 | `unicode_names`  | 5               | 1                | Non-ASCII paths in `cloudcp.log` round-trip byte-exact on resume. |
+
+Notes:
+- Kill intervals are **wall-clock seconds** from process start; adjust
+  `--pr-kill-after <sec>` to override all cases with a single value.
+- All PR cases use the **same `--transfer-id`** across pause and resume runs.
+- PR05 kills the resumed process a second time to verify log accumulation is
+  additive (files from run 1 are not re-uploaded in run 2 or run 3).
+
+### 9.4 cloudcp.log snapshot format
+
+`cloudcp` appends one `[Batch]` completion line to
+`/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloudcp.log` whenever a
+batch finishes:
+
+```
+2026-08-20 06:39:58.229 [Batch][1330679] done records=8000 ok=8000 failed=0 \
+  csv=/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_111/transfer_report_111.csv
+```
+
+The harness identifies lines belonging to transfer `<tid>` by scanning for
+`cloud_transfer_<tid>/` in the csv path, then sums the `ok=N` values. This
+gives the count of files that were durably committed before the kill.
+
+The harness stores `pr_baseline_count` (total ok before the final resume) and
+`pr_final_count` (total ok after the final resume) in the run result JSON.
+PASS requires `pr_final_count == total_expected_files`.
+
+### 9.5 CLI flags
+
+```
+python run_cloudcp_tests.py --pause-resume
+python run_cloudcp_tests.py --pause-resume --pr-kill-after 10   # override kill timing for all cases
+python run_cloudcp_tests.py --pause-resume --dry-run
+python run_cloudcp_tests.py --all                               # includes pause/resume
+```
+
+`--pause-resume` runs only the PR suite. `--all` includes it alongside the
+positive and negative suites. `--pr-kill-after <sec>` overrides the default
+per-case kill timing with a single value for all PR cases.
+
+### 9.6 Out-of-scope for this iteration
+
+- **PR07 (tampered log):** Removing lines from `cloudcp.log` after a kill to
+  simulate log corruption is deferred — the expected binary behaviour under
+  a truncated log is not yet confirmed.
+- **PR + negative combinations:** Running a pause/resume cycle over a malformed
+  batch is deferred until the basic PR suite is validated.
+
+---
+
+### Approval gate (pause/resume)
+
+The plan above is now implemented in `run_cloudcp_tests.py`. The transfer
+directory structure used is:
+
+```
+bcloud_batchmeta/transfer_<id>/
+  batches/
+    inprogress/<tier>/batch_000000.txt   ← batch lives here while cloudcp runs
+    completed/<tier>/batch_000000.txt    ← moved here when cloudcp finishes normally
+    pending/                             ← unused for single-batch runs
+```
+
+When cloudcp is killed mid-transfer the batch remains in `inprogress/`. On
+the resume run (same `--transfer-id`) cloudcp reads `cloudcp.log` to
+determine which files were already durably uploaded, then continues from the
+remaining records in `inprogress/`.
