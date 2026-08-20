@@ -1,0 +1,1078 @@
+<!doctype html><html><head><meta charset="utf-8"><title>CloudCp Component Fallback Report</title><style>
+    body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f6f8fa;color:#1f2328}
+    header{background:#24292f;color:#fff;padding:18px 28px}
+    header h1{margin:0;font-size:20px}
+    .wrap{padding:20px 28px}
+    .badge{color:#fff;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:700}
+    table{border-collapse:collapse;width:100%;background:#fff;margin:12px 0;font-size:13px}
+    th,td{border:1px solid #d0d7de;padding:6px 8px;text-align:left;vertical-align:top}
+    th{background:#eaeef2}
+    .case{background:#fff;border:1px solid #d0d7de;border-radius:8px;padding:14px 18px;margin:16px 0}
+    .case h3{margin:0 0 6px}
+    .desc{color:#57606a;margin:4px 0}
+    .meta{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:#f6f8fa;padding:6px 8px;border-radius:6px}
+    .reasons{margin:8px 0;color:#9a6700}
+    code{font-family:ui-monospace,Consolas,monospace;font-size:12px;color:#0550ae;word-break:break-all}
+    .detail{color:#57606a;font-size:12px;margin-top:2px}
+    pre.io{background:#0d1117;color:#c9d1d9;padding:8px;border-radius:6px;overflow:auto;max-height:220px;font-size:11px;margin:6px 0 0}
+    table.steps td:first-child{width:32px;text-align:right;color:#57606a}
+    summary{cursor:pointer;font-weight:600;margin:6px 0}
+    </style></head><body><header><h1>CloudCp Component Fallback Report</h1><div>2026-08-20T09:24:30 · host 192.168.6.32 · 14 case(s)</div></header><div class="wrap"><p><span class="badge" style="background:#82071e">ERROR: 1</span> <span class="badge" style="background:#cf222e">FAIL: 1</span> <span class="badge" style="background:#1a7f37">PASS: 12</span></p><table class="summary"><thead><tr><th>case</th><th>mech</th><th>group</th><th>dataset</th><th>type</th><th>fault</th><th>files</th><th>verdict</th></tr></thead><tbody><tr><td><a href="#CFW-U-01">CFW-U-01</a></td><td>worker</td><td>WORKER</td><td>zero</td><td>upload</td><td>-</td><td>200</td><td><span class="badge" style="background:#1a7f37">PASS</span></td></tr><tr><td><a href="#CFW-U-03">CFW-U-03</a></td><td>worker</td><td>WORKER</td><td>small</td><td>upload</td><td>-</td><td>120</td><td><span class="badge" style="background:#1a7f37">PASS</span></td></tr><tr><td><a href="#CFW-U-04">CFW-U-04</a></td><td>worker</td><td>WORKER</td><td>medium</td><td>upload</td><td>-</td><td>None</td><td><span class="badge" style="background:#82071e">ERROR</span></td></tr><tr><td><a href="#CFW-U-10">CFW-U-10</a></td><td>worker</td><td>WORKER</td><td>special</td><td>upload</td><td>-</td><td>120</td><td><span class="badge" style="background:#1a7f37">PASS</span></td></tr><tr><td><a href="#CMP-U-02">CMP-U-02</a></td><td>mp</td><td>MP</td><td>tiny</td><td>upload</td><td>-</td><td>5400</td><td><span class="badge" style="background:#1a7f37">PASS</span></td></tr><tr><td><a href="#CMP-U-03">CMP-U-03</a></td><td>mp</td><td>MP</td><td>small</td><td>upload</td><td>-</td><td>120</td><td><span class="badge" style="background:#1a7f37">PASS</span></td></tr><tr><td><a href="#CFW-N-01">CFW-N-01</a></td><td>worker</td><td>NEGATIVE</td><td>tiny</td><td>upload</td><td>missing</td><td>5400</td><td><span class="badge" style="background:#1a7f37">PASS</span></td></tr><tr><td><a href="#CMP-N-01">CMP-N-01</a></td><td>mp</td><td>NEGATIVE</td><td>tiny</td><td>download</td><td>download</td><td>5400</td><td><span class="badge" style="background:#1a7f37">PASS</span></td></tr><tr><td><a href="#CMP-N-02">CMP-N-02</a></td><td>mp</td><td>NEGATIVE</td><td>tiny</td><td>upload</td><td>missing</td><td>5400</td><td><span class="badge" style="background:#1a7f37">PASS</span></td></tr><tr><td><a href="#CFW-N-02">CFW-N-02</a></td><td>worker</td><td>NEGATIVE</td><td>tiny</td><td>upload</td><td>bad_lst</td><td>5400</td><td><span class="badge" style="background:#cf222e">FAIL</span></td></tr><tr><td><a href="#CFW-N-03">CFW-N-03</a></td><td>worker</td><td>NEGATIVE</td><td>tiny</td><td>upload</td><td>bad_bucket</td><td>5400</td><td><span class="badge" style="background:#1a7f37">PASS</span></td></tr><tr><td><a href="#CFW-N-04">CFW-N-04</a></td><td>worker</td><td>NEGATIVE</td><td>tiny</td><td>upload</td><td>late_lst</td><td>5400</td><td><span class="badge" style="background:#1a7f37">PASS</span></td></tr><tr><td><a href="#CMP-N-04">CMP-N-04</a></td><td>mp</td><td>NEGATIVE</td><td>tiny</td><td>upload</td><td>bad_bucket</td><td>5400</td><td><span class="badge" style="background:#1a7f37">PASS</span></td></tr><tr><td><a href="#CMP-N-05">CMP-N-05</a></td><td>mp</td><td>NEGATIVE</td><td>tiny</td><td>upload</td><td>bad_fsp</td><td>5400</td><td><span class="badge" style="background:#1a7f37">PASS</span></td></tr></tbody></table><section id="CFW-U-01" class="case"><h3>CFW-U-01 <span class="badge" style="background:#1a7f37">PASS</span></h3><p class="desc">Fallback worker drains a staged retry .lst for the &#x27;zero&#x27; dataset — all records uploaded via boto3 (FALLBACK_OK) and the batch is completed.</p><p class="meta">transfer_id=113 · files=200 · by_status={&#x27;FALLBACK_OK&#x27;: 200} · ok=None · failed=None · batch_completed=True · lst_retired=True · s3_objects=200</p><ul class=reasons><li>drained 200 file(s) via fallback; batch completed</li></ul><details open><summary>Steps &amp; commands (21)</summary><table class="steps"><thead><tr><th>#</th><th>kind</th><th>step / command</th><th>result</th></tr></thead><tbody><tr><td>1</td><td>local</td><td>case<br><div class=detail>CFW-U-01 [WORKER] mechanism=worker dataset=zero type=upload fault=- expect=ok</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>2</td><td>local</td><td>description<br><div class=detail>Fallback worker drains a staged retry .lst for the &#x27;zero&#x27; dataset — all records uploaded via boto3 (FALLBACK_OK) and the batch is completed.</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>3</td><td>ssh</td><td>upload stage helper<br><code>sftp put /home/bryck/fallback/cloudcp-phase-wise-testing/CloudCpFallbackTesting/component_stage.py -&gt; /tmp/cc_component_stage.py</code><div class=detail>uploaded</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>4</td><td>ssh</td><td>preflight bucket<br><code>aws s3 ls s3://omicron --endpoint-url https://10.10.10.103:9000 &gt;/dev/null 2&gt;&amp;1 &amp;&amp; echo OK || echo UNREACHABLE</code><div class=detail>rc=0</div><pre class="io">OK</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>5</td><td>ssh</td><td>prep remote spec dir<br><code>mkdir -p /tmp/cc_component_specs</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>6</td><td>ssh</td><td>upload spec<br><code>sftp put /home/bryck/fallback/cloudcp-phase-wise-testing/CloudCpFallbackTesting/spec_files/01_zero_byte.yaml -&gt; /tmp/cc_component_specs/01_zero_byte.yaml</code><div class=detail>uploaded</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>7</td><td>ssh</td><td>datagen<br><code>/home/bryck/rperiyas/datagen --spec /tmp/cc_component_specs/01_zero_byte.yaml</code><div class=detail>rc=0</div><pre class="io">Planned 200 files; mode=flat, threads=4
+[Progress] 100 / 200 files | 0 B | 13872.3 files/s | 0 B/s
+[Progress] 200 / 200 files | 0 B | 10722.8 files/s | 0 B/s
+
+[Done] 200 files | 0 B | 10224.7 files/s | 0 B/s | elapsed 0.0195604s</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>8</td><td>ssh</td><td>count source files<br><code>find /bryck/cloudcp_fallback/zero_byte -type f 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">200</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>9</td><td>ssh</td><td>alloc transfer id<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py alloc-id --batchmeta /opt/bryck/bryckapi/downloads/bcloud_batchmeta</code><div class=detail>rc=0</div><pre class="io">{&quot;transfer_id&quot;: 113}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>10</td><td>ssh</td><td>stage batch<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py stage-batch --src /bryck/cloudcp_fallback/zero_byte --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113 --tier zero --name batch_000000.txt</code><div class=detail>rc=0</div><pre class="io">{&quot;batch_file&quot;: &quot;/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/batches/inprogress/zero/batch_000000.txt&quot;, &quot;count&quot;: 200}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>11</td><td>ssh</td><td>make retry .lst<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py make-lst --batch /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/batches/inprogress/zero/batch_000000.txt --transfer-id 113 --bucket omicron --prefix zero_byte --fs-prefix /bryck/cloudcp_fallback/zero_byte</code><div class=detail>rc=0</div><pre class="io">{&quot;lst_path&quot;: &quot;/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_113/cloudcp_retry_113_batch_000000.txt.lst&quot;, &quot;count&quot;: 200}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>12</td><td>ssh</td><td>write done marker<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py done-marker --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113</code><div class=detail>rc=0</div><pre class="io">{&quot;marker&quot;: &quot;/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/_fallback_done&quot;}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>13</td><td>ssh</td><td>run fallback worker<br><code>/opt/bryck/.venv/bryck/bin/python3 -m bryckcloud.lib.cloud.fallback_worker --transfer-id 113 --transfer-type upload --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113 --pool-size 16</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>14</td><td>ssh</td><td>verify report<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py verify --transfer-id 113</code><div class=detail>rc=0</div><pre class="io">{&quot;total_rows&quot;: 200, &quot;by_status&quot;: {&quot;FALLBACK_OK&quot;: 200}}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>15</td><td>ssh</td><td>batch state<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py batch-state --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113 --name batch_000000.txt</code><div class=detail>rc=0</div><pre class="io">{&quot;counts&quot;: {&quot;pending&quot;: 0, &quot;inprogress&quot;: 0, &quot;completed&quot;: 1}, &quot;completed&quot;: true}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>16</td><td>ssh</td><td>check .lst.done<br><code>ls /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_113/cloudcp_retry_113_batch_000000.txt.lst.done &gt;/dev/null 2&gt;&amp;1 &amp;&amp; echo YES || echo NO</code><div class=detail>rc=0</div><pre class="io">YES</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>17</td><td>ssh</td><td>count s3 objects<br><code>aws s3 ls --recursive s3://omicron/zero_byte --endpoint-url https://10.10.10.103:9000 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">200</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>18</td><td>ssh</td><td>cleanup bucket prefix<br><code>aws s3 rm --recursive s3://omicron/zero_byte --endpoint-url https://10.10.10.103:9000</code><div class=detail>rc=0</div><pre class="io">delete: s3://omicron/zero_byte/zero-0a2ebs5enk.bin
+delete: s3://omicron/zero_byte/zero-49vbeuvvw8.bin
+delete: s3://omicron/zero_byte/zero-4hcv9haoi2.bin
+delete: s3://omicron/zero_byte/zero-459hix4y9l.bin
+delete: s3://omicron/zero_byte/zero-3krlqqily1.bin
+delete: s3://omicron/zero_byte/zero-2fa86g0zs8.bin
+delete: s3://omicron/zero_byte/zero-4l6cq82ixf.bin
+delete: s3://omicron/zero_byte/zero-4dzjbocsoa.bin
+delete: s3://omicron/zero_byte/zero-4w2mz61051.bin
+delete: s3://omicron/zero_byte/zero-6g3ek2md4g.bin
+delete: s3://omicron/zero_byte/zero-0v3ks5a8c9.bin
+delete: s3://omicron/zero_byte/zero-6h5b3mhl5o.bin
+delete: s3://omicron/zero_byte/zero-6javwt2a3v.bin
+delete: s3://omicron/zero_byte/zero-6jb8qoqptc.bin
+delete: s3://omicron/zero_byte/zero-0uccg1rgf2.bin
+delete: s3://omicron/zero_byte/zero-6wcfy0hd3a.bin
+delete: s3://omicron/zero_byte/zero-6ac82xzg72.bin
+delete: s3://omicron/zero_byte/zero-7h6vm885y1.bin
+delete: s3://omicron/zero_byte/zero-7fwzr1v1lp.bin
+delete: s3://omicron/zero_byte/zero-7jmnfp2xnr.bin
+delete: s3://omicron/zero_byte/zero-7u8eoch9my.bin
+delete: s3://omicron/zero_byte/zero-7mp6pfhsr5.bin
+delete: s3://omicron/zero_byte/zero-7ywyom2z0x.bin
+delete: s3://omicron/zero_byte/zero-7x4j8b6xxw.bin
+delete: s3://omicron/zero_byte/zero-85o6kw1zup.bin
+delete: s3://omicron/zero_byte/zero-87zvlxswg3.bin
+delete: s3://omicron/zero_byte/zero-88s3l0ewfi.bin
+delete: s3://omicron/zero_byte/zero-8lr7h7zz4o.bin
+delete: s3://omicron/zero_byte/zero-8fvb3axu4q.bin
+delete: s3://omicron/zero_byte/zero-8o9yxn9uzz.bin
+delete: s3://omicron/zero_byte/zero-8yqyxuovcb.bin
+delete: s3://omicron/zero_byte/zero-0yjc062qm4.bin
+delete: s3://omicron/zero_byte/zero-a3yx4gy19x.bin
+delete: s3://omicron/zero_byte/zero-8u3qpkai01.bin
+delete: s3://omicron/zero_byte/zero-999ykd8s5y.bin
+delete: s3://omicron/zero_byte/zero-aecbeahrnr.bin
+delete: s3://omicron/zero_byte/zero-a5vsfs0nrv.bin
+delete: s3://omicron/zero_byte/zero-ava7x98r5c.bin
+delete: s3://omicron/zero_byte/zero-agx1cyt5om.bin
+delete: s3://omicron/zero_byte/zero-aiok82gdqh.bin
+delete: s3://omicron/zero_byte/zero-ayyv2b14z4.bin
+delete: s3://omicron/zero_byte/zero-axazjdwrx6.bin
+delete: s3://omicron/zero_byte/zero-beytomtv1p.bin
+delete: s3://omicron/zero_byte/zero-ar1jfaps8d.bin
+delete: s3://omicron/zero_byte/zero-b4u1oioacn.bin
+delete: s3://omicron/zero_byte/zero-b8948hj4q4.bin
+delete: s3://omicron/zero_byte/zero-bmlpztttyl.bin
+delete: s3://omicron/zero_byte/zero-bonbbn0mtl.bin
+delete: s3://omicron/zero_byte/zero-cxo3ktnq2k.bin
+delete: s3://omicron/zero_byte/zero-btiegopvr9.bin
+delete: s3://omicron/zero_byte/zero-5vl45xguwb.bin
+delete: s3://omicron/zero_byte/zero-1bgwo5tbry.bin
+delete: s3://omicron/zero_byte/zero-d39kx1l88v.bin
+delete: s3://omicron/zero_byte/zero-d876w96vn8.bin
+delete: s3://omicron/zero_byte/zero-dkq70eqvbi.bin
+delete: s3://omicron/zero_byte/zero-df3qxjqk5y.bin
+delete: s3://omicron/zero_byte/zero-dc4ma0x8g0.bin
+delete: s3://omicron/zero_byte/zero-dqiu2zc101.bin
+delete: s3://omicron/zero_byte/zero-dvgay03ecn.bin
+delete: s3://omicron/zero_byte/zero-eaypk33v9i.bin
+delete: s3://omicron/zero_byte/zero-dys28aq832.bin
+delete: s3://omicron/zero_byte/zero-f1v71gark9.bin
+delete: s3://omicron/zero_byte/zero-dl7p66v5fl.bin
+delete: s3://omicron/zero_byte/zero-e4ytkzg3eb.bin
+delete: s3://omicron/zero_byte/zero-5xbqukr3yw.bin
+delete: s3://omicron/zero_byte/zero-f52nkpe2k0.bin
+delete: s3://omicron/zero_byte/zero-frhsiseby8.bin
+delete: s3://omicron/zero_byte/zero-fu8pynwyxc.bin
+delete: s3://omicron/zero_byte/zero-ewbteguii9.bin
+delete: s3://omicron/zero_byte/zero-fs4w29ft7m.bin
+delete: s3://omicron/zero_byte/zero-65419mdil6.bin
+delete: s3://omicron/zero_byte/zero-fs3h9yszxz.bin
+delete: s3://omicron/zero_byte/zero-g5o35wrpv9.bin
+delete: s3://omicron/zero_byte/zero-ggd43m2xjr.bin
+delete: s3://omicron/zero_byte/zero-gzu0vxrtei.bin
+delete: s3://omicron/zero_byte/zero-gn9z2x66je.bin
+delete: s3://omicron/zero_byte/zero-1woqs9p2w1.bin
+delete: s3://omicron/zero_byte/zero-hr9gka5rxj.bin
+delete: s3://omicron/z
+… [clipped, 10199 chars total]</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>19</td><td>ssh</td><td>cleanup /bryck source<br><code>rm -rf /bryck/cloudcp_fallback/zero_byte</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>20</td><td>ssh</td><td>cleanup batch-meta transfer dir<br><code>rm -rf /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>21</td><td>ssh</td><td>cleanup transfer log dir<br><code>rm -rf /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_113</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr></tbody></table></details></section><section id="CFW-U-03" class="case"><h3>CFW-U-03 <span class="badge" style="background:#1a7f37">PASS</span></h3><p class="desc">Fallback worker drains a staged retry .lst for the &#x27;small&#x27; dataset — all records uploaded via boto3 (FALLBACK_OK) and the batch is completed.</p><p class="meta">transfer_id=113 · files=120 · by_status={&#x27;FALLBACK_OK&#x27;: 120} · ok=None · failed=None · batch_completed=True · lst_retired=True · s3_objects=120</p><ul class=reasons><li>drained 120 file(s) via fallback; batch completed</li></ul><details open><summary>Steps &amp; commands (20)</summary><table class="steps"><thead><tr><th>#</th><th>kind</th><th>step / command</th><th>result</th></tr></thead><tbody><tr><td>1</td><td>local</td><td>case<br><div class=detail>CFW-U-03 [WORKER] mechanism=worker dataset=small type=upload fault=- expect=ok</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>2</td><td>local</td><td>description<br><div class=detail>Fallback worker drains a staged retry .lst for the &#x27;small&#x27; dataset — all records uploaded via boto3 (FALLBACK_OK) and the batch is completed.</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>3</td><td>ssh</td><td>preflight bucket<br><code>aws s3 ls s3://omicron --endpoint-url https://10.10.10.103:9000 &gt;/dev/null 2&gt;&amp;1 &amp;&amp; echo OK || echo UNREACHABLE</code><div class=detail>rc=0</div><pre class="io">OK</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>4</td><td>ssh</td><td>prep remote spec dir<br><code>mkdir -p /tmp/cc_component_specs</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>5</td><td>ssh</td><td>upload spec<br><code>sftp put /home/bryck/fallback/cloudcp-phase-wise-testing/CloudCpFallbackTesting/spec_files/03_small_files.yaml -&gt; /tmp/cc_component_specs/03_small_files.yaml</code><div class=detail>uploaded</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>6</td><td>ssh</td><td>datagen<br><code>/home/bryck/rperiyas/datagen --spec /tmp/cc_component_specs/03_small_files.yaml</code><div class=detail>rc=0</div><pre class="io">Planned 120 files; mode=flat, threads=8
+[Progress] 100 / 120 files | 798.0 MB | 190.158 files/s | 1.5 GB/s
+
+[Done] 120 files | 1003.1 MB | 191.957 files/s | 1.6 GB/s | elapsed 0.625139s</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>7</td><td>ssh</td><td>count source files<br><code>find /bryck/cloudcp_fallback/small_files -type f 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">120</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>8</td><td>ssh</td><td>alloc transfer id<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py alloc-id --batchmeta /opt/bryck/bryckapi/downloads/bcloud_batchmeta</code><div class=detail>rc=0</div><pre class="io">{&quot;transfer_id&quot;: 113}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>9</td><td>ssh</td><td>stage batch<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py stage-batch --src /bryck/cloudcp_fallback/small_files --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113 --tier small --name batch_000000.txt</code><div class=detail>rc=0</div><pre class="io">{&quot;batch_file&quot;: &quot;/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/batches/inprogress/small/batch_000000.txt&quot;, &quot;count&quot;: 120}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>10</td><td>ssh</td><td>make retry .lst<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py make-lst --batch /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/batches/inprogress/small/batch_000000.txt --transfer-id 113 --bucket omicron --prefix small_files --fs-prefix /bryck/cloudcp_fallback/small_files</code><div class=detail>rc=0</div><pre class="io">{&quot;lst_path&quot;: &quot;/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_113/cloudcp_retry_113_batch_000000.txt.lst&quot;, &quot;count&quot;: 120}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>11</td><td>ssh</td><td>write done marker<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py done-marker --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113</code><div class=detail>rc=0</div><pre class="io">{&quot;marker&quot;: &quot;/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/_fallback_done&quot;}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>12</td><td>ssh</td><td>run fallback worker<br><code>/opt/bryck/.venv/bryck/bin/python3 -m bryckcloud.lib.cloud.fallback_worker --transfer-id 113 --transfer-type upload --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113 --pool-size 16</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>13</td><td>ssh</td><td>verify report<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py verify --transfer-id 113</code><div class=detail>rc=0</div><pre class="io">{&quot;total_rows&quot;: 120, &quot;by_status&quot;: {&quot;FALLBACK_OK&quot;: 120}}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>14</td><td>ssh</td><td>batch state<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py batch-state --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113 --name batch_000000.txt</code><div class=detail>rc=0</div><pre class="io">{&quot;counts&quot;: {&quot;pending&quot;: 0, &quot;inprogress&quot;: 0, &quot;completed&quot;: 1}, &quot;completed&quot;: true}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>15</td><td>ssh</td><td>check .lst.done<br><code>ls /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_113/cloudcp_retry_113_batch_000000.txt.lst.done &gt;/dev/null 2&gt;&amp;1 &amp;&amp; echo YES || echo NO</code><div class=detail>rc=0</div><pre class="io">YES</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>16</td><td>ssh</td><td>count s3 objects<br><code>aws s3 ls --recursive s3://omicron/small_files --endpoint-url https://10.10.10.103:9000 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">120</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>17</td><td>ssh</td><td>cleanup bucket prefix<br><code>aws s3 rm --recursive s3://omicron/small_files --endpoint-url https://10.10.10.103:9000</code><div class=detail>rc=0</div><pre class="io">delete: s3://omicron/small_files/small-0mtlshlm0jdq.dat
+delete: s3://omicron/small_files/small-7fwzr1v1lpk2.dat
+delete: s3://omicron/small_files/small-3fclji4dzjbo.dat
+delete: s3://omicron/small_files/small-72b4u1oioacn.dat
+delete: s3://omicron/small_files/small-533y8jyidvga.bin
+delete: s3://omicron/small_files/small-8fvb3axu4qzv.dat
+delete: s3://omicron/small_files/small-8s5ylqtqfdaq.dat
+delete: s3://omicron/small_files/small-0nrvaiok82gd.dat
+delete: s3://omicron/small_files/small-7vsruiusdk5b.bin
+delete: s3://omicron/small_files/small-7jmnfp2xnr7y.dat
+delete: s3://omicron/small_files/small-aeacwvypahhl.bin
+delete: s3://omicron/small_files/small-9ctj99nscpoe.bin
+delete: s3://omicron/small_files/small-9l1xn56xxrky.bin
+delete: s3://omicron/small_files/small-b8948hj4q44h.dat
+delete: s3://omicron/small_files/small-b8qoqptcshaa.dat
+delete: s3://omicron/small_files/small-bb65419mdil6.bin
+delete: s3://omicron/small_files/small-c101oafsacj4.bin
+delete: s3://omicron/small_files/small-cbdk2nr7kzdj.bin
+delete: s3://omicron/small_files/small-crpkdf3yfu8p.bin
+delete: s3://omicron/small_files/small-cv9haoi26g3e.bin
+delete: s3://omicron/small_files/small-csoafs3h9ysz.dat
+delete: s3://omicron/small_files/small-cwoy459hix4y.dat
+delete: s3://omicron/small_files/small-cyt5omogma7f.bin
+delete: s3://omicron/small_files/small-d4p66ac82xzg.bin
+delete: s3://omicron/small_files/small-dc4ma0x8g088.dat
+delete: s3://omicron/small_files/small-f1v71gark96s.bin
+delete: s3://omicron/small_files/small-f2p52u8gz0b3.bin
+delete: s3://omicron/small_files/small-fdwcnvu0oxzb.bin
+delete: s3://omicron/small_files/small-feua6lgn9z2x.bin
+delete: s3://omicron/small_files/small-fkp9fp8lr7h7.bin
+delete: s3://omicron/small_files/small-fzm7ofbq66i8.bin
+delete: s3://omicron/small_files/small-gsudjm7wtl33.bin
+delete: s3://omicron/small_files/small-hewk7lks2fa8.bin
+delete: s3://omicron/small_files/small-hrnrk8x5llci.bin
+delete: s3://omicron/small_files/small-hxz4t564r53k.bin
+delete: s3://omicron/small_files/small-7h6vm885y1rg.bin
+delete: s3://omicron/small_files/small-iw8u3qpkai01.dat
+delete: s3://omicron/small_files/small-j23h4agfg9au.bin
+delete: s3://omicron/small_files/small-jrmnrdty9rw8.bin
+delete: s3://omicron/small_files/small-k2md4gjl2jjo.dat
+delete: s3://omicron/small_files/small-k4p20pj51ij5.dat
+delete: s3://omicron/small_files/small-1woqs9p2w1yn.bin
+delete: s3://omicron/small_files/small-ljj5ava7x98r.dat
+delete: s3://omicron/small_files/small-lhh6e6jzn1yh.bin
+delete: s3://omicron/small_files/small-m02hx3etqmlo.dat
+delete: s3://omicron/small_files/small-kagal7qgmxnv.bin
+delete: s3://omicron/small_files/small-msyvsk85o6kw.bin
+delete: s3://omicron/small_files/small-mxiydkq70eqv.dat
+delete: s3://omicron/small_files/small-mz3l0yiirm5y.bin
+delete: s3://omicron/small_files/small-n7vnif2k7mrp.bin
+delete: s3://omicron/small_files/small-no4fo8sjaidw.bin
+delete: s3://omicron/small_files/small-ncqrqbykpqdb.dat
+delete: s3://omicron/small_files/small-o5tbryuk2y5e.bin
+delete: s3://omicron/small_files/small-1zupvflosjzc.bin
+delete: s3://omicron/small_files/small-69uuuokfh7z6.bin
+delete: s3://omicron/small_files/small-od0oim365w9y.dat
+delete: s3://omicron/small_files/small-oqi989yb9av0.bin
+delete: s3://omicron/small_files/small-p1n9bk0r6jav.bin
+delete: s3://omicron/small_files/small-p5bd59iyzj1g.dat
+delete: s3://omicron/small_files/small-o6gegh654iqz.bin
+delete: s3://omicron/small_files/small-ps8dpyklq7lj.dat
+delete: s3://omicron/small_files/small-psing0yg6087.dat
+delete: s3://omicron/small_files/small-q0z7oxwhbac4.bin
+delete: s3://omicron/small_files/small-pvr9uhqxj5uw.dat
+delete: s3://omicron/small_files/small-qhwp6dovs9p3.dat
+delete: s3://omicron/small_files/small-qjogqrar1jfa.dat
+delete: s3://omicron/small_files/small-rdrtdnvvuglh.bin
+delete: s3://omicron/small_files/small-bifrhsiseby8.bin
+delete: s3://omicron/small_files/small-s2hif4lpmknj.bin
+delete: s3://omicron/small_files/small-ray0itpq664w.bin
+delete: s3://omicron/small_files/small-s3l0ewfi259e.bin
+delete: s3://omicron/sma
+… [clipped, 6719 chars total]</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>18</td><td>ssh</td><td>cleanup /bryck source<br><code>rm -rf /bryck/cloudcp_fallback/small_files</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>19</td><td>ssh</td><td>cleanup batch-meta transfer dir<br><code>rm -rf /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>20</td><td>ssh</td><td>cleanup transfer log dir<br><code>rm -rf /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_113</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr></tbody></table></details></section><section id="CFW-U-04" class="case"><h3>CFW-U-04 <span class="badge" style="background:#82071e">ERROR</span></h3><p class="desc">Fallback worker drains a staged retry .lst for the &#x27;medium&#x27; dataset — all records uploaded via boto3 (FALLBACK_OK) and the batch is completed.</p><p class="meta">transfer_id=None · files=None · by_status=None · ok=None · failed=None · batch_completed=None · lst_retired=None · s3_objects=None</p><ul class=reasons><li>RuntimeError: remote command failed (rc=1): /home/bryck/rperiyas/datagen --spec /tmp/cc_component_specs/04_medium_files.yaml
+Spec error: yaml-cpp: error at line 25, column 1: bad conversion</li></ul><details open><summary>Steps &amp; commands (7)</summary><table class="steps"><thead><tr><th>#</th><th>kind</th><th>step / command</th><th>result</th></tr></thead><tbody><tr><td>1</td><td>local</td><td>case<br><div class=detail>CFW-U-04 [WORKER] mechanism=worker dataset=medium type=upload fault=- expect=ok</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>2</td><td>local</td><td>description<br><div class=detail>Fallback worker drains a staged retry .lst for the &#x27;medium&#x27; dataset — all records uploaded via boto3 (FALLBACK_OK) and the batch is completed.</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>3</td><td>ssh</td><td>preflight bucket<br><code>aws s3 ls s3://omicron --endpoint-url https://10.10.10.103:9000 &gt;/dev/null 2&gt;&amp;1 &amp;&amp; echo OK || echo UNREACHABLE</code><div class=detail>rc=0</div><pre class="io">OK</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>4</td><td>ssh</td><td>prep remote spec dir<br><code>mkdir -p /tmp/cc_component_specs</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>5</td><td>ssh</td><td>upload spec<br><code>sftp put /home/bryck/fallback/cloudcp-phase-wise-testing/CloudCpFallbackTesting/spec_files/04_medium_files.yaml -&gt; /tmp/cc_component_specs/04_medium_files.yaml</code><div class=detail>uploaded</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>6</td><td>ssh</td><td>datagen<br><code>/home/bryck/rperiyas/datagen --spec /tmp/cc_component_specs/04_medium_files.yaml</code><div class=detail>rc=1</div><pre class="io"><br>[stderr] Spec error: yaml-cpp: error at line 25, column 1: bad conversion</pre></td><td style="color:#cf222e;font-weight:700">&#10007; rc=1</td></tr><tr><td>7</td><td>local</td><td>exception<br><div class=detail>remote command failed (rc=1): /home/bryck/rperiyas/datagen --spec /tmp/cc_component_specs/04_medium_files.yaml
+Spec error: yaml-cpp: error at line 25, column 1: bad conversion</div></td><td style="color:#cf222e;font-weight:700">&#10007; </td></tr></tbody></table></details></section><section id="CFW-U-10" class="case"><h3>CFW-U-10 <span class="badge" style="background:#1a7f37">PASS</span></h3><p class="desc">Fallback worker drains a staged retry .lst for the &#x27;special&#x27; dataset — all records uploaded via boto3 (FALLBACK_OK) and the batch is completed.</p><p class="meta">transfer_id=113 · files=120 · by_status={&#x27;FALLBACK_OK&#x27;: 120} · ok=None · failed=None · batch_completed=True · lst_retired=True · s3_objects=120</p><ul class=reasons><li>drained 120 file(s) via fallback; batch completed</li></ul><details open><summary>Steps &amp; commands (20)</summary><table class="steps"><thead><tr><th>#</th><th>kind</th><th>step / command</th><th>result</th></tr></thead><tbody><tr><td>1</td><td>local</td><td>case<br><div class=detail>CFW-U-10 [WORKER] mechanism=worker dataset=special type=upload fault=- expect=ok</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>2</td><td>local</td><td>description<br><div class=detail>Fallback worker drains a staged retry .lst for the &#x27;special&#x27; dataset — all records uploaded via boto3 (FALLBACK_OK) and the batch is completed.</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>3</td><td>ssh</td><td>preflight bucket<br><code>aws s3 ls s3://omicron --endpoint-url https://10.10.10.103:9000 &gt;/dev/null 2&gt;&amp;1 &amp;&amp; echo OK || echo UNREACHABLE</code><div class=detail>rc=0</div><pre class="io">OK</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>4</td><td>ssh</td><td>prep remote spec dir<br><code>mkdir -p /tmp/cc_component_specs</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>5</td><td>ssh</td><td>upload spec<br><code>sftp put /home/bryck/fallback/cloudcp-phase-wise-testing/CloudCpFallbackTesting/spec_files/10_special_char_names.yaml -&gt; /tmp/cc_component_specs/10_special_char_names.yaml</code><div class=detail>uploaded</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>6</td><td>ssh</td><td>datagen<br><code>/home/bryck/rperiyas/datagen --spec /tmp/cc_component_specs/10_special_char_names.yaml</code><div class=detail>rc=0</div><pre class="io">Planned 120 files; mode=flat, threads=4
+[Progress] 100 / 120 files | 11.9 MB | 342.707 files/s | 40.6 MB/s
+
+[Done] 120 files | 14.8 MB | 364.649 files/s | 44.9 MB/s | elapsed 0.329084s</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>7</td><td>ssh</td><td>count source files<br><code>find /bryck/cloudcp_fallback/special_char_names -type f 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">120</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>8</td><td>ssh</td><td>alloc transfer id<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py alloc-id --batchmeta /opt/bryck/bryckapi/downloads/bcloud_batchmeta</code><div class=detail>rc=0</div><pre class="io">{&quot;transfer_id&quot;: 113}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>9</td><td>ssh</td><td>stage batch<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py stage-batch --src /bryck/cloudcp_fallback/special_char_names --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113 --tier tiny --name batch_000000.txt</code><div class=detail>rc=0</div><pre class="io">{&quot;batch_file&quot;: &quot;/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/batches/inprogress/tiny/batch_000000.txt&quot;, &quot;count&quot;: 120}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>10</td><td>ssh</td><td>make retry .lst<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py make-lst --batch /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/batches/inprogress/tiny/batch_000000.txt --transfer-id 113 --bucket omicron --prefix special_char_names --fs-prefix /bryck/cloudcp_fallback/special_char_names</code><div class=detail>rc=0</div><pre class="io">{&quot;lst_path&quot;: &quot;/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_113/cloudcp_retry_113_batch_000000.txt.lst&quot;, &quot;count&quot;: 120}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>11</td><td>ssh</td><td>write done marker<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py done-marker --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113</code><div class=detail>rc=0</div><pre class="io">{&quot;marker&quot;: &quot;/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/_fallback_done&quot;}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>12</td><td>ssh</td><td>run fallback worker<br><code>/opt/bryck/.venv/bryck/bin/python3 -m bryckcloud.lib.cloud.fallback_worker --transfer-id 113 --transfer-type upload --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113 --pool-size 16</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>13</td><td>ssh</td><td>verify report<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py verify --transfer-id 113</code><div class=detail>rc=0</div><pre class="io">{&quot;total_rows&quot;: 120, &quot;by_status&quot;: {&quot;FALLBACK_OK&quot;: 120}}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>14</td><td>ssh</td><td>batch state<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py batch-state --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113 --name batch_000000.txt</code><div class=detail>rc=0</div><pre class="io">{&quot;counts&quot;: {&quot;pending&quot;: 0, &quot;inprogress&quot;: 0, &quot;completed&quot;: 1}, &quot;completed&quot;: true}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>15</td><td>ssh</td><td>check .lst.done<br><code>ls /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_113/cloudcp_retry_113_batch_000000.txt.lst.done &gt;/dev/null 2&gt;&amp;1 &amp;&amp; echo YES || echo NO</code><div class=detail>rc=0</div><pre class="io">YES</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>16</td><td>ssh</td><td>count s3 objects<br><code>aws s3 ls --recursive s3://omicron/special_char_names --endpoint-url https://10.10.10.103:9000 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">120</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>17</td><td>ssh</td><td>cleanup bucket prefix<br><code>aws s3 rm --recursive s3://omicron/special_char_names --endpoint-url https://10.10.10.103:9000</code><div class=detail>rc=0</div><pre class="io">delete: s3://omicron/special_char_names/ IHwas45c+-)+p.txt
+delete: s3://omicron/special_char_names/2UDfJLJdYwFJhc.txt
+delete: s3://omicron/special_char_names/0S8d5)1[HMqBn4.dat
+delete: s3://omicron/special_char_names/-bS4ypq$j$t1D6.dat
+delete: s3://omicron/special_char_names/58AMP3H,Q2VJa0.txt
+delete: s3://omicron/special_char_names/0$56z-Bbaj5z9#.txt
+delete: s3://omicron/special_char_names/6F&amp;4S@lZVn---0.dat
+delete: s3://omicron/special_char_names/4DKTbqFw=7nhJq.txt
+delete: s3://omicron/special_char_names/203a,jiVcOjmRs.txt
+delete: s3://omicron/special_char_names/6ulbFN=hHZvyI!.dat
+delete: s3://omicron/special_char_names/6iZjnrg[H#$bf!.txt
+delete: s3://omicron/special_char_names/7X2o#8c)R5DrEa.txt
+delete: s3://omicron/special_char_names/6oxbnay@IoBYDT.dat
+delete: s3://omicron/special_char_names/7CwGi8w4R(NXAN.dat
+delete: s3://omicron/special_char_names/!jDfp,zZqY2)P].txt
+delete: s3://omicron/special_char_names/5q EgXE(xOCH8v.dat
+delete: s3://omicron/special_char_names/7qX jPJzyF&amp;  Z.dat
+delete: s3://omicron/special_char_names/7qXlPNBfiaX2uA.dat
+delete: s3://omicron/special_char_names/9GWAB8NVvI9mex.dat
+delete: s3://omicron/special_char_names/9q-YN0X1)x#fJ=.txt
+delete: s3://omicron/special_char_names/$sFg3Fsz(#&amp;V-0.dat
+delete: s3://omicron/special_char_names/8jcM]iBw#Vfl03.txt
+delete: s3://omicron/special_char_names/!lW2K6U5xFv90B.txt
+delete: s3://omicron/special_char_names/@a[Sz[[WnRVeG-.dat
+delete: s3://omicron/special_char_names/BKw+Y[xzgrsV+R.txt
+delete: s3://omicron/special_char_names/9KDHqKDsbkbfUU.dat
+delete: s3://omicron/special_char_names/B0R-TlzDipbhV].dat
+delete: s3://omicron/special_char_names/F]9S=n23d 3U9w.dat
+delete: s3://omicron/special_char_names/3jhIsR81g545Da.txt
+delete: s3://omicron/special_char_names/EB813W6cmVF&amp;Oc.dat
+delete: s3://omicron/special_char_names/H[dh[-rZ1u5m0+.txt
+delete: s3://omicron/special_char_names/FX2Sf Z1cOrkoF.txt
+delete: s3://omicron/special_char_names/FSK,SqIXu&amp;RVx(.txt
+delete: s3://omicron/special_char_names/IUcrmKpMsNicZ+.txt
+delete: s3://omicron/special_char_names/DmcJ$#q+(ckZ9r.dat
+delete: s3://omicron/special_char_names/L@2kDyAuzDM7sI.txt
+delete: s3://omicron/special_char_names/Lz]Z=mTc9aXR(I.txt
+delete: s3://omicron/special_char_names/H73Gu]5st&amp;LaZ4.txt
+delete: s3://omicron/special_char_names/KoH6C,cw4L$tbS.dat
+delete: s3://omicron/special_char_names/)Aa4X=n3+!N9x4.dat
+delete: s3://omicron/special_char_names/N]b+e,$tc=HDIG.dat
+delete: s3://omicron/special_char_names/OgNoabJuDnJKbK.txt
+delete: s3://omicron/special_char_names/#AKH@p$Tz=!]Z5.txt
+delete: s3://omicron/special_char_names/$82Ztg4$7Iz)yN.txt
+delete: s3://omicron/special_char_names/!tzDlG7XCK@0V0.txt
+delete: s3://omicron/special_char_names/TIU2,sVYhczWz).txt
+delete: s3://omicron/special_char_names/RtbTG0hzu8(p(b.dat
+delete: s3://omicron/special_char_names/LZQw7Z[k)=-U7m.dat
+delete: s3://omicron/special_char_names/P0,LV=76XIlcBD.dat
+delete: s3://omicron/special_char_names/SNiv]cYL86Ll!e.txt
+delete: s3://omicron/special_char_names/$n9iv7zh)nty7t.dat
+delete: s3://omicron/special_char_names/V 6csMYHLXy(2$.dat
+delete: s3://omicron/special_char_names/UG#iESN=G l2A#.dat
+delete: s3://omicron/special_char_names/TXBGO4fL!Mb44a.txt
+delete: s3://omicron/special_char_names/WO9a(SajfciapK.txt
+delete: s3://omicron/special_char_names/V0XevOyb(InMRi.dat
+delete: s3://omicron/special_char_names/Xi3b9@LH7KTCee.dat
+delete: s3://omicron/special_char_names/YVKhycO A =W8g.dat
+delete: s3://omicron/special_char_names/V50BLiJPhDTTRo.dat
+delete: s3://omicron/special_char_names/+yK#p#21)D(-Sd.txt
+delete: s3://omicron/special_char_names/Ye1V4Rffn7Lmm8.txt
+delete: s3://omicron/special_char_names/ODxl]Qriqvx3[d.txt
+delete: s3://omicron/special_char_names/YBTP2 + S(sb5H.txt
+delete: s3://omicron/special_char_names/YSMw+&amp;D#wV51RF.dat
+delete: s3://omicron/special_char_names/TmyFOt1g!TMKRq.dat
+delete: s3://omicron/special_char_names/Y[k6(fxwtKBBKh.txt
+delete: s3://omicron/special_char_names/Wpdag(5VEJO-G9.dat
+delete: s3://omicron/special_char_names/Zp[ZYtq
+… [clipped, 7079 chars total]</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>18</td><td>ssh</td><td>cleanup /bryck source<br><code>rm -rf /bryck/cloudcp_fallback/special_char_names</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>19</td><td>ssh</td><td>cleanup batch-meta transfer dir<br><code>rm -rf /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>20</td><td>ssh</td><td>cleanup transfer log dir<br><code>rm -rf /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_113</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr></tbody></table></details></section><section id="CMP-U-02" class="case"><h3>CMP-U-02 <span class="badge" style="background:#1a7f37">PASS</span></h3><p class="desc">retry_whole_batch() uploads the entire staged batch for the &#x27;tiny&#x27; dataset via the boto3 ProcessPool — ok==count, failed==0, all rows MP_OK.</p><p class="meta">transfer_id=113 · files=5400 · by_status={&#x27;MP_OK&#x27;: 5400} · ok=5400 · failed=0 · batch_completed=None · lst_retired=None · s3_objects=5400</p><ul class=reasons><li>retry_whole_batch uploaded 5400 file(s) (MP_OK)</li></ul><details open><summary>Steps &amp; commands (16)</summary><table class="steps"><thead><tr><th>#</th><th>kind</th><th>step / command</th><th>result</th></tr></thead><tbody><tr><td>1</td><td>local</td><td>case<br><div class=detail>CMP-U-02 [MP] mechanism=mp dataset=tiny type=upload fault=- expect=ok</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>2</td><td>local</td><td>description<br><div class=detail>retry_whole_batch() uploads the entire staged batch for the &#x27;tiny&#x27; dataset via the boto3 ProcessPool — ok==count, failed==0, all rows MP_OK.</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>3</td><td>ssh</td><td>preflight bucket<br><code>aws s3 ls s3://omicron --endpoint-url https://10.10.10.103:9000 &gt;/dev/null 2&gt;&amp;1 &amp;&amp; echo OK || echo UNREACHABLE</code><div class=detail>rc=0</div><pre class="io">OK</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>4</td><td>ssh</td><td>prep remote spec dir<br><code>mkdir -p /tmp/cc_component_specs</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>5</td><td>ssh</td><td>upload spec<br><code>sftp put /home/bryck/fallback/cloudcp-phase-wise-testing/CloudCpFallbackTesting/spec_files/02_tiny_files.yaml -&gt; /tmp/cc_component_specs/02_tiny_files.yaml</code><div class=detail>uploaded</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>6</td><td>ssh</td><td>datagen<br><code>/home/bryck/rperiyas/datagen --spec /tmp/cc_component_specs/02_tiny_files.yaml</code><div class=detail>rc=0</div><pre class="io">Planned 5400 files; mode=tree, threads=8
+[Progress] 100 / 5400 files | 3.9 MB | 547.294 files/s | 21.3 MB/s
+[Progress] 200 / 5400 files | 8.2 MB | 597.831 files/s | 24.6 MB/s
+[Progress] 300 / 5400 files | 12.9 MB | 613.173 files/s | 26.5 MB/s
+[Progress] 400 / 5400 files | 17.7 MB | 619.523 files/s | 27.5 MB/s
+[Progress] 500 / 5400 files | 23.4 MB | 627.516 files/s | 29.4 MB/s
+[Progress] 600 / 5400 files | 27.7 MB | 629.705 files/s | 29.1 MB/s
+[Progress] 700 / 5400 files | 32.1 MB | 633.116 files/s | 28.9 MB/s
+[Progress] 800 / 5400 files | 34.9 MB | 634.98 files/s | 27.7 MB/s
+[Progress] 900 / 5400 files | 40.7 MB | 636.727 files/s | 28.7 MB/s
+[Progress] 1000 / 5400 files | 43.8 MB | 638.841 files/s | 28.0 MB/s
+[Progress] 1100 / 5400 files | 48.7 MB | 639.897 files/s | 28.3 MB/s
+[Progress] 1200 / 5400 files | 54.4 MB | 640.987 files/s | 29.0 MB/s
+[Progress] 1300 / 5400 files | 59.0 MB | 641.805 files/s | 29.1 MB/s
+[Progress] 1400 / 5400 files | 64.6 MB | 642.439 files/s | 29.7 MB/s
+[Progress] 1500 / 5400 files | 68.9 MB | 643.268 files/s | 29.6 MB/s
+[Progress] 1600 / 5400 files | 73.3 MB | 643.955 files/s | 29.5 MB/s
+[Progress] 1700 / 5400 files | 77.7 MB | 644.298 files/s | 29.4 MB/s
+[Progress] 1800 / 5400 files | 81.3 MB | 644.601 files/s | 29.1 MB/s
+[Progress] 1801 / 5400 files | 81.3 MB | 644.959 files/s | 29.1 MB/s
+[Progress] 1901 / 5400 files | 86.0 MB | 644.437 files/s | 29.1 MB/s
+[Progress] 2001 / 5400 files | 90.6 MB | 645.09 files/s | 29.2 MB/s
+[Progress] 2101 / 5400 files | 95.1 MB | 645.188 files/s | 29.2 MB/s
+[Progress] 2201 / 5400 files | 100.0 MB | 645.397 files/s | 29.3 MB/s
+[Progress] 2301 / 5400 files | 103.3 MB | 645.766 files/s | 29.0 MB/s
+[Progress] 2401 / 5400 files | 107.6 MB | 645.678 files/s | 28.9 MB/s
+[Progress] 2501 / 5400 files | 112.6 MB | 646.39 files/s | 29.1 MB/s
+[Progress] 2601 / 5400 files | 116.8 MB | 645.842 files/s | 29.0 MB/s
+[Progress] 2701 / 5400 files | 121.7 MB | 646.744 files/s | 29.1 MB/s
+[Progress] 2801 / 5400 files | 126.0 MB | 646.344 files/s | 29.1 MB/s
+[Progress] 2901 / 5400 files | 130.1 MB | 647.205 files/s | 29.0 MB/s
+[Progress] 3001 / 5400 files | 134.8 MB | 647.03 files/s | 29.1 MB/s
+[Progress] 3101 / 5400 files | 139.6 MB | 646.884 files/s | 29.1 MB/s
+[Progress] 3201 / 5400 files | 143.8 MB | 647.664 files/s | 29.1 MB/s
+[Progress] 3301 / 5400 files | 148.4 MB | 647.29 files/s | 29.1 MB/s
+[Progress] 3401 / 5400 files | 152.2 MB | 647.888 files/s | 29.0 MB/s
+[Progress] 3501 / 5400 files | 156.2 MB | 647.672 files/s | 28.9 MB/s
+[Progress] 3601 / 5400 files | 161.1 MB | 647.873 files/s | 29.0 MB/s
+[Progress] 3701 / 5400 files | 165.7 MB | 647.817 files/s | 29.0 MB/s
+[Progress] 3801 / 5400 files | 171.1 MB | 648.086 files/s | 29.2 MB/s
+[Progress] 3901 / 5400 files | 174.6 MB | 648.104 files/s | 29.0 MB/s
+[Progress] 4001 / 5400 files | 179.5 MB | 646.363 files/s | 29.0 MB/s
+[Progress] 4101 / 5400 files | 185.1 MB | 647.047 files/s | 29.2 MB/s
+[Progress] 4201 / 5400 files | 189.2 MB | 647.104 files/s | 29.2 MB/s
+[Progress] 4301 / 5400 files | 193.2 MB | 647.406 files/s | 29.1 MB/s
+[Progress] 4401 / 5400 files | 197.2 MB | 647.289 files/s | 29.0 MB/s
+[Progress] 4501 / 5400 files | 202.4 MB | 647.29 files/s | 29.1 MB/s
+[Progress] 4601 / 5400 files | 206.6 MB | 647.342 files/s | 29.1 MB/s
+[Progress] 4701 / 5400 files | 211.2 MB | 647.489 files/s | 29.1 MB/s
+[Progress] 4801 / 5400 files | 216.3 MB | 647.63 files/s | 29.2 MB/s
+[Progress] 4901 / 5400 files | 221.1 MB | 647.537 files/s | 29.2 MB/s
+[Progress] 5001 / 5400 files | 226.6 MB | 647.861 files/s | 29.4 MB/s
+[Progress] 5101 / 5400 files | 230.9 MB | 647.504 files/s | 29.3 MB/s
+[Progress] 5201 / 5400 files | 234.5 MB | 647.859 files/s | 29.2 MB/s
+[Progress] 5301 / 5400 files | 239.4 MB | 647.339 files/s | 29.2 MB/s
+
+[Done] 5400 files | 243.4 MB | 647.256 files/s | 29.2 MB/s | elapsed 8.34291s</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>7</td><td>ssh</td><td>count source files<br><code>find /bryck/cloudcp_fallback/tiny_files -type f 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">5400</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>8</td><td>ssh</td><td>alloc transfer id<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py alloc-id --batchmeta /opt/bryck/bryckapi/downloads/bcloud_batchmeta</code><div class=detail>rc=0</div><pre class="io">{&quot;transfer_id&quot;: 113}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>9</td><td>ssh</td><td>stage batch<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py stage-batch --src /bryck/cloudcp_fallback/tiny_files --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113 --tier tiny --name batch_000000.txt</code><div class=detail>rc=0</div><pre class="io">{&quot;batch_file&quot;: &quot;/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/batches/inprogress/tiny/batch_000000.txt&quot;, &quot;count&quot;: 5400}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>10</td><td>ssh</td><td>run retry_whole_batch<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py run-mp --transfer-id 113 --batch /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/batches/inprogress/tiny/batch_000000.txt --bucket omicron --prefix tiny_files --fs-prefix /bryck/cloudcp_fallback/tiny_files --endpoint https://10.10.10.103:9000 --region us-west-1 --transfer-type upload</code><div class=detail>rc=0</div><pre class="io">{&quot;ok&quot;: 5400, &quot;failed&quot;: 0, &quot;ok_bytes&quot;: 255242664}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>11</td><td>ssh</td><td>verify report<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py verify --transfer-id 113</code><div class=detail>rc=0</div><pre class="io">{&quot;total_rows&quot;: 5400, &quot;by_status&quot;: {&quot;MP_OK&quot;: 5400}}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>12</td><td>ssh</td><td>count s3 objects<br><code>aws s3 ls --recursive s3://omicron/tiny_files --endpoint-url https://10.10.10.103:9000 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">5400</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>13</td><td>ssh</td><td>cleanup bucket prefix<br><code>aws s3 rm --recursive s3://omicron/tiny_files --endpoint-url https://10.10.10.103:9000</code><div class=detail>rc=0</div><pre class="io">delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-B1cg19oPRqUk.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-MCaQRKXcU0R1.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-ddfsWxE6sRgp.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-rXZmZaljl9bJ.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-sbkat5BlwOxK.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-5m3Lv761QUDl.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-xeDECcPszDgc.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-1ffZ9sOVt76L.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-DnMA4gyKG8AY.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-IL0HYDxBnDyo.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-NHXaZKahecga.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-pUpnJqbKAQgu.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-9tWOw14NPErP.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-HzhPmph4YGsP.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-39JKJyrkn5S3.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-AVw8csUE4pbK.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-RLuPGNkYalNV.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-Q7UXvFHTB8IS.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-7kLcYaOJZCSL.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-b7906mp0B0Zn.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-UxDLbnzs7Wlg.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-dK8mazpW3lYh.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-jSv4ykbD34n6.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-ZciQYo0mvTon.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-TwHtGmswUpfB.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-nhMs5usFWkb6.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-rWug0lquWqpz.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-aWBnC8OoOEWl.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-uqp1bLa6O86E.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-xDCduFbzxcbw.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-079MWjjvB09J.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-mDwDs7P1tufo.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-XSNBnehaj3Rg.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-fNzP019moO0Q.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-yy0jz8FqbofM.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-pM6JYBBsaoUU.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-GWmoj0tzwryr.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-fVUUyajFafq0.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-OgTbX5EBWDLx.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-y4kikm320nBS.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-2k1CPFsdLVl7.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-MQzwXRSNWbkM.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-LOwCTifCpJXR.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-PdRMUJeelWEk.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-GYtTiMinX28h.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-6pvxjAWOxE5Q.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-5huY3M80blvE.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-QyNQOdrHta0B.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-kgNfxKJTzORc.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-c8ByCAHeFmab.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-w6LxniXs5vDB.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-CSS5yONmcaeZ.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-eEBsgjYQjI7B.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-jrz9jA7uD4m4.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-NGrSC2gwChCI.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-CqylCDaDWrjb.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-ge0vaUO7lT66.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3
+… [clipped, 374149 chars total]</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>14</td><td>ssh</td><td>cleanup /bryck source<br><code>rm -rf /bryck/cloudcp_fallback/tiny_files</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>15</td><td>ssh</td><td>cleanup batch-meta transfer dir<br><code>rm -rf /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>16</td><td>ssh</td><td>cleanup transfer log dir<br><code>rm -rf /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_113</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr></tbody></table></details></section><section id="CMP-U-03" class="case"><h3>CMP-U-03 <span class="badge" style="background:#1a7f37">PASS</span></h3><p class="desc">retry_whole_batch() uploads the entire staged batch for the &#x27;small&#x27; dataset via the boto3 ProcessPool — ok==count, failed==0, all rows MP_OK.</p><p class="meta">transfer_id=113 · files=120 · by_status={&#x27;MP_OK&#x27;: 120} · ok=120 · failed=0 · batch_completed=None · lst_retired=None · s3_objects=120</p><ul class=reasons><li>retry_whole_batch uploaded 120 file(s) (MP_OK)</li></ul><details open><summary>Steps &amp; commands (16)</summary><table class="steps"><thead><tr><th>#</th><th>kind</th><th>step / command</th><th>result</th></tr></thead><tbody><tr><td>1</td><td>local</td><td>case<br><div class=detail>CMP-U-03 [MP] mechanism=mp dataset=small type=upload fault=- expect=ok</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>2</td><td>local</td><td>description<br><div class=detail>retry_whole_batch() uploads the entire staged batch for the &#x27;small&#x27; dataset via the boto3 ProcessPool — ok==count, failed==0, all rows MP_OK.</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>3</td><td>ssh</td><td>preflight bucket<br><code>aws s3 ls s3://omicron --endpoint-url https://10.10.10.103:9000 &gt;/dev/null 2&gt;&amp;1 &amp;&amp; echo OK || echo UNREACHABLE</code><div class=detail>rc=0</div><pre class="io">OK</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>4</td><td>ssh</td><td>prep remote spec dir<br><code>mkdir -p /tmp/cc_component_specs</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>5</td><td>ssh</td><td>upload spec<br><code>sftp put /home/bryck/fallback/cloudcp-phase-wise-testing/CloudCpFallbackTesting/spec_files/03_small_files.yaml -&gt; /tmp/cc_component_specs/03_small_files.yaml</code><div class=detail>uploaded</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>6</td><td>ssh</td><td>datagen<br><code>/home/bryck/rperiyas/datagen --spec /tmp/cc_component_specs/03_small_files.yaml</code><div class=detail>rc=0</div><pre class="io">Planned 120 files; mode=flat, threads=8
+[Progress] 100 / 120 files | 798.0 MB | 382.11 files/s | 3.0 GB/s
+
+[Done] 120 files | 1003.1 MB | 381.651 files/s | 3.1 GB/s | elapsed 0.314424s</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>7</td><td>ssh</td><td>count source files<br><code>find /bryck/cloudcp_fallback/small_files -type f 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">120</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>8</td><td>ssh</td><td>alloc transfer id<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py alloc-id --batchmeta /opt/bryck/bryckapi/downloads/bcloud_batchmeta</code><div class=detail>rc=0</div><pre class="io">{&quot;transfer_id&quot;: 113}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>9</td><td>ssh</td><td>stage batch<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py stage-batch --src /bryck/cloudcp_fallback/small_files --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113 --tier small --name batch_000000.txt</code><div class=detail>rc=0</div><pre class="io">{&quot;batch_file&quot;: &quot;/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/batches/inprogress/small/batch_000000.txt&quot;, &quot;count&quot;: 120}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>10</td><td>ssh</td><td>run retry_whole_batch<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py run-mp --transfer-id 113 --batch /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/batches/inprogress/small/batch_000000.txt --bucket omicron --prefix small_files --fs-prefix /bryck/cloudcp_fallback/small_files --endpoint https://10.10.10.103:9000 --region us-west-1 --transfer-type upload</code><div class=detail>rc=0</div><pre class="io">{&quot;ok&quot;: 120, &quot;failed&quot;: 0, &quot;ok_bytes&quot;: 1051792265}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>11</td><td>ssh</td><td>verify report<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py verify --transfer-id 113</code><div class=detail>rc=0</div><pre class="io">{&quot;total_rows&quot;: 120, &quot;by_status&quot;: {&quot;MP_OK&quot;: 120}}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>12</td><td>ssh</td><td>count s3 objects<br><code>aws s3 ls --recursive s3://omicron/small_files --endpoint-url https://10.10.10.103:9000 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">120</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>13</td><td>ssh</td><td>cleanup bucket prefix<br><code>aws s3 rm --recursive s3://omicron/small_files --endpoint-url https://10.10.10.103:9000</code><div class=detail>rc=0</div><pre class="io">delete: s3://omicron/small_files/small-0uc3yzbtiego.dat
+delete: s3://omicron/small_files/small-7fwzr1v1lpk2.dat
+delete: s3://omicron/small_files/small-489w1ffmq49u.bin
+delete: s3://omicron/small_files/small-0v3ks5a8c96j.bin
+delete: s3://omicron/small_files/small-7jmnfp2xnr7y.dat
+delete: s3://omicron/small_files/small-7el36w84agmr.bin
+delete: s3://omicron/small_files/small-7h6vm885y1rg.bin
+delete: s3://omicron/small_files/small-5yyjhx9m2wff.dat
+delete: s3://omicron/small_files/small-8s5ylqtqfdaq.dat
+delete: s3://omicron/small_files/small-7vsruiusdk5b.bin
+delete: s3://omicron/small_files/small-8fvb3axu4qzv.dat
+delete: s3://omicron/small_files/small-5cd39kx1l88v.dat
+delete: s3://omicron/small_files/small-b8948hj4q44h.dat
+delete: s3://omicron/small_files/small-9l1xn56xxrky.bin
+delete: s3://omicron/small_files/small-9ctj99nscpoe.bin
+delete: s3://omicron/small_files/small-bifrhsiseby8.bin
+delete: s3://omicron/small_files/small-c101oafsacj4.bin
+delete: s3://omicron/small_files/small-bb65419mdil6.bin
+delete: s3://omicron/small_files/small-crpkdf3yfu8p.bin
+delete: s3://omicron/small_files/small-0nrvaiok82gd.dat
+delete: s3://omicron/small_files/small-cbdk2nr7kzdj.bin
+delete: s3://omicron/small_files/small-cv9haoi26g3e.bin
+delete: s3://omicron/small_files/small-167yrvp1xs99.bin
+delete: s3://omicron/small_files/small-d4p66ac82xzg.bin
+delete: s3://omicron/small_files/small-dc4ma0x8g088.dat
+delete: s3://omicron/small_files/small-1zupvflosjzc.bin
+delete: s3://omicron/small_files/small-cwoy459hix4y.dat
+delete: s3://omicron/small_files/small-csoafs3h9ysz.dat
+delete: s3://omicron/small_files/small-f1v71gark96s.bin
+delete: s3://omicron/small_files/small-feua6lgn9z2x.bin
+delete: s3://omicron/small_files/small-0yjc062qm4ls.bin
+delete: s3://omicron/small_files/small-fzm7ofbq66i8.bin
+delete: s3://omicron/small_files/small-gsudjm7wtl33.bin
+delete: s3://omicron/small_files/small-fkp9fp8lr7h7.bin
+delete: s3://omicron/small_files/small-fdwcnvu0oxzb.bin
+delete: s3://omicron/small_files/small-hewk7lks2fa8.bin
+delete: s3://omicron/small_files/small-f2p52u8gz0b3.bin
+delete: s3://omicron/small_files/small-hrnrk8x5llci.bin
+delete: s3://omicron/small_files/small-aeacwvypahhl.bin
+delete: s3://omicron/small_files/small-j0jhujavpydl.dat
+delete: s3://omicron/small_files/small-k2md4gjl2jjo.dat
+delete: s3://omicron/small_files/small-jrmnrdty9rw8.bin
+delete: s3://omicron/small_files/small-iw8u3qpkai01.dat
+delete: s3://omicron/small_files/small-j23h4agfg9au.bin
+delete: s3://omicron/small_files/small-533y8jyidvga.bin
+delete: s3://omicron/small_files/small-lhh6e6jzn1yh.bin
+delete: s3://omicron/small_files/small-mxiydkq70eqv.dat
+delete: s3://omicron/small_files/small-kagal7qgmxnv.bin
+delete: s3://omicron/small_files/small-21xqfbmnxh87.bin
+delete: s3://omicron/small_files/small-b8qoqptcshaa.dat
+delete: s3://omicron/small_files/small-ncqrqbykpqdb.dat
+delete: s3://omicron/small_files/small-0mtlshlm0jdq.dat
+delete: s3://omicron/small_files/small-m02hx3etqmlo.dat
+delete: s3://omicron/small_files/small-k4p20pj51ij5.dat
+delete: s3://omicron/small_files/small-o6gegh654iqz.bin
+delete: s3://omicron/small_files/small-od0oim365w9y.dat
+delete: s3://omicron/small_files/small-oqi989yb9av0.bin
+delete: s3://omicron/small_files/small-n7vnif2k7mrp.bin
+delete: s3://omicron/small_files/small-msyvsk85o6kw.bin
+delete: s3://omicron/small_files/small-nqqblsbonbbn.dat
+delete: s3://omicron/small_files/small-psing0yg6087.dat
+delete: s3://omicron/small_files/small-p5bd59iyzj1g.dat
+delete: s3://omicron/small_files/small-no4fo8sjaidw.bin
+delete: s3://omicron/small_files/small-o5tbryuk2y5e.bin
+delete: s3://omicron/small_files/small-ps8dpyklq7lj.dat
+delete: s3://omicron/small_files/small-69uuuokfh7z6.bin
+delete: s3://omicron/small_files/small-a2phq9xixr1g.dat
+delete: s3://omicron/small_files/small-66jeg5o35wrp.dat
+delete: s3://omicron/small_files/small-pvr9uhqxj5uw.dat
+delete: s3://omicron/small_files/small-rlqqily11o50.bin
+delete: s3://omicron/small_files/small-3bey3i4hm0ih.bin
+delete: s3://omicron/sma
+… [clipped, 6719 chars total]</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>14</td><td>ssh</td><td>cleanup /bryck source<br><code>rm -rf /bryck/cloudcp_fallback/small_files</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>15</td><td>ssh</td><td>cleanup batch-meta transfer dir<br><code>rm -rf /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>16</td><td>ssh</td><td>cleanup transfer log dir<br><code>rm -rf /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_113</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr></tbody></table></details></section><section id="CFW-N-01" class="case"><h3>CFW-N-01 <span class="badge" style="background:#1a7f37">PASS</span></h3><p class="desc">Fallback worker with the source files deleted after staging — records fail terminally, the batch stays inprogress and the .lst is not retired; no hang / crash.</p><p class="meta">transfer_id=113 · files=5400 · by_status={} · ok=None · failed=None · batch_completed=False · lst_retired=False · s3_objects=0</p><ul class=reasons><li>drained 0 file(s) via fallback; batch completed</li></ul><details open><summary>Steps &amp; commands (21)</summary><table class="steps"><thead><tr><th>#</th><th>kind</th><th>step / command</th><th>result</th></tr></thead><tbody><tr><td>1</td><td>local</td><td>case<br><div class=detail>CFW-N-01 [NEGATIVE] mechanism=worker dataset=tiny type=upload fault=missing expect=fail</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>2</td><td>local</td><td>description<br><div class=detail>Fallback worker with the source files deleted after staging — records fail terminally, the batch stays inprogress and the .lst is not retired; no hang / crash.</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>3</td><td>ssh</td><td>preflight bucket<br><code>aws s3 ls s3://omicron --endpoint-url https://10.10.10.103:9000 &gt;/dev/null 2&gt;&amp;1 &amp;&amp; echo OK || echo UNREACHABLE</code><div class=detail>rc=0</div><pre class="io">OK</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>4</td><td>ssh</td><td>prep remote spec dir<br><code>mkdir -p /tmp/cc_component_specs</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>5</td><td>ssh</td><td>upload spec<br><code>sftp put /home/bryck/fallback/cloudcp-phase-wise-testing/CloudCpFallbackTesting/spec_files/02_tiny_files.yaml -&gt; /tmp/cc_component_specs/02_tiny_files.yaml</code><div class=detail>uploaded</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>6</td><td>ssh</td><td>datagen<br><code>/home/bryck/rperiyas/datagen --spec /tmp/cc_component_specs/02_tiny_files.yaml</code><div class=detail>rc=0</div><pre class="io">Planned 5400 files; mode=tree, threads=8
+[Progress] 100 / 5400 files | 3.9 MB | 547.407 files/s | 21.6 MB/s
+[Progress] 200 / 5400 files | 8.2 MB | 603.205 files/s | 24.8 MB/s
+[Progress] 300 / 5400 files | 12.9 MB | 613.549 files/s | 26.5 MB/s
+[Progress] 400 / 5400 files | 17.7 MB | 625.038 files/s | 27.7 MB/s
+[Progress] 500 / 5400 files | 23.4 MB | 631.379 files/s | 29.6 MB/s
+[Progress] 600 / 5400 files | 27.7 MB | 632.427 files/s | 29.2 MB/s
+[Progress] 700 / 5400 files | 32.1 MB | 638.548 files/s | 29.3 MB/s
+[Progress] 800 / 5400 files | 34.9 MB | 639.06 files/s | 27.9 MB/s
+[Progress] 900 / 5400 files | 40.6 MB | 642.986 files/s | 29.0 MB/s
+[Progress] 1000 / 5400 files | 43.8 MB | 642.883 files/s | 28.2 MB/s
+[Progress] 1100 / 5400 files | 48.7 MB | 645.775 files/s | 28.6 MB/s
+[Progress] 1200 / 5400 files | 54.4 MB | 642.385 files/s | 29.1 MB/s
+[Progress] 1300 / 5400 files | 59.0 MB | 644.557 files/s | 29.2 MB/s
+[Progress] 1400 / 5400 files | 64.6 MB | 645.064 files/s | 29.8 MB/s
+[Progress] 1500 / 5400 files | 68.9 MB | 646.521 files/s | 29.7 MB/s
+[Progress] 1600 / 5400 files | 73.5 MB | 647.776 files/s | 29.8 MB/s
+[Progress] 1700 / 5400 files | 77.7 MB | 648.26 files/s | 29.6 MB/s
+[Progress] 1800 / 5400 files | 81.3 MB | 648.66 files/s | 29.3 MB/s
+[Progress] 1900 / 5400 files | 85.9 MB | 649.943 files/s | 29.4 MB/s
+[Progress] 2000 / 5400 files | 90.4 MB | 649.429 files/s | 29.3 MB/s
+[Progress] 2100 / 5400 files | 95.2 MB | 650.207 files/s | 29.5 MB/s
+[Progress] 2200 / 5400 files | 100.0 MB | 650.48 files/s | 29.6 MB/s
+[Progress] 2300 / 5400 files | 103.2 MB | 650.854 files/s | 29.2 MB/s
+[Progress] 2400 / 5400 files | 107.6 MB | 651.109 files/s | 29.2 MB/s
+[Progress] 2500 / 5400 files | 112.6 MB | 650.916 files/s | 29.3 MB/s
+[Progress] 2600 / 5400 files | 116.6 MB | 651.655 files/s | 29.2 MB/s
+[Progress] 2700 / 5400 files | 121.7 MB | 651.206 files/s | 29.3 MB/s
+[Progress] 2800 / 5400 files | 126.0 MB | 652.238 files/s | 29.4 MB/s
+[Progress] 2900 / 5400 files | 129.8 MB | 651.738 files/s | 29.2 MB/s
+[Progress] 3000 / 5400 files | 134.8 MB | 652.635 files/s | 29.3 MB/s
+[Progress] 3100 / 5400 files | 139.5 MB | 652.517 files/s | 29.4 MB/s
+[Progress] 3200 / 5400 files | 143.7 MB | 652.882 files/s | 29.3 MB/s
+[Progress] 3300 / 5400 files | 148.3 MB | 652.607 files/s | 29.3 MB/s
+[Progress] 3400 / 5400 files | 152.2 MB | 653.177 files/s | 29.2 MB/s
+[Progress] 3500 / 5400 files | 156.2 MB | 652.97 files/s | 29.1 MB/s
+[Progress] 3600 / 5400 files | 161.0 MB | 653.184 files/s | 29.2 MB/s
+[Progress] 3700 / 5400 files | 165.5 MB | 653.295 files/s | 29.2 MB/s
+[Progress] 3800 / 5400 files | 171.0 MB | 653.411 files/s | 29.4 MB/s
+[Progress] 3900 / 5400 files | 174.5 MB | 653.739 files/s | 29.3 MB/s
+[Progress] 4000 / 5400 files | 179.3 MB | 653.561 files/s | 29.3 MB/s
+[Progress] 4100 / 5400 files | 185.1 MB | 654.103 files/s | 29.5 MB/s
+[Progress] 4200 / 5400 files | 189.2 MB | 653.718 files/s | 29.5 MB/s
+[Progress] 4300 / 5400 files | 193.2 MB | 654.052 files/s | 29.4 MB/s
+[Progress] 4400 / 5400 files | 197.2 MB | 654.062 files/s | 29.3 MB/s
+[Progress] 4500 / 5400 files | 202.4 MB | 654.238 files/s | 29.4 MB/s
+[Progress] 4600 / 5400 files | 206.5 MB | 650.733 files/s | 29.2 MB/s
+[Progress] 4700 / 5400 files | 211.2 MB | 651.179 files/s | 29.3 MB/s
+[Progress] 4800 / 5400 files | 216.3 MB | 651.382 files/s | 29.4 MB/s
+[Progress] 4900 / 5400 files | 221.1 MB | 651.578 files/s | 29.4 MB/s
+[Progress] 5000 / 5400 files | 226.6 MB | 651.719 files/s | 29.5 MB/s
+[Progress] 5100 / 5400 files | 230.9 MB | 651.836 files/s | 29.5 MB/s
+[Progress] 5200 / 5400 files | 234.5 MB | 651.945 files/s | 29.4 MB/s
+[Progress] 5300 / 5400 files | 239.4 MB | 652.07 files/s | 29.4 MB/s
+[Progress] 5400 / 5400 files | 243.4 MB | 652.179 files/s | 29.4 MB/s
+
+[Done] 5400 files | 243.4 MB | 651.78 files/s | 29.4 MB/s | elapsed 8.28501s</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>7</td><td>ssh</td><td>count source files<br><code>find /bryck/cloudcp_fallback/tiny_files -type f 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">5400</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>8</td><td>ssh</td><td>alloc transfer id<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py alloc-id --batchmeta /opt/bryck/bryckapi/downloads/bcloud_batchmeta</code><div class=detail>rc=0</div><pre class="io">{&quot;transfer_id&quot;: 113}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>9</td><td>ssh</td><td>stage batch<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py stage-batch --src /bryck/cloudcp_fallback/tiny_files --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113 --tier tiny --name batch_000000.txt</code><div class=detail>rc=0</div><pre class="io">{&quot;batch_file&quot;: &quot;/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/batches/inprogress/tiny/batch_000000.txt&quot;, &quot;count&quot;: 5400}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>10</td><td>ssh</td><td>make retry .lst<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py make-lst --batch /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/batches/inprogress/tiny/batch_000000.txt --transfer-id 113 --bucket omicron --prefix tiny_files --fs-prefix /bryck/cloudcp_fallback/tiny_files</code><div class=detail>rc=0</div><pre class="io">{&quot;lst_path&quot;: &quot;/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_113/cloudcp_retry_113_batch_000000.txt.lst&quot;, &quot;count&quot;: 5400}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>11</td><td>ssh</td><td>inject fault: delete sources<br><code>find /bryck/cloudcp_fallback/tiny_files -type f -delete</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>12</td><td>ssh</td><td>write done marker<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py done-marker --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113</code><div class=detail>rc=0</div><pre class="io">{&quot;marker&quot;: &quot;/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/_fallback_done&quot;}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>13</td><td>ssh</td><td>run fallback worker<br><code>/opt/bryck/.venv/bryck/bin/python3 -m bryckcloud.lib.cloud.fallback_worker --transfer-id 113 --transfer-type upload --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113 --pool-size 16</code><div class=detail>rc=1</div></td><td style="color:#cf222e;font-weight:700">&#10007; rc=1</td></tr><tr><td>14</td><td>ssh</td><td>verify report<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py verify --transfer-id 113</code><div class=detail>rc=0</div><pre class="io">{&quot;total_rows&quot;: 0, &quot;by_status&quot;: {}}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>15</td><td>ssh</td><td>batch state<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py batch-state --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113 --name batch_000000.txt</code><div class=detail>rc=0</div><pre class="io">{&quot;counts&quot;: {&quot;pending&quot;: 0, &quot;inprogress&quot;: 1, &quot;completed&quot;: 0}, &quot;completed&quot;: false}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>16</td><td>ssh</td><td>check .lst.done<br><code>ls /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_113/cloudcp_retry_113_batch_000000.txt.lst.done &gt;/dev/null 2&gt;&amp;1 &amp;&amp; echo YES || echo NO</code><div class=detail>rc=0</div><pre class="io">NO</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>17</td><td>ssh</td><td>count s3 objects<br><code>aws s3 ls --recursive s3://omicron/tiny_files --endpoint-url https://10.10.10.103:9000 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">0</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>18</td><td>ssh</td><td>cleanup bucket prefix<br><code>aws s3 rm --recursive s3://omicron/tiny_files --endpoint-url https://10.10.10.103:9000</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>19</td><td>ssh</td><td>cleanup /bryck source<br><code>rm -rf /bryck/cloudcp_fallback/tiny_files</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>20</td><td>ssh</td><td>cleanup batch-meta transfer dir<br><code>rm -rf /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>21</td><td>ssh</td><td>cleanup transfer log dir<br><code>rm -rf /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_113</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr></tbody></table></details></section><section id="CMP-N-01" class="case"><h3>CMP-N-01 <span class="badge" style="background:#1a7f37">PASS</span></h3><p class="desc">retry_whole_batch() with transfer_type=download — downloads are not handled inline, so it returns (0, N, 0) with no crash.</p><p class="meta">transfer_id=113 · files=5400 · by_status={} · ok=0 · failed=5400 · batch_completed=None · lst_retired=None · s3_objects=0</p><ul class=reasons><li>download not handled: ok=0 failed=5400 (expected 0/5400)</li></ul><details open><summary>Steps &amp; commands (16)</summary><table class="steps"><thead><tr><th>#</th><th>kind</th><th>step / command</th><th>result</th></tr></thead><tbody><tr><td>1</td><td>local</td><td>case<br><div class=detail>CMP-N-01 [NEGATIVE] mechanism=mp dataset=tiny type=download fault=download expect=fail</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>2</td><td>local</td><td>description<br><div class=detail>retry_whole_batch() with transfer_type=download — downloads are not handled inline, so it returns (0, N, 0) with no crash.</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>3</td><td>ssh</td><td>preflight bucket<br><code>aws s3 ls s3://omicron --endpoint-url https://10.10.10.103:9000 &gt;/dev/null 2&gt;&amp;1 &amp;&amp; echo OK || echo UNREACHABLE</code><div class=detail>rc=0</div><pre class="io">OK</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>4</td><td>ssh</td><td>prep remote spec dir<br><code>mkdir -p /tmp/cc_component_specs</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>5</td><td>ssh</td><td>upload spec<br><code>sftp put /home/bryck/fallback/cloudcp-phase-wise-testing/CloudCpFallbackTesting/spec_files/02_tiny_files.yaml -&gt; /tmp/cc_component_specs/02_tiny_files.yaml</code><div class=detail>uploaded</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>6</td><td>ssh</td><td>datagen<br><code>/home/bryck/rperiyas/datagen --spec /tmp/cc_component_specs/02_tiny_files.yaml</code><div class=detail>rc=0</div><pre class="io">Planned 5400 files; mode=tree, threads=8
+[Progress] 100 / 5400 files | 3.9 MB | 553.755 files/s | 21.8 MB/s
+[Progress] 200 / 5400 files | 8.2 MB | 606.225 files/s | 24.9 MB/s
+[Progress] 300 / 5400 files | 12.9 MB | 618.148 files/s | 26.7 MB/s
+[Progress] 400 / 5400 files | 17.7 MB | 627.45 files/s | 27.8 MB/s
+[Progress] 500 / 5400 files | 23.4 MB | 632.73 files/s | 29.7 MB/s
+[Progress] 600 / 5400 files | 27.7 MB | 639.62 files/s | 29.6 MB/s
+[Progress] 700 / 5400 files | 32.1 MB | 638.823 files/s | 29.3 MB/s
+[Progress] 800 / 5400 files | 34.9 MB | 642.273 files/s | 28.0 MB/s
+[Progress] 900 / 5400 files | 40.6 MB | 642.764 files/s | 29.0 MB/s
+[Progress] 1000 / 5400 files | 43.8 MB | 645.057 files/s | 28.3 MB/s
+[Progress] 1100 / 5400 files | 48.7 MB | 645.4 files/s | 28.6 MB/s
+[Progress] 1200 / 5400 files | 54.4 MB | 647.246 files/s | 29.3 MB/s
+[Progress] 1300 / 5400 files | 59.0 MB | 647.235 files/s | 29.4 MB/s
+[Progress] 1400 / 5400 files | 64.6 MB | 647.612 files/s | 29.9 MB/s
+[Progress] 1500 / 5400 files | 68.9 MB | 648.522 files/s | 29.8 MB/s
+[Progress] 1600 / 5400 files | 73.5 MB | 649.274 files/s | 29.8 MB/s
+[Progress] 1700 / 5400 files | 77.7 MB | 649.73 files/s | 29.7 MB/s
+[Progress] 1800 / 5400 files | 81.3 MB | 648.074 files/s | 29.3 MB/s
+[Progress] 1900 / 5400 files | 85.9 MB | 648.456 files/s | 29.3 MB/s
+[Progress] 2000 / 5400 files | 90.4 MB | 649.588 files/s | 29.3 MB/s
+[Progress] 2100 / 5400 files | 95.2 MB | 649.659 files/s | 29.5 MB/s
+[Progress] 2200 / 5400 files | 100.0 MB | 650.407 files/s | 29.6 MB/s
+[Progress] 2300 / 5400 files | 103.2 MB | 650.67 files/s | 29.2 MB/s
+[Progress] 2400 / 5400 files | 107.6 MB | 651.159 files/s | 29.2 MB/s
+[Progress] 2500 / 5400 files | 112.6 MB | 651.257 files/s | 29.3 MB/s
+[Progress] 2600 / 5400 files | 116.6 MB | 651.657 files/s | 29.2 MB/s
+[Progress] 2700 / 5400 files | 121.7 MB | 651.928 files/s | 29.4 MB/s
+[Progress] 2800 / 5400 files | 126.0 MB | 652.1 files/s | 29.3 MB/s
+[Progress] 2900 / 5400 files | 129.8 MB | 652.401 files/s | 29.2 MB/s
+[Progress] 3000 / 5400 files | 134.8 MB | 652.695 files/s | 29.3 MB/s
+[Progress] 3100 / 5400 files | 139.5 MB | 652.907 files/s | 29.4 MB/s
+[Progress] 3200 / 5400 files | 143.7 MB | 653.194 files/s | 29.3 MB/s
+[Progress] 3300 / 5400 files | 148.3 MB | 653.432 files/s | 29.4 MB/s
+[Progress] 3400 / 5400 files | 152.2 MB | 653.584 files/s | 29.3 MB/s
+[Progress] 3500 / 5400 files | 156.2 MB | 653.622 files/s | 29.2 MB/s
+[Progress] 3600 / 5400 files | 161.1 MB | 653.891 files/s | 29.3 MB/s
+[Progress] 3700 / 5400 files | 165.5 MB | 653.636 files/s | 29.2 MB/s
+[Progress] 3800 / 5400 files | 171.0 MB | 654.014 files/s | 29.4 MB/s
+[Progress] 3900 / 5400 files | 174.5 MB | 653.648 files/s | 29.3 MB/s
+[Progress] 4000 / 5400 files | 179.3 MB | 653.961 files/s | 29.3 MB/s
+[Progress] 4100 / 5400 files | 185.1 MB | 653.822 files/s | 29.5 MB/s
+[Progress] 4200 / 5400 files | 189.2 MB | 654.384 files/s | 29.5 MB/s
+[Progress] 4300 / 5400 files | 193.2 MB | 653.822 files/s | 29.4 MB/s
+[Progress] 4400 / 5400 files | 197.2 MB | 654.37 files/s | 29.3 MB/s
+[Progress] 4500 / 5400 files | 202.4 MB | 653.833 files/s | 29.4 MB/s
+[Progress] 4600 / 5400 files | 206.5 MB | 654.294 files/s | 29.4 MB/s
+[Progress] 4700 / 5400 files | 211.2 MB | 653.864 files/s | 29.4 MB/s
+[Progress] 4800 / 5400 files | 216.3 MB | 654.348 files/s | 29.5 MB/s
+[Progress] 4900 / 5400 files | 221.1 MB | 654.072 files/s | 29.5 MB/s
+[Progress] 5000 / 5400 files | 226.6 MB | 654.451 files/s | 29.7 MB/s
+[Progress] 5100 / 5400 files | 230.9 MB | 654.121 files/s | 29.6 MB/s
+[Progress] 5200 / 5400 files | 234.5 MB | 653.546 files/s | 29.5 MB/s
+[Progress] 5300 / 5400 files | 239.4 MB | 653.865 files/s | 29.5 MB/s
+[Progress] 5400 / 5400 files | 243.4 MB | 653.669 files/s | 29.5 MB/s
+
+[Done] 5400 files | 243.4 MB | 653.275 files/s | 29.4 MB/s | elapsed 8.26604s</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>7</td><td>ssh</td><td>count source files<br><code>find /bryck/cloudcp_fallback/tiny_files -type f 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">5400</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>8</td><td>ssh</td><td>alloc transfer id<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py alloc-id --batchmeta /opt/bryck/bryckapi/downloads/bcloud_batchmeta</code><div class=detail>rc=0</div><pre class="io">{&quot;transfer_id&quot;: 113}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>9</td><td>ssh</td><td>stage batch<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py stage-batch --src /bryck/cloudcp_fallback/tiny_files --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113 --tier tiny --name batch_000000.txt</code><div class=detail>rc=0</div><pre class="io">{&quot;batch_file&quot;: &quot;/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/batches/inprogress/tiny/batch_000000.txt&quot;, &quot;count&quot;: 5400}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>10</td><td>ssh</td><td>run retry_whole_batch<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py run-mp --transfer-id 113 --batch /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/batches/inprogress/tiny/batch_000000.txt --bucket omicron --prefix tiny_files --fs-prefix /bryck/cloudcp_fallback/tiny_files --endpoint https://10.10.10.103:9000 --region us-west-1 --transfer-type download</code><div class=detail>rc=0</div><pre class="io">{&quot;ok&quot;: 0, &quot;failed&quot;: 5400, &quot;ok_bytes&quot;: 0}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>11</td><td>ssh</td><td>verify report<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py verify --transfer-id 113</code><div class=detail>rc=0</div><pre class="io">{&quot;total_rows&quot;: 0, &quot;by_status&quot;: {}}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>12</td><td>ssh</td><td>count s3 objects<br><code>aws s3 ls --recursive s3://omicron/tiny_files --endpoint-url https://10.10.10.103:9000 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">0</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>13</td><td>ssh</td><td>cleanup bucket prefix<br><code>aws s3 rm --recursive s3://omicron/tiny_files --endpoint-url https://10.10.10.103:9000</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>14</td><td>ssh</td><td>cleanup /bryck source<br><code>rm -rf /bryck/cloudcp_fallback/tiny_files</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>15</td><td>ssh</td><td>cleanup batch-meta transfer dir<br><code>rm -rf /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>16</td><td>ssh</td><td>cleanup transfer log dir<br><code>rm -rf /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_113</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr></tbody></table></details></section><section id="CMP-N-02" class="case"><h3>CMP-N-02 <span class="badge" style="background:#1a7f37">PASS</span></h3><p class="desc">retry_whole_batch() with the source files deleted after staging — every record fails the stat/upload, failed==N and ok==0.</p><p class="meta">transfer_id=113 · files=5400 · by_status={} · ok=0 · failed=5400 · batch_completed=None · lst_retired=None · s3_objects=0</p><ul class=reasons><li>all records failed: ok=0 failed=5400 (expected 0/5400)</li></ul><details open><summary>Steps &amp; commands (17)</summary><table class="steps"><thead><tr><th>#</th><th>kind</th><th>step / command</th><th>result</th></tr></thead><tbody><tr><td>1</td><td>local</td><td>case<br><div class=detail>CMP-N-02 [NEGATIVE] mechanism=mp dataset=tiny type=upload fault=missing expect=fail</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>2</td><td>local</td><td>description<br><div class=detail>retry_whole_batch() with the source files deleted after staging — every record fails the stat/upload, failed==N and ok==0.</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>3</td><td>ssh</td><td>preflight bucket<br><code>aws s3 ls s3://omicron --endpoint-url https://10.10.10.103:9000 &gt;/dev/null 2&gt;&amp;1 &amp;&amp; echo OK || echo UNREACHABLE</code><div class=detail>rc=0</div><pre class="io">OK</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>4</td><td>ssh</td><td>prep remote spec dir<br><code>mkdir -p /tmp/cc_component_specs</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>5</td><td>ssh</td><td>upload spec<br><code>sftp put /home/bryck/fallback/cloudcp-phase-wise-testing/CloudCpFallbackTesting/spec_files/02_tiny_files.yaml -&gt; /tmp/cc_component_specs/02_tiny_files.yaml</code><div class=detail>uploaded</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>6</td><td>ssh</td><td>datagen<br><code>/home/bryck/rperiyas/datagen --spec /tmp/cc_component_specs/02_tiny_files.yaml</code><div class=detail>rc=0</div><pre class="io">Planned 5400 files; mode=tree, threads=8
+[Progress] 100 / 5400 files | 3.9 MB | 553.519 files/s | 21.8 MB/s
+[Progress] 200 / 5400 files | 8.2 MB | 607.388 files/s | 25.0 MB/s
+[Progress] 300 / 5400 files | 12.9 MB | 621.049 files/s | 26.8 MB/s
+[Progress] 400 / 5400 files | 17.7 MB | 629.381 files/s | 27.9 MB/s
+[Progress] 500 / 5400 files | 23.4 MB | 636.071 files/s | 29.8 MB/s
+[Progress] 600 / 5400 files | 27.7 MB | 638.236 files/s | 29.5 MB/s
+[Progress] 700 / 5400 files | 32.1 MB | 642.433 files/s | 29.4 MB/s
+[Progress] 800 / 5400 files | 34.9 MB | 644.521 files/s | 28.1 MB/s
+[Progress] 900 / 5400 files | 40.6 MB | 645.26 files/s | 29.1 MB/s
+[Progress] 1000 / 5400 files | 43.8 MB | 646.922 files/s | 28.3 MB/s
+[Progress] 1100 / 5400 files | 48.7 MB | 647.648 files/s | 28.7 MB/s
+[Progress] 1200 / 5400 files | 54.4 MB | 648.133 files/s | 29.4 MB/s
+[Progress] 1300 / 5400 files | 59.0 MB | 649.146 files/s | 29.5 MB/s
+[Progress] 1400 / 5400 files | 64.6 MB | 649.201 files/s | 30.0 MB/s
+[Progress] 1500 / 5400 files | 68.9 MB | 650.663 files/s | 29.9 MB/s
+[Progress] 1600 / 5400 files | 73.5 MB | 650.796 files/s | 29.9 MB/s
+[Progress] 1700 / 5400 files | 77.7 MB | 651.25 files/s | 29.8 MB/s
+[Progress] 1800 / 5400 files | 81.3 MB | 651.813 files/s | 29.4 MB/s
+[Progress] 1900 / 5400 files | 85.9 MB | 651.746 files/s | 29.5 MB/s
+[Progress] 2000 / 5400 files | 90.4 MB | 652.527 files/s | 29.5 MB/s
+[Progress] 2100 / 5400 files | 95.2 MB | 652.594 files/s | 29.6 MB/s
+[Progress] 2200 / 5400 files | 100.0 MB | 652.914 files/s | 29.7 MB/s
+[Progress] 2300 / 5400 files | 103.2 MB | 651.838 files/s | 29.3 MB/s
+[Progress] 2400 / 5400 files | 107.6 MB | 652.72 files/s | 29.3 MB/s
+[Progress] 2500 / 5400 files | 112.6 MB | 651.71 files/s | 29.3 MB/s
+[Progress] 2600 / 5400 files | 116.6 MB | 652.667 files/s | 29.3 MB/s
+[Progress] 2700 / 5400 files | 121.7 MB | 650.676 files/s | 29.3 MB/s
+[Progress] 2800 / 5400 files | 126.0 MB | 651.145 files/s | 29.3 MB/s
+[Progress] 2900 / 5400 files | 129.8 MB | 651.315 files/s | 29.2 MB/s
+[Progress] 3000 / 5400 files | 134.8 MB | 651.783 files/s | 29.3 MB/s
+[Progress] 3100 / 5400 files | 139.5 MB | 651.656 files/s | 29.3 MB/s
+[Progress] 3200 / 5400 files | 143.7 MB | 652.393 files/s | 29.3 MB/s
+[Progress] 3300 / 5400 files | 148.3 MB | 651.759 files/s | 29.3 MB/s
+[Progress] 3400 / 5400 files | 152.2 MB | 652.497 files/s | 29.2 MB/s
+[Progress] 3500 / 5400 files | 156.2 MB | 651.868 files/s | 29.1 MB/s
+[Progress] 3600 / 5400 files | 161.1 MB | 652.498 files/s | 29.2 MB/s
+[Progress] 3700 / 5400 files | 165.5 MB | 651.854 files/s | 29.2 MB/s
+[Progress] 3800 / 5400 files | 171.0 MB | 652.394 files/s | 29.4 MB/s
+[Progress] 3900 / 5400 files | 174.5 MB | 651.826 files/s | 29.2 MB/s
+[Progress] 4000 / 5400 files | 179.3 MB | 652.354 files/s | 29.2 MB/s
+[Progress] 4100 / 5400 files | 185.1 MB | 652.164 files/s | 29.4 MB/s
+[Progress] 4200 / 5400 files | 189.2 MB | 652.378 files/s | 29.4 MB/s
+[Progress] 4300 / 5400 files | 193.2 MB | 652.486 files/s | 29.3 MB/s
+[Progress] 4400 / 5400 files | 197.2 MB | 652.338 files/s | 29.2 MB/s
+[Progress] 4500 / 5400 files | 202.4 MB | 652.703 files/s | 29.4 MB/s
+[Progress] 4600 / 5400 files | 206.5 MB | 652.224 files/s | 29.3 MB/s
+[Progress] 4700 / 5400 files | 211.2 MB | 652.689 files/s | 29.3 MB/s
+[Progress] 4800 / 5400 files | 216.3 MB | 652.153 files/s | 29.4 MB/s
+[Progress] 4900 / 5400 files | 221.1 MB | 652.595 files/s | 29.4 MB/s
+[Progress] 5000 / 5400 files | 226.6 MB | 652.149 files/s | 29.6 MB/s
+[Progress] 5100 / 5400 files | 230.9 MB | 652.582 files/s | 29.5 MB/s
+[Progress] 5200 / 5400 files | 234.5 MB | 652.304 files/s | 29.4 MB/s
+[Progress] 5300 / 5400 files | 239.4 MB | 652.755 files/s | 29.5 MB/s
+[Progress] 5400 / 5400 files | 243.4 MB | 652.451 files/s | 29.4 MB/s
+
+[Done] 5400 files | 243.4 MB | 652.037 files/s | 29.4 MB/s | elapsed 8.28174s</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>7</td><td>ssh</td><td>count source files<br><code>find /bryck/cloudcp_fallback/tiny_files -type f 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">5400</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>8</td><td>ssh</td><td>alloc transfer id<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py alloc-id --batchmeta /opt/bryck/bryckapi/downloads/bcloud_batchmeta</code><div class=detail>rc=0</div><pre class="io">{&quot;transfer_id&quot;: 113}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>9</td><td>ssh</td><td>stage batch<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py stage-batch --src /bryck/cloudcp_fallback/tiny_files --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113 --tier tiny --name batch_000000.txt</code><div class=detail>rc=0</div><pre class="io">{&quot;batch_file&quot;: &quot;/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/batches/inprogress/tiny/batch_000000.txt&quot;, &quot;count&quot;: 5400}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>10</td><td>ssh</td><td>inject fault: delete sources<br><code>find /bryck/cloudcp_fallback/tiny_files -type f -delete</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>11</td><td>ssh</td><td>run retry_whole_batch<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py run-mp --transfer-id 113 --batch /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/batches/inprogress/tiny/batch_000000.txt --bucket omicron --prefix tiny_files --fs-prefix /bryck/cloudcp_fallback/tiny_files --endpoint https://10.10.10.103:9000 --region us-west-1 --transfer-type upload</code><div class=detail>rc=0</div><pre class="io">{&quot;ok&quot;: 0, &quot;failed&quot;: 5400, &quot;ok_bytes&quot;: 0}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>12</td><td>ssh</td><td>verify report<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py verify --transfer-id 113</code><div class=detail>rc=0</div><pre class="io">{&quot;total_rows&quot;: 0, &quot;by_status&quot;: {}}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>13</td><td>ssh</td><td>count s3 objects<br><code>aws s3 ls --recursive s3://omicron/tiny_files --endpoint-url https://10.10.10.103:9000 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">0</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>14</td><td>ssh</td><td>cleanup bucket prefix<br><code>aws s3 rm --recursive s3://omicron/tiny_files --endpoint-url https://10.10.10.103:9000</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>15</td><td>ssh</td><td>cleanup /bryck source<br><code>rm -rf /bryck/cloudcp_fallback/tiny_files</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>16</td><td>ssh</td><td>cleanup batch-meta transfer dir<br><code>rm -rf /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>17</td><td>ssh</td><td>cleanup transfer log dir<br><code>rm -rf /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_113</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr></tbody></table></details></section><section id="CFW-N-02" class="case"><h3>CFW-N-02 <span class="badge" style="background:#cf222e">FAIL</span></h3><p class="desc">B1 — Malformed .lst framing (2 fields/record, no size/error fields): read_retry_list misgroups fields; url_parse receives garbage paths and returns (None,None); all records fail terminally; no hang/crash.</p><p class="meta">transfer_id=113 · files=5400 · by_status={&#x27;FALLBACK_OK&#x27;: 2700} · ok=None · failed=None · batch_completed=True · lst_retired=True · s3_objects=2700</p><ul class=reasons><li>expected 0 FALLBACK_OK rows, got 2700</li><li>batch unexpectedly moved to completed/</li><li>.lst unexpectedly retired (should stay inprogress for resume)</li></ul><details open><summary>Steps &amp; commands (20)</summary><table class="steps"><thead><tr><th>#</th><th>kind</th><th>step / command</th><th>result</th></tr></thead><tbody><tr><td>1</td><td>local</td><td>case<br><div class=detail>CFW-N-02 [NEGATIVE] mechanism=worker dataset=tiny type=upload fault=bad_lst expect=fail</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>2</td><td>local</td><td>description<br><div class=detail>B1 — Malformed .lst framing (2 fields/record, no size/error fields): read_retry_list misgroups fields; url_parse receives garbage paths and returns (None,None); all records fail terminally; no hang/crash.</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>3</td><td>ssh</td><td>preflight bucket<br><code>aws s3 ls s3://omicron --endpoint-url https://10.10.10.103:9000 &gt;/dev/null 2&gt;&amp;1 &amp;&amp; echo OK || echo UNREACHABLE</code><div class=detail>rc=0</div><pre class="io">OK</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>4</td><td>ssh</td><td>prep remote spec dir<br><code>mkdir -p /tmp/cc_component_specs</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>5</td><td>ssh</td><td>upload spec<br><code>sftp put /home/bryck/fallback/cloudcp-phase-wise-testing/CloudCpFallbackTesting/spec_files/02_tiny_files.yaml -&gt; /tmp/cc_component_specs/02_tiny_files.yaml</code><div class=detail>uploaded</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>6</td><td>ssh</td><td>datagen<br><code>/home/bryck/rperiyas/datagen --spec /tmp/cc_component_specs/02_tiny_files.yaml</code><div class=detail>rc=0</div><pre class="io">Planned 5400 files; mode=tree, threads=8
+[Progress] 100 / 5400 files | 3.9 MB | 551.481 files/s | 21.8 MB/s
+[Progress] 200 / 5400 files | 8.2 MB | 604.272 files/s | 24.9 MB/s
+[Progress] 300 / 5400 files | 12.9 MB | 619.321 files/s | 26.7 MB/s
+[Progress] 400 / 5400 files | 17.7 MB | 629.647 files/s | 27.9 MB/s
+[Progress] 500 / 5400 files | 23.4 MB | 634.611 files/s | 29.7 MB/s
+[Progress] 600 / 5400 files | 27.7 MB | 635.75 files/s | 29.4 MB/s
+[Progress] 700 / 5400 files | 31.9 MB | 639.045 files/s | 29.1 MB/s
+[Progress] 800 / 5400 files | 34.9 MB | 640.942 files/s | 27.9 MB/s
+[Progress] 900 / 5400 files | 40.6 MB | 643.48 files/s | 29.0 MB/s
+[Progress] 1000 / 5400 files | 43.8 MB | 644.663 files/s | 28.3 MB/s
+[Progress] 1100 / 5400 files | 48.7 MB | 646.227 files/s | 28.6 MB/s
+[Progress] 1200 / 5400 files | 54.4 MB | 646.537 files/s | 29.3 MB/s
+[Progress] 1300 / 5400 files | 59.0 MB | 647.062 files/s | 29.4 MB/s
+[Progress] 1400 / 5400 files | 64.6 MB | 648.357 files/s | 29.9 MB/s
+[Progress] 1500 / 5400 files | 68.9 MB | 649.191 files/s | 29.8 MB/s
+[Progress] 1600 / 5400 files | 73.5 MB | 650.006 files/s | 29.9 MB/s
+[Progress] 1700 / 5400 files | 77.7 MB | 649.376 files/s | 29.7 MB/s
+[Progress] 1800 / 5400 files | 81.3 MB | 650.424 files/s | 29.4 MB/s
+[Progress] 1900 / 5400 files | 85.9 MB | 650.803 files/s | 29.4 MB/s
+[Progress] 2000 / 5400 files | 90.4 MB | 651.653 files/s | 29.4 MB/s
+[Progress] 2100 / 5400 files | 95.2 MB | 651.341 files/s | 29.5 MB/s
+[Progress] 2200 / 5400 files | 100.0 MB | 652.347 files/s | 29.7 MB/s
+[Progress] 2300 / 5400 files | 103.2 MB | 651.552 files/s | 29.2 MB/s
+[Progress] 2400 / 5400 files | 107.6 MB | 649.373 files/s | 29.1 MB/s
+[Progress] 2500 / 5400 files | 112.6 MB | 649.673 files/s | 29.2 MB/s
+[Progress] 2600 / 5400 files | 116.6 MB | 650.008 files/s | 29.2 MB/s
+[Progress] 2700 / 5400 files | 121.7 MB | 650.186 files/s | 29.3 MB/s
+[Progress] 2800 / 5400 files | 126.0 MB | 650.537 files/s | 29.3 MB/s
+[Progress] 2900 / 5400 files | 129.8 MB | 650.568 files/s | 29.1 MB/s
+[Progress] 3000 / 5400 files | 134.8 MB | 650.872 files/s | 29.2 MB/s
+[Progress] 3100 / 5400 files | 139.5 MB | 650.972 files/s | 29.3 MB/s
+[Progress] 3200 / 5400 files | 143.7 MB | 651.369 files/s | 29.3 MB/s
+[Progress] 3300 / 5400 files | 148.3 MB | 651.307 files/s | 29.3 MB/s
+[Progress] 3400 / 5400 files | 152.2 MB | 651.58 files/s | 29.2 MB/s
+[Progress] 3500 / 5400 files | 156.2 MB | 651.562 files/s | 29.1 MB/s
+[Progress] 3600 / 5400 files | 161.1 MB | 651.804 files/s | 29.2 MB/s
+[Progress] 3700 / 5400 files | 165.5 MB | 651.934 files/s | 29.2 MB/s
+[Progress] 3800 / 5400 files | 171.0 MB | 652.217 files/s | 29.4 MB/s
+[Progress] 3900 / 5400 files | 174.5 MB | 652.374 files/s | 29.2 MB/s
+[Progress] 4000 / 5400 files | 179.3 MB | 652.702 files/s | 29.3 MB/s
+[Progress] 4100 / 5400 files | 185.1 MB | 652.617 files/s | 29.5 MB/s
+[Progress] 4200 / 5400 files | 189.2 MB | 653.143 files/s | 29.4 MB/s
+[Progress] 4300 / 5400 files | 193.2 MB | 652.921 files/s | 29.3 MB/s
+[Progress] 4400 / 5400 files | 197.2 MB | 653.416 files/s | 29.3 MB/s
+[Progress] 4500 / 5400 files | 202.4 MB | 652.966 files/s | 29.4 MB/s
+[Progress] 4600 / 5400 files | 206.5 MB | 653.361 files/s | 29.3 MB/s
+[Progress] 4700 / 5400 files | 211.2 MB | 652.761 files/s | 29.3 MB/s
+[Progress] 4800 / 5400 files | 216.3 MB | 653.203 files/s | 29.4 MB/s
+[Progress] 4900 / 5400 files | 221.1 MB | 652.938 files/s | 29.5 MB/s
+[Progress] 5000 / 5400 files | 226.5 MB | 652.995 files/s | 29.6 MB/s
+[Progress] 5100 / 5400 files | 230.9 MB | 653.058 files/s | 29.6 MB/s
+[Progress] 5200 / 5400 files | 234.5 MB | 652.848 files/s | 29.4 MB/s
+[Progress] 5300 / 5400 files | 239.4 MB | 653.176 files/s | 29.5 MB/s
+[Progress] 5400 / 5400 files | 243.4 MB | 652.831 files/s | 29.4 MB/s
+
+[Done] 5400 files | 243.4 MB | 652.446 files/s | 29.4 MB/s | elapsed 8.27654s</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>7</td><td>ssh</td><td>count source files<br><code>find /bryck/cloudcp_fallback/tiny_files -type f 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">5400</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>8</td><td>ssh</td><td>alloc transfer id<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py alloc-id --batchmeta /opt/bryck/bryckapi/downloads/bcloud_batchmeta</code><div class=detail>rc=0</div><pre class="io">{&quot;transfer_id&quot;: 113}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>9</td><td>ssh</td><td>stage batch<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py stage-batch --src /bryck/cloudcp_fallback/tiny_files --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113 --tier tiny --name batch_000000.txt</code><div class=detail>rc=0</div><pre class="io">{&quot;batch_file&quot;: &quot;/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/batches/inprogress/tiny/batch_000000.txt&quot;, &quot;count&quot;: 5400}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>10</td><td>ssh</td><td>make malformed .lst (B1: 2 fields/record, no size/error)<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py make-bad-lst --batch /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/batches/inprogress/tiny/batch_000000.txt --transfer-id 113 --bucket omicron --prefix tiny_files --fs-prefix /bryck/cloudcp_fallback/tiny_files</code><div class=detail>rc=0</div><pre class="io">{&quot;lst_path&quot;: &quot;/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_113/cloudcp_retry_113_batch_000000.txt.lst&quot;, &quot;count&quot;: 5400}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>11</td><td>ssh</td><td>write done marker<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py done-marker --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113</code><div class=detail>rc=0</div><pre class="io">{&quot;marker&quot;: &quot;/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/_fallback_done&quot;}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>12</td><td>ssh</td><td>run fallback worker<br><code>/opt/bryck/.venv/bryck/bin/python3 -m bryckcloud.lib.cloud.fallback_worker --transfer-id 113 --transfer-type upload --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113 --pool-size 16</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>13</td><td>ssh</td><td>verify report<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py verify --transfer-id 113</code><div class=detail>rc=0</div><pre class="io">{&quot;total_rows&quot;: 2700, &quot;by_status&quot;: {&quot;FALLBACK_OK&quot;: 2700}}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>14</td><td>ssh</td><td>batch state<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py batch-state --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113 --name batch_000000.txt</code><div class=detail>rc=0</div><pre class="io">{&quot;counts&quot;: {&quot;pending&quot;: 0, &quot;inprogress&quot;: 0, &quot;completed&quot;: 1}, &quot;completed&quot;: true}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>15</td><td>ssh</td><td>check .lst.done<br><code>ls /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_113/cloudcp_retry_113_batch_000000.txt.lst.done &gt;/dev/null 2&gt;&amp;1 &amp;&amp; echo YES || echo NO</code><div class=detail>rc=0</div><pre class="io">YES</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>16</td><td>ssh</td><td>count s3 objects<br><code>aws s3 ls --recursive s3://omicron/tiny_files --endpoint-url https://10.10.10.103:9000 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">2700</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>17</td><td>ssh</td><td>cleanup bucket prefix<br><code>aws s3 rm --recursive s3://omicron/tiny_files --endpoint-url https://10.10.10.103:9000</code><div class=detail>rc=0</div><pre class="io">delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-LOwCTifCpJXR.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-9tWOw14NPErP.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-yy0jz8FqbofM.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-4lTRG7a1KFiG.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-CqylCDaDWrjb.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-MQzwXRSNWbkM.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-5huY3M80blvE.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-Q7UXvFHTB8IS.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-QyNQOdrHta0B.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-N7oD4IxaWj4X.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-SR0y09KdiJLL.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-V36PEKzUOG98.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-TLYsG1b7d83p.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-jrz9jA7uD4m4.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-fNzP019moO0Q.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-ge0vaUO7lT66.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-SPpeT3WCv0tF.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-zG7fBQrtC6uq.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_4/tiny-FrY9nhXZ203p.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-GWmoj0tzwryr.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_4/tiny-Jon8bNaRpgMD.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-rWug0lquWqpz.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-yCo879Qd9bKU.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_4/tiny-URJzKktzGpRe.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_4/tiny-PEXVEj6dfats.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_4/tiny-LQTYjE34ufAO.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-pUpnJqbKAQgu.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_4/tiny-s0BWSAq2Uoq2.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-OgTbX5EBWDLx.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-bibeMLPAanmu.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_4/tiny-tmn3i3qRxVQn.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_4/tiny-zKD8KnCOq2JM.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_4/tiny-vGPKFs72y4sM.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_4/tiny-O3yUP1iW0ess.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_5/tiny-43pgk1zY2NEA.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_5/tiny-OR0t4eD7WnOj.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_5/tiny-YkdtqnZfSqdz.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_5/tiny-XwR3VT2VNXcF.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-TwHtGmswUpfB.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_5/tiny-IGwehaOSqvE5.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_5/tiny-K5jQMk999Qrg.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-nhMs5usFWkb6.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_4/tiny-zfTzpvZ42M9Q.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_5/tiny-EtBCntQWVz2T.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-rXZmZaljl9bJ.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_6/tiny-RTnfYaeUad5o.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_5/tiny-eGyaiFYn9PGR.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_5/tiny-6jNSDVLVtzrX.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-vSZuTPopEu2Q.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-fVUUyajFafq0.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_4/tiny-cc421V9vfpt3.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-ddfsWxE6sRgp.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_5/tiny-cokDmFoGhcQ7.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_5/tiny-hmbfM2LCLS8o.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_5/tiny-v9wbaiUvY4LN.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-1ffZ9sOVt76L.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_6/tiny-0q8c4OPMEftc.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_6
+… [clipped, 187070 chars total]</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>18</td><td>ssh</td><td>cleanup /bryck source<br><code>rm -rf /bryck/cloudcp_fallback/tiny_files</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>19</td><td>ssh</td><td>cleanup batch-meta transfer dir<br><code>rm -rf /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>20</td><td>ssh</td><td>cleanup transfer log dir<br><code>rm -rf /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_113</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr></tbody></table></details></section><section id="CFW-N-03" class="case"><h3>CFW-N-03 <span class="badge" style="background:#1a7f37">PASS</span></h3><p class="desc">B2 — Valid .lst but s3path references a nonexistent bucket: all uploads fail with NoSuchBucket after max_attempts retries; batch stays inprogress; .lst not retired; no hang/crash.</p><p class="meta">transfer_id=113 · files=5400 · by_status={} · ok=None · failed=None · batch_completed=False · lst_retired=False · s3_objects=0</p><ul class=reasons><li>all 5400 record(s) failed terminally as expected; batch inprogress; .lst not retired</li></ul><details open><summary>Steps &amp; commands (20)</summary><table class="steps"><thead><tr><th>#</th><th>kind</th><th>step / command</th><th>result</th></tr></thead><tbody><tr><td>1</td><td>local</td><td>case<br><div class=detail>CFW-N-03 [NEGATIVE] mechanism=worker dataset=tiny type=upload fault=bad_bucket expect=fail</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>2</td><td>local</td><td>description<br><div class=detail>B2 — Valid .lst but s3path references a nonexistent bucket: all uploads fail with NoSuchBucket after max_attempts retries; batch stays inprogress; .lst not retired; no hang/crash.</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>3</td><td>ssh</td><td>preflight bucket<br><code>aws s3 ls s3://omicron --endpoint-url https://10.10.10.103:9000 &gt;/dev/null 2&gt;&amp;1 &amp;&amp; echo OK || echo UNREACHABLE</code><div class=detail>rc=0</div><pre class="io">OK</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>4</td><td>ssh</td><td>prep remote spec dir<br><code>mkdir -p /tmp/cc_component_specs</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>5</td><td>ssh</td><td>upload spec<br><code>sftp put /home/bryck/fallback/cloudcp-phase-wise-testing/CloudCpFallbackTesting/spec_files/02_tiny_files.yaml -&gt; /tmp/cc_component_specs/02_tiny_files.yaml</code><div class=detail>uploaded</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>6</td><td>ssh</td><td>datagen<br><code>/home/bryck/rperiyas/datagen --spec /tmp/cc_component_specs/02_tiny_files.yaml</code><div class=detail>rc=0</div><pre class="io">Planned 5400 files; mode=tree, threads=8
+[Progress] 100 / 5400 files | 3.9 MB | 555.893 files/s | 21.9 MB/s
+[Progress] 200 / 5400 files | 8.1 MB | 606.386 files/s | 24.4 MB/s
+[Progress] 300 / 5400 files | 12.9 MB | 621.017 files/s | 26.8 MB/s
+[Progress] 400 / 5400 files | 17.7 MB | 628.75 files/s | 27.9 MB/s
+[Progress] 500 / 5400 files | 23.4 MB | 634.789 files/s | 29.8 MB/s
+[Progress] 600 / 5400 files | 27.8 MB | 637.481 files/s | 29.5 MB/s
+[Progress] 700 / 5400 files | 32.1 MB | 640.452 files/s | 29.3 MB/s
+[Progress] 800 / 5400 files | 34.9 MB | 642.433 files/s | 28.0 MB/s
+[Progress] 900 / 5400 files | 40.6 MB | 643.775 files/s | 29.0 MB/s
+[Progress] 1000 / 5400 files | 43.8 MB | 644.965 files/s | 28.3 MB/s
+[Progress] 1100 / 5400 files | 48.7 MB | 644.38 files/s | 28.5 MB/s
+[Progress] 1200 / 5400 files | 54.5 MB | 646.409 files/s | 29.4 MB/s
+[Progress] 1300 / 5400 files | 59.0 MB | 646.644 files/s | 29.3 MB/s
+[Progress] 1400 / 5400 files | 64.6 MB | 647.932 files/s | 29.9 MB/s
+[Progress] 1500 / 5400 files | 68.9 MB | 648.704 files/s | 29.8 MB/s
+[Progress] 1600 / 5400 files | 73.5 MB | 649.495 files/s | 29.8 MB/s
+[Progress] 1700 / 5400 files | 77.7 MB | 649.438 files/s | 29.7 MB/s
+[Progress] 1800 / 5400 files | 81.3 MB | 650.369 files/s | 29.4 MB/s
+[Progress] 1900 / 5400 files | 85.9 MB | 649.415 files/s | 29.3 MB/s
+[Progress] 2000 / 5400 files | 90.4 MB | 650.535 files/s | 29.4 MB/s
+[Progress] 2100 / 5400 files | 95.2 MB | 650.016 files/s | 29.5 MB/s
+[Progress] 2200 / 5400 files | 100.0 MB | 651.121 files/s | 29.6 MB/s
+[Progress] 2300 / 5400 files | 103.2 MB | 647.648 files/s | 29.0 MB/s
+[Progress] 2400 / 5400 files | 107.6 MB | 646.823 files/s | 29.0 MB/s
+[Progress] 2500 / 5400 files | 112.6 MB | 647.769 files/s | 29.2 MB/s
+[Progress] 2600 / 5400 files | 116.6 MB | 647.727 files/s | 29.1 MB/s
+[Progress] 2700 / 5400 files | 121.7 MB | 648.911 files/s | 29.2 MB/s
+[Progress] 2800 / 5400 files | 126.0 MB | 648.365 files/s | 29.2 MB/s
+[Progress] 2900 / 5400 files | 129.8 MB | 649.378 files/s | 29.1 MB/s
+[Progress] 3000 / 5400 files | 134.8 MB | 648.938 files/s | 29.2 MB/s
+[Progress] 3100 / 5400 files | 139.5 MB | 649.787 files/s | 29.2 MB/s
+[Progress] 3200 / 5400 files | 143.7 MB | 649.581 files/s | 29.2 MB/s
+[Progress] 3300 / 5400 files | 148.3 MB | 650.177 files/s | 29.2 MB/s
+[Progress] 3400 / 5400 files | 152.2 MB | 650.351 files/s | 29.1 MB/s
+[Progress] 3500 / 5400 files | 156.2 MB | 650.513 files/s | 29.0 MB/s
+[Progress] 3600 / 5400 files | 161.1 MB | 651.133 files/s | 29.1 MB/s
+[Progress] 3700 / 5400 files | 165.5 MB | 650.94 files/s | 29.1 MB/s
+[Progress] 3800 / 5400 files | 171.0 MB | 651.512 files/s | 29.3 MB/s
+[Progress] 3900 / 5400 files | 174.5 MB | 651.203 files/s | 29.1 MB/s
+[Progress] 4000 / 5400 files | 179.3 MB | 651.695 files/s | 29.2 MB/s
+[Progress] 4100 / 5400 files | 185.1 MB | 651.502 files/s | 29.4 MB/s
+[Progress] 4200 / 5400 files | 189.2 MB | 651.839 files/s | 29.4 MB/s
+[Progress] 4300 / 5400 files | 193.2 MB | 651.949 files/s | 29.3 MB/s
+[Progress] 4400 / 5400 files | 197.2 MB | 652.196 files/s | 29.2 MB/s
+[Progress] 4500 / 5400 files | 202.4 MB | 652.352 files/s | 29.3 MB/s
+[Progress] 4600 / 5400 files | 206.5 MB | 652.669 files/s | 29.3 MB/s
+[Progress] 4700 / 5400 files | 211.2 MB | 652.672 files/s | 29.3 MB/s
+[Progress] 4800 / 5400 files | 216.3 MB | 652.625 files/s | 29.4 MB/s
+[Progress] 4900 / 5400 files | 221.1 MB | 652.963 files/s | 29.5 MB/s
+[Progress] 5000 / 5400 files | 226.6 MB | 652.631 files/s | 29.6 MB/s
+[Progress] 5100 / 5400 files | 230.9 MB | 653.135 files/s | 29.6 MB/s
+[Progress] 5200 / 5400 files | 234.5 MB | 652.747 files/s | 29.4 MB/s
+[Progress] 5300 / 5400 files | 239.4 MB | 653.205 files/s | 29.5 MB/s
+[Progress] 5400 / 5400 files | 243.4 MB | 653.097 files/s | 29.4 MB/s
+
+[Done] 5400 files | 243.4 MB | 652.702 files/s | 29.4 MB/s | elapsed 8.2733s</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>7</td><td>ssh</td><td>count source files<br><code>find /bryck/cloudcp_fallback/tiny_files -type f 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">5400</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>8</td><td>ssh</td><td>alloc transfer id<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py alloc-id --batchmeta /opt/bryck/bryckapi/downloads/bcloud_batchmeta</code><div class=detail>rc=0</div><pre class="io">{&quot;transfer_id&quot;: 113}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>9</td><td>ssh</td><td>stage batch<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py stage-batch --src /bryck/cloudcp_fallback/tiny_files --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113 --tier tiny --name batch_000000.txt</code><div class=detail>rc=0</div><pre class="io">{&quot;batch_file&quot;: &quot;/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/batches/inprogress/tiny/batch_000000.txt&quot;, &quot;count&quot;: 5400}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>10</td><td>ssh</td><td>make .lst with nonexistent bucket (B2)<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py make-lst --batch /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/batches/inprogress/tiny/batch_000000.txt --transfer-id 113 --bucket nonexistent-bucket-xyz --prefix tiny_files --fs-prefix /bryck/cloudcp_fallback/tiny_files</code><div class=detail>rc=0</div><pre class="io">{&quot;lst_path&quot;: &quot;/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_113/cloudcp_retry_113_batch_000000.txt.lst&quot;, &quot;count&quot;: 5400}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>11</td><td>ssh</td><td>write done marker<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py done-marker --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113</code><div class=detail>rc=0</div><pre class="io">{&quot;marker&quot;: &quot;/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/_fallback_done&quot;}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>12</td><td>ssh</td><td>run fallback worker<br><code>/opt/bryck/.venv/bryck/bin/python3 -m bryckcloud.lib.cloud.fallback_worker --transfer-id 113 --transfer-type upload --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113 --pool-size 16</code><div class=detail>rc=1</div></td><td style="color:#cf222e;font-weight:700">&#10007; rc=1</td></tr><tr><td>13</td><td>ssh</td><td>verify report<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py verify --transfer-id 113</code><div class=detail>rc=0</div><pre class="io">{&quot;total_rows&quot;: 0, &quot;by_status&quot;: {}}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>14</td><td>ssh</td><td>batch state<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py batch-state --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113 --name batch_000000.txt</code><div class=detail>rc=0</div><pre class="io">{&quot;counts&quot;: {&quot;pending&quot;: 0, &quot;inprogress&quot;: 1, &quot;completed&quot;: 0}, &quot;completed&quot;: false}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>15</td><td>ssh</td><td>check .lst.done<br><code>ls /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_113/cloudcp_retry_113_batch_000000.txt.lst.done &gt;/dev/null 2&gt;&amp;1 &amp;&amp; echo YES || echo NO</code><div class=detail>rc=0</div><pre class="io">NO</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>16</td><td>ssh</td><td>count s3 objects<br><code>aws s3 ls --recursive s3://omicron/tiny_files --endpoint-url https://10.10.10.103:9000 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">0</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>17</td><td>ssh</td><td>cleanup bucket prefix<br><code>aws s3 rm --recursive s3://omicron/tiny_files --endpoint-url https://10.10.10.103:9000</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>18</td><td>ssh</td><td>cleanup /bryck source<br><code>rm -rf /bryck/cloudcp_fallback/tiny_files</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>19</td><td>ssh</td><td>cleanup batch-meta transfer dir<br><code>rm -rf /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>20</td><td>ssh</td><td>cleanup transfer log dir<br><code>rm -rf /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_113</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr></tbody></table></details></section><section id="CFW-N-04" class="case"><h3>CFW-N-04 <span class="badge" style="background:#1a7f37">PASS</span></h3><p class="desc">B3 — Done marker written BEFORE the .lst (reversed staging order): worker must still drain the list on its first poll pass and complete the batch cleanly (resilience to early-marker race).</p><p class="meta">transfer_id=113 · files=5400 · by_status={&#x27;FALLBACK_OK&#x27;: 5400} · ok=None · failed=None · batch_completed=True · lst_retired=True · s3_objects=5400</p><ul class=reasons><li>drained 5400 file(s) via fallback; batch completed</li></ul><details open><summary>Steps &amp; commands (20)</summary><table class="steps"><thead><tr><th>#</th><th>kind</th><th>step / command</th><th>result</th></tr></thead><tbody><tr><td>1</td><td>local</td><td>case<br><div class=detail>CFW-N-04 [NEGATIVE] mechanism=worker dataset=tiny type=upload fault=late_lst expect=ok</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>2</td><td>local</td><td>description<br><div class=detail>B3 — Done marker written BEFORE the .lst (reversed staging order): worker must still drain the list on its first poll pass and complete the batch cleanly (resilience to early-marker race).</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>3</td><td>ssh</td><td>preflight bucket<br><code>aws s3 ls s3://omicron --endpoint-url https://10.10.10.103:9000 &gt;/dev/null 2&gt;&amp;1 &amp;&amp; echo OK || echo UNREACHABLE</code><div class=detail>rc=0</div><pre class="io">OK</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>4</td><td>ssh</td><td>prep remote spec dir<br><code>mkdir -p /tmp/cc_component_specs</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>5</td><td>ssh</td><td>upload spec<br><code>sftp put /home/bryck/fallback/cloudcp-phase-wise-testing/CloudCpFallbackTesting/spec_files/02_tiny_files.yaml -&gt; /tmp/cc_component_specs/02_tiny_files.yaml</code><div class=detail>uploaded</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>6</td><td>ssh</td><td>datagen<br><code>/home/bryck/rperiyas/datagen --spec /tmp/cc_component_specs/02_tiny_files.yaml</code><div class=detail>rc=0</div><pre class="io">Planned 5400 files; mode=tree, threads=8
+[Progress] 100 / 5400 files | 3.9 MB | 551.309 files/s | 21.7 MB/s
+[Progress] 200 / 5400 files | 8.2 MB | 604.853 files/s | 24.9 MB/s
+[Progress] 300 / 5400 files | 12.9 MB | 616.878 files/s | 26.6 MB/s
+[Progress] 400 / 5400 files | 17.7 MB | 624.722 files/s | 27.7 MB/s
+[Progress] 500 / 5400 files | 23.4 MB | 632.542 files/s | 29.7 MB/s
+[Progress] 600 / 5400 files | 27.7 MB | 636.877 files/s | 29.4 MB/s
+[Progress] 700 / 5400 files | 32.1 MB | 638.559 files/s | 29.3 MB/s
+[Progress] 800 / 5400 files | 34.9 MB | 640.712 files/s | 27.9 MB/s
+[Progress] 900 / 5400 files | 40.6 MB | 643.283 files/s | 29.0 MB/s
+[Progress] 1000 / 5400 files | 43.8 MB | 644.997 files/s | 28.3 MB/s
+[Progress] 1100 / 5400 files | 48.7 MB | 645.224 files/s | 28.6 MB/s
+[Progress] 1200 / 5400 files | 54.5 MB | 647.08 files/s | 29.4 MB/s
+[Progress] 1300 / 5400 files | 59.0 MB | 647.475 files/s | 29.4 MB/s
+[Progress] 1400 / 5400 files | 64.6 MB | 648.743 files/s | 30.0 MB/s
+[Progress] 1500 / 5400 files | 68.9 MB | 649.317 files/s | 29.8 MB/s
+[Progress] 1600 / 5400 files | 73.5 MB | 650.739 files/s | 29.9 MB/s
+[Progress] 1700 / 5400 files | 77.7 MB | 651.689 files/s | 29.8 MB/s
+[Progress] 1800 / 5400 files | 81.3 MB | 651.936 files/s | 29.5 MB/s
+[Progress] 1900 / 5400 files | 85.9 MB | 651.934 files/s | 29.5 MB/s
+[Progress] 2000 / 5400 files | 90.4 MB | 652.469 files/s | 29.5 MB/s
+[Progress] 2100 / 5400 files | 95.2 MB | 653.146 files/s | 29.6 MB/s
+[Progress] 2200 / 5400 files | 100.0 MB | 652.653 files/s | 29.7 MB/s
+[Progress] 2300 / 5400 files | 103.2 MB | 653.041 files/s | 29.3 MB/s
+[Progress] 2400 / 5400 files | 107.6 MB | 653.399 files/s | 29.3 MB/s
+[Progress] 2500 / 5400 files | 112.6 MB | 653.131 files/s | 29.4 MB/s
+[Progress] 2600 / 5400 files | 116.6 MB | 653.436 files/s | 29.3 MB/s
+[Progress] 2700 / 5400 files | 121.7 MB | 653.961 files/s | 29.5 MB/s
+[Progress] 2800 / 5400 files | 126.0 MB | 653.798 files/s | 29.4 MB/s
+[Progress] 2900 / 5400 files | 129.8 MB | 653.494 files/s | 29.3 MB/s
+[Progress] 3000 / 5400 files | 134.8 MB | 653.97 files/s | 29.4 MB/s
+[Progress] 3100 / 5400 files | 139.5 MB | 650.939 files/s | 29.3 MB/s
+[Progress] 3200 / 5400 files | 143.7 MB | 651.434 files/s | 29.3 MB/s
+[Progress] 3300 / 5400 files | 148.3 MB | 651.395 files/s | 29.3 MB/s
+[Progress] 3400 / 5400 files | 152.2 MB | 651.928 files/s | 29.2 MB/s
+[Progress] 3500 / 5400 files | 156.2 MB | 651.826 files/s | 29.1 MB/s
+[Progress] 3600 / 5400 files | 161.1 MB | 652.278 files/s | 29.2 MB/s
+[Progress] 3700 / 5400 files | 165.5 MB | 652.186 files/s | 29.2 MB/s
+[Progress] 3800 / 5400 files | 171.0 MB | 652.457 files/s | 29.4 MB/s
+[Progress] 3900 / 5400 files | 174.5 MB | 652.591 files/s | 29.2 MB/s
+[Progress] 4000 / 5400 files | 179.3 MB | 652.573 files/s | 29.2 MB/s
+[Progress] 4100 / 5400 files | 185.1 MB | 652.851 files/s | 29.5 MB/s
+[Progress] 4200 / 5400 files | 189.2 MB | 652.546 files/s | 29.4 MB/s
+[Progress] 4300 / 5400 files | 193.2 MB | 653.111 files/s | 29.3 MB/s
+[Progress] 4400 / 5400 files | 197.2 MB | 652.645 files/s | 29.2 MB/s
+[Progress] 4500 / 5400 files | 202.4 MB | 653.003 files/s | 29.4 MB/s
+[Progress] 4600 / 5400 files | 206.5 MB | 652.467 files/s | 29.3 MB/s
+[Progress] 4700 / 5400 files | 211.2 MB | 652.958 files/s | 29.3 MB/s
+[Progress] 4800 / 5400 files | 216.3 MB | 652.57 files/s | 29.4 MB/s
+[Progress] 4900 / 5400 files | 221.1 MB | 652.681 files/s | 29.4 MB/s
+[Progress] 5000 / 5400 files | 226.6 MB | 652.604 files/s | 29.6 MB/s
+[Progress] 5100 / 5400 files | 230.9 MB | 653.014 files/s | 29.6 MB/s
+[Progress] 5200 / 5400 files | 234.5 MB | 652.746 files/s | 29.4 MB/s
+[Progress] 5300 / 5400 files | 239.4 MB | 653.019 files/s | 29.5 MB/s
+[Progress] 5400 / 5400 files | 243.4 MB | 652.936 files/s | 29.4 MB/s
+
+[Done] 5400 files | 243.4 MB | 652.541 files/s | 29.4 MB/s | elapsed 8.27534s</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>7</td><td>ssh</td><td>count source files<br><code>find /bryck/cloudcp_fallback/tiny_files -type f 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">5400</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>8</td><td>ssh</td><td>alloc transfer id<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py alloc-id --batchmeta /opt/bryck/bryckapi/downloads/bcloud_batchmeta</code><div class=detail>rc=0</div><pre class="io">{&quot;transfer_id&quot;: 113}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>9</td><td>ssh</td><td>stage batch<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py stage-batch --src /bryck/cloudcp_fallback/tiny_files --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113 --tier tiny --name batch_000000.txt</code><div class=detail>rc=0</div><pre class="io">{&quot;batch_file&quot;: &quot;/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/batches/inprogress/tiny/batch_000000.txt&quot;, &quot;count&quot;: 5400}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>10</td><td>ssh</td><td>write done marker (before .lst — B3 fault injection)<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py done-marker --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113</code><div class=detail>rc=0</div><pre class="io">{&quot;marker&quot;: &quot;/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/_fallback_done&quot;}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>11</td><td>ssh</td><td>make retry .lst<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py make-lst --batch /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/batches/inprogress/tiny/batch_000000.txt --transfer-id 113 --bucket omicron --prefix tiny_files --fs-prefix /bryck/cloudcp_fallback/tiny_files</code><div class=detail>rc=0</div><pre class="io">{&quot;lst_path&quot;: &quot;/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_113/cloudcp_retry_113_batch_000000.txt.lst&quot;, &quot;count&quot;: 5400}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>12</td><td>ssh</td><td>run fallback worker<br><code>/opt/bryck/.venv/bryck/bin/python3 -m bryckcloud.lib.cloud.fallback_worker --transfer-id 113 --transfer-type upload --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113 --pool-size 16</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>13</td><td>ssh</td><td>verify report<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py verify --transfer-id 113</code><div class=detail>rc=0</div><pre class="io">{&quot;total_rows&quot;: 5400, &quot;by_status&quot;: {&quot;FALLBACK_OK&quot;: 5400}}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>14</td><td>ssh</td><td>batch state<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py batch-state --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113 --name batch_000000.txt</code><div class=detail>rc=0</div><pre class="io">{&quot;counts&quot;: {&quot;pending&quot;: 0, &quot;inprogress&quot;: 0, &quot;completed&quot;: 1}, &quot;completed&quot;: true}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>15</td><td>ssh</td><td>check .lst.done<br><code>ls /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_113/cloudcp_retry_113_batch_000000.txt.lst.done &gt;/dev/null 2&gt;&amp;1 &amp;&amp; echo YES || echo NO</code><div class=detail>rc=0</div><pre class="io">YES</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>16</td><td>ssh</td><td>count s3 objects<br><code>aws s3 ls --recursive s3://omicron/tiny_files --endpoint-url https://10.10.10.103:9000 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">5400</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>17</td><td>ssh</td><td>cleanup bucket prefix<br><code>aws s3 rm --recursive s3://omicron/tiny_files --endpoint-url https://10.10.10.103:9000</code><div class=detail>rc=0</div><pre class="io">delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-GWmoj0tzwryr.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-xeDECcPszDgc.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-1ffZ9sOVt76L.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-4lTRG7a1KFiG.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-vSZuTPopEu2Q.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-9tWOw14NPErP.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-BFnwlUQk3U75.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-AVw8csUE4pbK.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-39JKJyrkn5S3.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-5m3Lv761QUDl.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-HzhPmph4YGsP.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-DnMA4gyKG8AY.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-TwHtGmswUpfB.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-UxDLbnzs7Wlg.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-ZciQYo0mvTon.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-XSNBnehaj3Rg.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-NHXaZKahecga.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-dK8mazpW3lYh.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-rXZmZaljl9bJ.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-b7906mp0B0Zn.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-mDwDs7P1tufo.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-pUpnJqbKAQgu.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-pM6JYBBsaoUU.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-fVUUyajFafq0.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-nhMs5usFWkb6.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-rWug0lquWqpz.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-uqp1bLa6O86E.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-w6LxniXs5vDB.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-y4kikm320nBS.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-B1cg19oPRqUk.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-yy0jz8FqbofM.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-2k1CPFsdLVl7.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-xDCduFbzxcbw.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-5huY3M80blvE.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-CSS5yONmcaeZ.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-kgNfxKJTzORc.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-6pvxjAWOxE5Q.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-EgDIgxLLJlum.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-OgTbX5EBWDLx.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-079MWjjvB09J.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-CqylCDaDWrjb.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-IL0HYDxBnDyo.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-GYtTiMinX28h.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-QyNQOdrHta0B.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_2/tiny-jSv4ykbD34n6.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-TLYsG1b7d83p.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-SPpeT3WCv0tF.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-kVK5VkaEs94G.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-PdRMUJeelWEk.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-ddfsWxE6sRgp.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-kWz2XJ7kSTdZ.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-MQzwXRSNWbkM.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-N7oD4IxaWj4X.log
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/tiny-UMyCG9AXMUQw.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_4/tiny-2YYP6qQofKlb.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-sbkat5BlwOxK.txt
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_1/tiny-MCaQRKXcU0R1.json
+delete: s3://omicron/tiny_files/d1_1/d2_1/d3_3/ti
+… [clipped, 374149 chars total]</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>18</td><td>ssh</td><td>cleanup /bryck source<br><code>rm -rf /bryck/cloudcp_fallback/tiny_files</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>19</td><td>ssh</td><td>cleanup batch-meta transfer dir<br><code>rm -rf /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>20</td><td>ssh</td><td>cleanup transfer log dir<br><code>rm -rf /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_113</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr></tbody></table></details></section><section id="CMP-N-04" class="case"><h3>CMP-N-04 <span class="badge" style="background:#1a7f37">PASS</span></h3><p class="desc">B7 — Nonexistent bucket passed to retry_whole_batch: every upload fails with NoSuchBucket after max_attempts retries; ok==0, failed==count; no hang/crash.</p><p class="meta">transfer_id=113 · files=5400 · by_status={} · ok=0 · failed=5400 · batch_completed=None · lst_retired=None · s3_objects=0</p><ul class=reasons><li>all 5400 record(s) failed after retries (nonexistent bucket); no hang/crash</li></ul><details open><summary>Steps &amp; commands (16)</summary><table class="steps"><thead><tr><th>#</th><th>kind</th><th>step / command</th><th>result</th></tr></thead><tbody><tr><td>1</td><td>local</td><td>case<br><div class=detail>CMP-N-04 [NEGATIVE] mechanism=mp dataset=tiny type=upload fault=bad_bucket expect=fail</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>2</td><td>local</td><td>description<br><div class=detail>B7 — Nonexistent bucket passed to retry_whole_batch: every upload fails with NoSuchBucket after max_attempts retries; ok==0, failed==count; no hang/crash.</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>3</td><td>ssh</td><td>preflight bucket<br><code>aws s3 ls s3://omicron --endpoint-url https://10.10.10.103:9000 &gt;/dev/null 2&gt;&amp;1 &amp;&amp; echo OK || echo UNREACHABLE</code><div class=detail>rc=0</div><pre class="io">OK</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>4</td><td>ssh</td><td>prep remote spec dir<br><code>mkdir -p /tmp/cc_component_specs</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>5</td><td>ssh</td><td>upload spec<br><code>sftp put /home/bryck/fallback/cloudcp-phase-wise-testing/CloudCpFallbackTesting/spec_files/02_tiny_files.yaml -&gt; /tmp/cc_component_specs/02_tiny_files.yaml</code><div class=detail>uploaded</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>6</td><td>ssh</td><td>datagen<br><code>/home/bryck/rperiyas/datagen --spec /tmp/cc_component_specs/02_tiny_files.yaml</code><div class=detail>rc=0</div><pre class="io">Planned 5400 files; mode=tree, threads=8
+[Progress] 100 / 5400 files | 3.9 MB | 550.231 files/s | 21.7 MB/s
+[Progress] 200 / 5400 files | 8.2 MB | 605.58 files/s | 24.9 MB/s
+[Progress] 300 / 5400 files | 12.9 MB | 610.154 files/s | 26.3 MB/s
+[Progress] 400 / 5400 files | 17.7 MB | 625.033 files/s | 27.7 MB/s
+[Progress] 500 / 5400 files | 23.4 MB | 629.345 files/s | 29.5 MB/s
+[Progress] 600 / 5400 files | 27.7 MB | 636.684 files/s | 29.4 MB/s
+[Progress] 700 / 5400 files | 32.1 MB | 639.576 files/s | 29.3 MB/s
+[Progress] 800 / 5400 files | 34.9 MB | 642.403 files/s | 28.0 MB/s
+[Progress] 900 / 5400 files | 40.6 MB | 641.585 files/s | 28.9 MB/s
+[Progress] 1000 / 5400 files | 43.8 MB | 644.917 files/s | 28.3 MB/s
+[Progress] 1100 / 5400 files | 48.7 MB | 644.582 files/s | 28.5 MB/s
+[Progress] 1200 / 5400 files | 54.4 MB | 646.955 files/s | 29.3 MB/s
+[Progress] 1300 / 5400 files | 59.0 MB | 647.037 files/s | 29.4 MB/s
+[Progress] 1400 / 5400 files | 64.5 MB | 648.218 files/s | 29.9 MB/s
+[Progress] 1500 / 5400 files | 68.9 MB | 648.548 files/s | 29.8 MB/s
+[Progress] 1600 / 5400 files | 73.5 MB | 649.071 files/s | 29.8 MB/s
+[Progress] 1700 / 5400 files | 77.7 MB | 649.533 files/s | 29.7 MB/s
+[Progress] 1800 / 5400 files | 81.3 MB | 650.456 files/s | 29.4 MB/s
+[Progress] 1900 / 5400 files | 85.9 MB | 650.814 files/s | 29.4 MB/s
+[Progress] 2000 / 5400 files | 90.4 MB | 651.377 files/s | 29.4 MB/s
+[Progress] 2100 / 5400 files | 95.2 MB | 651.293 files/s | 29.5 MB/s
+[Progress] 2200 / 5400 files | 100.0 MB | 651.841 files/s | 29.6 MB/s
+[Progress] 2300 / 5400 files | 103.2 MB | 651.788 files/s | 29.3 MB/s
+[Progress] 2400 / 5400 files | 107.6 MB | 652.172 files/s | 29.2 MB/s
+[Progress] 2500 / 5400 files | 112.6 MB | 651.495 files/s | 29.3 MB/s
+[Progress] 2600 / 5400 files | 116.6 MB | 650.145 files/s | 29.2 MB/s
+[Progress] 2700 / 5400 files | 121.7 MB | 649.989 files/s | 29.3 MB/s
+[Progress] 2800 / 5400 files | 126.0 MB | 650.301 files/s | 29.3 MB/s
+[Progress] 2900 / 5400 files | 129.8 MB | 650.672 files/s | 29.1 MB/s
+[Progress] 3000 / 5400 files | 134.8 MB | 650.02 files/s | 29.2 MB/s
+[Progress] 3100 / 5400 files | 139.5 MB | 650.748 files/s | 29.3 MB/s
+[Progress] 3200 / 5400 files | 143.7 MB | 650.069 files/s | 29.2 MB/s
+[Progress] 3300 / 5400 files | 148.3 MB | 650.812 files/s | 29.2 MB/s
+[Progress] 3400 / 5400 files | 152.2 MB | 650.489 files/s | 29.1 MB/s
+[Progress] 3500 / 5400 files | 156.2 MB | 650.851 files/s | 29.1 MB/s
+[Progress] 3600 / 5400 files | 161.1 MB | 647.284 files/s | 29.0 MB/s
+[Progress] 3700 / 5400 files | 165.5 MB | 647.328 files/s | 29.0 MB/s
+[Progress] 3800 / 5400 files | 171.0 MB | 647.714 files/s | 29.1 MB/s
+[Progress] 3900 / 5400 files | 174.5 MB | 647.964 files/s | 29.0 MB/s
+[Progress] 4000 / 5400 files | 179.3 MB | 648.523 files/s | 29.1 MB/s
+[Progress] 4100 / 5400 files | 185.1 MB | 648.707 files/s | 29.3 MB/s
+[Progress] 4200 / 5400 files | 189.2 MB | 648.605 files/s | 29.2 MB/s
+[Progress] 4300 / 5400 files | 193.2 MB | 649.094 files/s | 29.2 MB/s
+[Progress] 4400 / 5400 files | 197.2 MB | 648.664 files/s | 29.1 MB/s
+[Progress] 4500 / 5400 files | 202.4 MB | 649.154 files/s | 29.2 MB/s
+[Progress] 4600 / 5400 files | 206.5 MB | 648.718 files/s | 29.1 MB/s
+[Progress] 4700 / 5400 files | 211.2 MB | 649.123 files/s | 29.2 MB/s
+[Progress] 4800 / 5400 files | 216.3 MB | 649.177 files/s | 29.3 MB/s
+[Progress] 4900 / 5400 files | 221.1 MB | 649.12 files/s | 29.3 MB/s
+[Progress] 5000 / 5400 files | 226.6 MB | 649.552 files/s | 29.4 MB/s
+[Progress] 5100 / 5400 files | 230.9 MB | 649.245 files/s | 29.4 MB/s
+[Progress] 5200 / 5400 files | 234.3 MB | 649.723 files/s | 29.3 MB/s
+[Progress] 5300 / 5400 files | 239.4 MB | 649.323 files/s | 29.3 MB/s
+[Progress] 5400 / 5400 files | 243.4 MB | 649.837 files/s | 29.3 MB/s
+
+[Done] 5400 files | 243.4 MB | 649.449 files/s | 29.3 MB/s | elapsed 8.31474s</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>7</td><td>ssh</td><td>count source files<br><code>find /bryck/cloudcp_fallback/tiny_files -type f 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">5400</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>8</td><td>ssh</td><td>alloc transfer id<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py alloc-id --batchmeta /opt/bryck/bryckapi/downloads/bcloud_batchmeta</code><div class=detail>rc=0</div><pre class="io">{&quot;transfer_id&quot;: 113}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>9</td><td>ssh</td><td>stage batch<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py stage-batch --src /bryck/cloudcp_fallback/tiny_files --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113 --tier tiny --name batch_000000.txt</code><div class=detail>rc=0</div><pre class="io">{&quot;batch_file&quot;: &quot;/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/batches/inprogress/tiny/batch_000000.txt&quot;, &quot;count&quot;: 5400}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>10</td><td>ssh</td><td>run retry_whole_batch<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py run-mp --transfer-id 113 --batch /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/batches/inprogress/tiny/batch_000000.txt --bucket nonexistent-bucket-xyz --prefix tiny_files --fs-prefix /bryck/cloudcp_fallback/tiny_files --endpoint https://10.10.10.103:9000 --region us-west-1 --transfer-type upload</code><div class=detail>rc=0</div><pre class="io">{&quot;ok&quot;: 0, &quot;failed&quot;: 5400, &quot;ok_bytes&quot;: 0}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>11</td><td>ssh</td><td>verify report<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py verify --transfer-id 113</code><div class=detail>rc=0</div><pre class="io">{&quot;total_rows&quot;: 0, &quot;by_status&quot;: {}}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>12</td><td>ssh</td><td>count s3 objects<br><code>aws s3 ls --recursive s3://omicron/tiny_files --endpoint-url https://10.10.10.103:9000 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">0</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>13</td><td>ssh</td><td>cleanup bucket prefix<br><code>aws s3 rm --recursive s3://omicron/tiny_files --endpoint-url https://10.10.10.103:9000</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>14</td><td>ssh</td><td>cleanup /bryck source<br><code>rm -rf /bryck/cloudcp_fallback/tiny_files</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>15</td><td>ssh</td><td>cleanup batch-meta transfer dir<br><code>rm -rf /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>16</td><td>ssh</td><td>cleanup transfer log dir<br><code>rm -rf /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_113</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr></tbody></table></details></section><section id="CMP-N-05" class="case"><h3>CMP-N-05 <span class="badge" style="background:#1a7f37">PASS</span></h3><p class="desc">B8 — Wrong fs_prefix: compose_s3_key falls back to basename-only keys; uploads succeed but files with the same basename in different sub-directories collide to the same S3 key (last-writer-wins); ok==count but s3_objects may be &lt; count.</p><p class="meta">transfer_id=113 · files=5400 · by_status={&#x27;MP_OK&#x27;: 5400} · ok=5400 · failed=0 · batch_completed=None · lst_retired=None · s3_objects=5400</p><ul class=reasons><li>5400 upload(s) succeeded with basename-only keys (wrong fs_prefix); MP_OK rows=5400</li></ul><details open><summary>Steps &amp; commands (16)</summary><table class="steps"><thead><tr><th>#</th><th>kind</th><th>step / command</th><th>result</th></tr></thead><tbody><tr><td>1</td><td>local</td><td>case<br><div class=detail>CMP-N-05 [NEGATIVE] mechanism=mp dataset=tiny type=upload fault=bad_fsp expect=ok</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>2</td><td>local</td><td>description<br><div class=detail>B8 — Wrong fs_prefix: compose_s3_key falls back to basename-only keys; uploads succeed but files with the same basename in different sub-directories collide to the same S3 key (last-writer-wins); ok==count but s3_objects may be &lt; count.</div></td><td style="color:#57606a;font-weight:700"> </td></tr><tr><td>3</td><td>ssh</td><td>preflight bucket<br><code>aws s3 ls s3://omicron --endpoint-url https://10.10.10.103:9000 &gt;/dev/null 2&gt;&amp;1 &amp;&amp; echo OK || echo UNREACHABLE</code><div class=detail>rc=0</div><pre class="io">OK</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>4</td><td>ssh</td><td>prep remote spec dir<br><code>mkdir -p /tmp/cc_component_specs</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>5</td><td>ssh</td><td>upload spec<br><code>sftp put /home/bryck/fallback/cloudcp-phase-wise-testing/CloudCpFallbackTesting/spec_files/02_tiny_files.yaml -&gt; /tmp/cc_component_specs/02_tiny_files.yaml</code><div class=detail>uploaded</div></td><td style="color:#1a7f37;font-weight:700">&#10003; </td></tr><tr><td>6</td><td>ssh</td><td>datagen<br><code>/home/bryck/rperiyas/datagen --spec /tmp/cc_component_specs/02_tiny_files.yaml</code><div class=detail>rc=0</div><pre class="io">Planned 5400 files; mode=tree, threads=8
+[Progress] 100 / 5400 files | 3.9 MB | 549.177 files/s | 21.7 MB/s
+[Progress] 200 / 5400 files | 8.2 MB | 603.754 files/s | 24.8 MB/s
+[Progress] 300 / 5400 files | 12.9 MB | 618.023 files/s | 26.7 MB/s
+[Progress] 400 / 5400 files | 17.7 MB | 629.82 files/s | 27.9 MB/s
+[Progress] 500 / 5400 files | 23.3 MB | 633.086 files/s | 29.5 MB/s
+[Progress] 600 / 5400 files | 27.7 MB | 635.496 files/s | 29.4 MB/s
+[Progress] 700 / 5400 files | 32.1 MB | 641.201 files/s | 29.4 MB/s
+[Progress] 800 / 5400 files | 34.9 MB | 641.456 files/s | 28.0 MB/s
+[Progress] 900 / 5400 files | 40.6 MB | 644.486 files/s | 29.1 MB/s
+[Progress] 1000 / 5400 files | 43.8 MB | 644.76 files/s | 28.3 MB/s
+[Progress] 1100 / 5400 files | 48.7 MB | 646.951 files/s | 28.6 MB/s
+[Progress] 1200 / 5400 files | 54.4 MB | 647.06 files/s | 29.3 MB/s
+[Progress] 1300 / 5400 files | 59.0 MB | 648.196 files/s | 29.4 MB/s
+[Progress] 1400 / 5400 files | 64.6 MB | 648.624 files/s | 29.9 MB/s
+[Progress] 1500 / 5400 files | 68.9 MB | 649.247 files/s | 29.8 MB/s
+[Progress] 1600 / 5400 files | 73.5 MB | 650.116 files/s | 29.9 MB/s
+[Progress] 1700 / 5400 files | 77.7 MB | 650.642 files/s | 29.7 MB/s
+[Progress] 1800 / 5400 files | 81.3 MB | 651.548 files/s | 29.4 MB/s
+[Progress] 1900 / 5400 files | 85.9 MB | 652.014 files/s | 29.5 MB/s
+[Progress] 2000 / 5400 files | 90.4 MB | 651.475 files/s | 29.4 MB/s
+[Progress] 2100 / 5400 files | 95.2 MB | 652.386 files/s | 29.6 MB/s
+[Progress] 2200 / 5400 files | 100.0 MB | 652.455 files/s | 29.7 MB/s
+[Progress] 2300 / 5400 files | 103.2 MB | 652.925 files/s | 29.3 MB/s
+[Progress] 2400 / 5400 files | 107.6 MB | 653.285 files/s | 29.3 MB/s
+[Progress] 2500 / 5400 files | 112.6 MB | 653.62 files/s | 29.4 MB/s
+[Progress] 2600 / 5400 files | 116.6 MB | 654.008 files/s | 29.3 MB/s
+[Progress] 2700 / 5400 files | 121.7 MB | 653.668 files/s | 29.5 MB/s
+[Progress] 2800 / 5400 files | 126.0 MB | 654.459 files/s | 29.5 MB/s
+[Progress] 2900 / 5400 files | 129.8 MB | 653.713 files/s | 29.3 MB/s
+[Progress] 3000 / 5400 files | 134.8 MB | 654.381 files/s | 29.4 MB/s
+[Progress] 3100 / 5400 files | 139.5 MB | 654.223 files/s | 29.4 MB/s
+[Progress] 3200 / 5400 files | 143.7 MB | 654.376 files/s | 29.4 MB/s
+[Progress] 3300 / 5400 files | 148.3 MB | 654.565 files/s | 29.4 MB/s
+[Progress] 3400 / 5400 files | 152.2 MB | 654.263 files/s | 29.3 MB/s
+[Progress] 3500 / 5400 files | 156.2 MB | 654.646 files/s | 29.2 MB/s
+[Progress] 3600 / 5400 files | 161.1 MB | 654.483 files/s | 29.3 MB/s
+[Progress] 3700 / 5400 files | 165.5 MB | 655.018 files/s | 29.3 MB/s
+[Progress] 3800 / 5400 files | 171.0 MB | 655.03 files/s | 29.5 MB/s
+[Progress] 3900 / 5400 files | 174.4 MB | 653.322 files/s | 29.2 MB/s
+[Progress] 4000 / 5400 files | 179.3 MB | 653.427 files/s | 29.3 MB/s
+[Progress] 4100 / 5400 files | 185.1 MB | 653.142 files/s | 29.5 MB/s
+[Progress] 4200 / 5400 files | 189.2 MB | 653.616 files/s | 29.4 MB/s
+[Progress] 4300 / 5400 files | 193.2 MB | 653.631 files/s | 29.4 MB/s
+[Progress] 4400 / 5400 files | 197.2 MB | 653.886 files/s | 29.3 MB/s
+[Progress] 4500 / 5400 files | 202.4 MB | 653.883 files/s | 29.4 MB/s
+[Progress] 4600 / 5400 files | 206.5 MB | 654.011 files/s | 29.4 MB/s
+[Progress] 4700 / 5400 files | 211.2 MB | 654.076 files/s | 29.4 MB/s
+[Progress] 4800 / 5400 files | 216.3 MB | 653.408 files/s | 29.4 MB/s
+[Progress] 4900 / 5400 files | 221.1 MB | 653.299 files/s | 29.5 MB/s
+[Progress] 5000 / 5400 files | 226.6 MB | 653.204 files/s | 29.6 MB/s
+[Progress] 5100 / 5400 files | 230.9 MB | 653.58 files/s | 29.6 MB/s
+[Progress] 5200 / 5400 files | 234.5 MB | 653.467 files/s | 29.5 MB/s
+[Progress] 5300 / 5400 files | 239.4 MB | 653.668 files/s | 29.5 MB/s
+[Progress] 5400 / 5400 files | 243.4 MB | 653.731 files/s | 29.5 MB/s
+
+[Done] 5400 files | 243.4 MB | 653.339 files/s | 29.5 MB/s | elapsed 8.26524s</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>7</td><td>ssh</td><td>count source files<br><code>find /bryck/cloudcp_fallback/tiny_files -type f 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">5400</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>8</td><td>ssh</td><td>alloc transfer id<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py alloc-id --batchmeta /opt/bryck/bryckapi/downloads/bcloud_batchmeta</code><div class=detail>rc=0</div><pre class="io">{&quot;transfer_id&quot;: 113}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>9</td><td>ssh</td><td>stage batch<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py stage-batch --src /bryck/cloudcp_fallback/tiny_files --transfer-dir /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113 --tier tiny --name batch_000000.txt</code><div class=detail>rc=0</div><pre class="io">{&quot;batch_file&quot;: &quot;/opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/batches/inprogress/tiny/batch_000000.txt&quot;, &quot;count&quot;: 5400}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>10</td><td>ssh</td><td>run retry_whole_batch<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py run-mp --transfer-id 113 --batch /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113/batches/inprogress/tiny/batch_000000.txt --bucket omicron --prefix tiny_files --fs-prefix /nonexistent/wrong/fsp --endpoint https://10.10.10.103:9000 --region us-west-1 --transfer-type upload</code><div class=detail>rc=0</div><pre class="io">{&quot;ok&quot;: 5400, &quot;failed&quot;: 0, &quot;ok_bytes&quot;: 255242664}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>11</td><td>ssh</td><td>verify report<br><code>/opt/bryck/.venv/bryck/bin/python3 /tmp/cc_component_stage.py verify --transfer-id 113</code><div class=detail>rc=0</div><pre class="io">{&quot;total_rows&quot;: 5400, &quot;by_status&quot;: {&quot;MP_OK&quot;: 5400}}</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>12</td><td>ssh</td><td>count s3 objects<br><code>aws s3 ls --recursive s3://omicron/tiny_files --endpoint-url https://10.10.10.103:9000 2&gt;/dev/null | wc -l</code><div class=detail>rc=0</div><pre class="io">5400</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>13</td><td>ssh</td><td>cleanup bucket prefix<br><code>aws s3 rm --recursive s3://omicron/tiny_files --endpoint-url https://10.10.10.103:9000</code><div class=detail>rc=0</div><pre class="io">delete: s3://omicron/tiny_files/tiny-01q3ulKbC4ol.json
+delete: s3://omicron/tiny_files/tiny-0BaMtMH1vTyv.txt
+delete: s3://omicron/tiny_files/tiny-0HEwHVxqZbqF.txt
+delete: s3://omicron/tiny_files/tiny-0HnXs2PEe5bL.txt
+delete: s3://omicron/tiny_files/tiny-0Gx72HoH3ZS3.txt
+delete: s3://omicron/tiny_files/tiny-0JHhOdhtHY8s.json
+delete: s3://omicron/tiny_files/tiny-0IFp4GyNrKOJ.log
+delete: s3://omicron/tiny_files/tiny-07CoruZepziv.json
+delete: s3://omicron/tiny_files/tiny-08iFIdKAbev4.txt
+delete: s3://omicron/tiny_files/tiny-0JQK16GNP34f.json
+delete: s3://omicron/tiny_files/tiny-0MZxZ2hCkedr.log
+delete: s3://omicron/tiny_files/tiny-0K6zVkThWbjJ.txt
+delete: s3://omicron/tiny_files/tiny-09xwP09HBrvj.txt
+delete: s3://omicron/tiny_files/tiny-0PQxFEuo7jiY.txt
+delete: s3://omicron/tiny_files/tiny-0PsAUZXlE3aR.txt
+delete: s3://omicron/tiny_files/tiny-0O8szZTEPEqI.log
+delete: s3://omicron/tiny_files/tiny-0OqQAthaMac2.log
+delete: s3://omicron/tiny_files/tiny-02UF1F4VKsh3.json
+delete: s3://omicron/tiny_files/tiny-0RQdxfKbKr2A.json
+delete: s3://omicron/tiny_files/tiny-0N6fHgeJLMph.json
+delete: s3://omicron/tiny_files/tiny-0R0UJ7H2uSZH.json
+delete: s3://omicron/tiny_files/tiny-0SRqmiEZizWW.json
+delete: s3://omicron/tiny_files/tiny-0FW5nTQyc8Br.log
+delete: s3://omicron/tiny_files/tiny-0TeFTmImvEFr.txt
+delete: s3://omicron/tiny_files/tiny-0SUgFEaDSSjc.log
+delete: s3://omicron/tiny_files/tiny-0SMXBwi5B6nr.txt
+delete: s3://omicron/tiny_files/tiny-0RQub5qaHQhb.json
+delete: s3://omicron/tiny_files/tiny-0Xu2shlZtgnU.log
+delete: s3://omicron/tiny_files/tiny-0VCA8e79flZD.json
+delete: s3://omicron/tiny_files/tiny-0Y6hL1I8HooS.txt
+delete: s3://omicron/tiny_files/tiny-0WVcpiQKT3AL.txt
+delete: s3://omicron/tiny_files/tiny-0a4bI2At3TZN.log
+delete: s3://omicron/tiny_files/tiny-0ZBNFVqoW5aM.json
+delete: s3://omicron/tiny_files/tiny-0a4GJSCKUqRD.json
+delete: s3://omicron/tiny_files/tiny-0ZXE1AXYcAh6.json
+delete: s3://omicron/tiny_files/tiny-05eeLXV0826h.json
+delete: s3://omicron/tiny_files/tiny-0cFWCmEaSeju.txt
+delete: s3://omicron/tiny_files/tiny-04BYywmK1dlW.log
+delete: s3://omicron/tiny_files/tiny-0BDlXxG1dmkW.txt
+delete: s3://omicron/tiny_files/tiny-0bm0fx0gTKDf.json
+delete: s3://omicron/tiny_files/tiny-0ElUWQQMLmw0.json
+delete: s3://omicron/tiny_files/tiny-0YFxInePqQ6j.txt
+delete: s3://omicron/tiny_files/tiny-0iqLTWb7Za6t.txt
+delete: s3://omicron/tiny_files/tiny-079MWjjvB09J.txt
+delete: s3://omicron/tiny_files/tiny-0hcLSeuHs7LU.txt
+delete: s3://omicron/tiny_files/tiny-00UHC2bKKtOU.log
+delete: s3://omicron/tiny_files/tiny-0h9lfZzQyCO3.txt
+delete: s3://omicron/tiny_files/tiny-0q8c4OPMEftc.json
+delete: s3://omicron/tiny_files/tiny-0kC3gX5kZBlz.log
+delete: s3://omicron/tiny_files/tiny-0rIRIlQhudIu.json
+delete: s3://omicron/tiny_files/tiny-0m112F2Q6MpX.txt
+delete: s3://omicron/tiny_files/tiny-0rq0HYHuQ7Qb.json
+delete: s3://omicron/tiny_files/tiny-0uV7S8szwWLx.json
+delete: s3://omicron/tiny_files/tiny-0Do965XCeEXZ.json
+delete: s3://omicron/tiny_files/tiny-0wakPf6v1k2l.txt
+delete: s3://omicron/tiny_files/tiny-0gNlMamxYgcK.txt
+delete: s3://omicron/tiny_files/tiny-08EivCfhxJvl.txt
+delete: s3://omicron/tiny_files/tiny-0pX5X8bY5mMR.txt
+delete: s3://omicron/tiny_files/tiny-0AGqdtZrAAX9.txt
+delete: s3://omicron/tiny_files/tiny-0bnJp30T5i3h.json
+delete: s3://omicron/tiny_files/tiny-08yK3i7NmVSC.json
+delete: s3://omicron/tiny_files/tiny-0Gpm2fZI3bkE.log
+delete: s3://omicron/tiny_files/tiny-0vyai2nxsste.txt
+delete: s3://omicron/tiny_files/tiny-0qY0o11JaezV.txt
+delete: s3://omicron/tiny_files/tiny-0y9BYg2ZvTsA.json
+delete: s3://omicron/tiny_files/tiny-0y1czNAb2RST.txt
+delete: s3://omicron/tiny_files/tiny-0yFA8sKFoYL0.txt
+delete: s3://omicron/tiny_files/tiny-0yK0hwsYUUG3.txt
+delete: s3://omicron/tiny_files/tiny-03LwjQL53pyZ.json
+delete: s3://omicron/tiny_files/tiny-0wcJvN8PiWBo.txt
+delete: s3://omicron/tiny_files/tiny-0xfnqCQdxxea.txt
+delete: s3://omicron/tiny_files/tiny-0jdrGOqjdkv2.txt
+delete: s3://omicron/tiny_files/tiny-0zStV5fNp7DJ.txt
+delete: s3://omicron/tiny_files/
+… [clipped, 293149 chars total]</pre></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>14</td><td>ssh</td><td>cleanup /bryck source<br><code>rm -rf /bryck/cloudcp_fallback/tiny_files</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>15</td><td>ssh</td><td>cleanup batch-meta transfer dir<br><code>rm -rf /opt/bryck/bryckapi/downloads/bcloud_batchmeta/transfer_113</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr><tr><td>16</td><td>ssh</td><td>cleanup transfer log dir<br><code>rm -rf /opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloud_transfer_113</code><div class=detail>rc=0</div></td><td style="color:#1a7f37;font-weight:700">&#10003; rc=0</td></tr></tbody></table></details></section></div></body></html>

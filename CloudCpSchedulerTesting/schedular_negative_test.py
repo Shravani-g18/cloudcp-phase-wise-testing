@@ -205,6 +205,7 @@ class NegCase:
     desc: str
     build: "callable"
     posix_only: bool = False
+    pause_resume: bool = False       # route to the dedicated kill/resume runner
 
 
 # =====================================================================================
@@ -412,6 +413,315 @@ CASE_BY_ID = {c.id: c for c in CASES}
 
 
 # =====================================================================================
+# Pause / resume negatives (plan Group E.2) — dedicated two-phase runner
+# =====================================================================================
+@dataclass
+class PRNegSetup:
+    src: str
+    dst: str
+    files: int = 4000                    # zero-byte backlog to synthesise
+    kill_after: float = DEF_KILL_AFTER   # kill delay for the first (interrupted) run
+    resume_new_id: bool = False          # resume with a fresh id+dir (no shared state)
+    delete_transfer_dir: bool = False    # rm the transfer-dir before resuming
+    corrupt_manifest: bool = False       # scribble over the batch-state manifest
+    readonly_transfer: bool = False      # chmod 0500 the transfer-dir before resuming
+    kill_during_reconcile: bool = False  # kill the resume run early, then a 3rd clean run
+    concurrent: bool = False             # two brokers on the same id+dir at once
+    expect: dict = field(default_factory=dict)
+    note: str = ""
+
+
+def _pr_neg_dst(cfg: NegConfig, cid: str) -> str:
+    return f"{cfg.s3_base.rstrip('/')}/neg/{cid}"
+
+
+def _b_pr_wrong_id(sb, cfg, cid):
+    src = sb.data / cid
+    make_tier(src, "zero", 4000, 0)
+    return PRNegSetup(src=str(src), dst=_pr_neg_dst(cfg, cid), files=4000,
+                      resume_new_id=True,
+                      expect={"resume_exit": "handled", "no_dup": True,
+                              "no_timeout": True, "no_traceback": True},
+                      note="resume with a DIFFERENT id/dir: no shared state, safe full re-run")
+
+
+def _b_pr_deleted_dir(sb, cfg, cid):
+    src = sb.data / cid
+    make_tier(src, "zero", 4000, 0)
+    return PRNegSetup(src=str(src), dst=_pr_neg_dst(cfg, cid), files=4000,
+                      delete_transfer_dir=True,
+                      expect={"resume_exit": "zero", "complete": True, "no_dup": True,
+                              "no_timeout": True, "no_traceback": True},
+                      note="resume after transfer-dir deleted: clean full run, no crash")
+
+
+def _b_pr_corrupt_meta(sb, cfg, cid):
+    src = sb.data / cid
+    make_tier(src, "zero", 4000, 0)
+    return PRNegSetup(src=str(src), dst=_pr_neg_dst(cfg, cid), files=4000,
+                      corrupt_manifest=True,
+                      expect={"resume_exit": "zero", "complete": True, "no_dup": True,
+                              "no_timeout": True, "no_traceback": True},
+                      note="resume with corrupt batch-state manifest: reconcile/repair via "
+                           "state dirs (host cloudcp.log is shared and never touched)")
+
+
+def _b_pr_readonly(sb, cfg, cid):
+    src = sb.data / cid
+    make_tier(src, "zero", 4000, 0)
+    return PRNegSetup(src=str(src), dst=_pr_neg_dst(cfg, cid), files=4000,
+                      readonly_transfer=True,
+                      expect={"resume_exit": "nonzero", "no_timeout": True,
+                              "no_traceback": True},
+                      note="read-only transfer-dir on resume: reconcile write fails fast")
+
+
+def _b_pr_kill_reconcile(sb, cfg, cid):
+    src = sb.data / cid
+    make_tier(src, "zero", 4000, 0)
+    return PRNegSetup(src=str(src), dst=_pr_neg_dst(cfg, cid), files=4000,
+                      kill_during_reconcile=True,
+                      expect={"resume_exit": "zero", "complete": True, "no_dup": True,
+                              "no_timeout": True, "no_traceback": True},
+                      note="kill again during resume reconcile; a third resume still completes")
+
+
+def _b_pr_concurrent(sb, cfg, cid):
+    src = sb.data / cid
+    make_tier(src, "zero", 4000, 0)
+    return PRNegSetup(src=str(src), dst=_pr_neg_dst(cfg, cid), files=4000,
+                      concurrent=True,
+                      expect={"resume_exit": "handled", "no_dup": True,
+                              "no_timeout": True, "no_traceback": True},
+                      note="two brokers on the same id+dir: atomic claim() prevents double dispatch")
+
+
+def _b_pr_orphan_object(sb, cfg, cid):
+    src = sb.data / cid
+    make_tier(src, "zero", 4000, 0)
+    return PRNegSetup(src=str(src), dst=_pr_neg_dst(cfg, cid), files=4000,
+                      expect={"resume_exit": "zero", "complete": True, "no_dup": True,
+                              "no_timeout": True, "no_traceback": True},
+                      note="orphan inprogress w/ objects already uploaded: resume requeues, "
+                           "SKIP_EXISTING dedups → no duplicate uploads")
+
+
+PR_NEG_CASES = [
+    NegCase("SCH-PR-NEG-01", "pause_resume", "Resume with a different id",
+            "re-run after kill with a fresh id/dir", _b_pr_wrong_id, True, True),
+    NegCase("SCH-PR-NEG-02", "pause_resume", "Resume after transfer-dir deleted",
+            "delete transfer_<id> then re-run", _b_pr_deleted_dir, True, True),
+    NegCase("SCH-PR-NEG-03", "pause_resume", "Corrupt batch-state on resume",
+            "scribble the manifest then resume", _b_pr_corrupt_meta, True, True),
+    NegCase("SCH-PR-NEG-04", "pause_resume", "Read-only transfer-dir on resume",
+            "chmod 0500 then resume", _b_pr_readonly, True, True),
+    NegCase("SCH-PR-NEG-05", "pause_resume", "Kill during resume reconcile",
+            "kill the resume broker early, then a clean run", _b_pr_kill_reconcile, True, True),
+    NegCase("SCH-PR-NEG-06", "pause_resume", "Concurrent resume (two brokers)",
+            "two brokers on the same id+dir", _b_pr_concurrent, True, True),
+    NegCase("SCH-PR-NEG-07", "pause_resume", "Orphan inprogress, object uploaded",
+            "kill after upload, before completed/.lst", _b_pr_orphan_object, True, True),
+]
+CASES += PR_NEG_CASES
+CASE_BY_ID = {c.id: c for c in CASES}
+
+
+def _clear_dst(cfg: NegConfig, dst: str) -> None:
+    try:
+        subprocess.run(["aws", "s3", "rm", dst, "--recursive",
+                        "--endpoint-url", cfg.endpoint_url],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError:
+        pass
+
+
+def _count_dst_objects(cfg: NegConfig, dst: str) -> int:
+    try:
+        out = subprocess.run(["aws", "s3", "ls", dst, "--recursive",
+                              "--endpoint-url", cfg.endpoint_url],
+                             capture_output=True, text=True)
+        return sum(1 for ln in out.stdout.splitlines() if ln.strip())
+    except OSError:
+        return -1
+
+
+def run_pr_neg_case(case: NegCase, cfg: NegConfig, out_root: Path) -> dict:
+    """Two-phase pause/resume negative: interrupt a first run, mutate, then resume."""
+    LOG.info("=" * 70)
+    LOG.info("CASE %s — %s", case.id, case.title)
+    result = {
+        "id": case.id, "group": case.group, "title": case.title, "desc": case.desc,
+        "status": "SKIP", "note": "", "checks": [], "rc": None,
+        "csv_summary": {}, "structure": [], "expect": {},
+    }
+    if case.posix_only and not POSIX:
+        result["note"] = "POSIX-only (kill/chmod); run on the Linux host"
+        return result
+
+    with Sandbox(out_root, case.id) as sb:
+        setup = case.build(sb, cfg, case.id)
+        result["note"] = setup.note
+        result["expect"] = setup.expect
+        result["structure"] = [{"tier": "zero", "count": setup.files,
+                                "file_size_bytes": 0, "total_bytes": 0}]
+
+        if cfg.dry_run:
+            result["status"] = "SKIP"
+            result["note"] = "dry-run: " + setup.note
+            return result
+
+        env = os.environ.copy()
+        _clear_dst(cfg, setup.dst)
+
+        tr_id = _alloc_transfer_id(cfg)
+        transfer_dir = sb.batchmeta / f"transfer_{tr_id}"
+        transfer_dir.mkdir(parents=True, exist_ok=True)
+
+        # -- phase 1: interrupted first run --------------------------------
+        LOG.info("phase 1: interrupted run id=%s (SIGKILL after %.1fs)", tr_id, setup.kill_after)
+        _run_proc(_build_cmd(cfg, tr_id, setup.src, setup.dst, transfer_dir, []),
+                  env, cfg.timeout, sb.logs / f"stderr_p1_{tr_id}.log",
+                  signal_spec=(signal.SIGKILL, setup.kill_after))
+
+        # -- between-phase fault injection ---------------------------------
+        resume_id, resume_dir = tr_id, transfer_dir
+        if setup.resume_new_id:
+            resume_id = _alloc_transfer_id(cfg)
+            resume_dir = sb.batchmeta / f"transfer_{resume_id}"
+            resume_dir.mkdir(parents=True, exist_ok=True)
+            LOG.info("fault: resume uses a fresh id=%s (no shared state)", resume_id)
+        if setup.delete_transfer_dir:
+            LOG.info("fault: deleting transfer-dir %s", transfer_dir)
+            _force_rmtree(transfer_dir)
+            resume_dir.mkdir(parents=True, exist_ok=True)
+        if setup.corrupt_manifest:
+            mf = transfer_dir / "manifest.json"
+            LOG.info("fault: corrupting %s", mf)
+            mf.write_bytes(b"{ not json ,,, \x00\x01 truncated")
+        if setup.readonly_transfer:
+            sb.guard_chmod(transfer_dir, 0o500)
+
+        # -- phase 2: resume ------------------------------------------------
+        start_dt = _dt.datetime.now()
+        cap = st.JournalCapture(cfg.journal_tag, resume_id, sb.logs, start_dt, cfg.dry_run,
+                                lead_sec=cfg.capture_lead, drain_sec=cfg.capture_drain)
+        cap.start()
+        stderr_p2 = sb.logs / f"stderr_p2_{resume_id}.log"
+        resume_cmd = _build_cmd(cfg, resume_id, setup.src, setup.dst, resume_dir, [])
+
+        if setup.concurrent:
+            LOG.info("phase 2: two concurrent brokers on id=%s", resume_id)
+            run_info = _run_two_brokers(resume_cmd, env, cfg.timeout, stderr_p2)
+        elif setup.kill_during_reconcile:
+            LOG.info("phase 2: kill resume during reconcile (SIGKILL after 0.5s)")
+            _run_proc(resume_cmd, env, cfg.timeout, sb.logs / f"stderr_p2kill_{resume_id}.log",
+                      signal_spec=(signal.SIGKILL, 0.5))
+            LOG.info("phase 3: final clean resume id=%s", resume_id)
+            run_info = _run_proc(resume_cmd, env, cfg.timeout, stderr_p2)
+        else:
+            run_info = _run_proc(resume_cmd, env, cfg.timeout, stderr_p2)
+        cap.stop()
+
+        if setup.readonly_transfer:
+            try:
+                transfer_dir.chmod(0o755)
+            except OSError:
+                pass
+
+        # -- gather results -------------------------------------------------
+        csv_stats = {"distinct": 0, "rows": 0, "duplicates": 0, "failed": 0}
+        csv_src = st.find_results_csv(cfg.transfer_logs_dir, resume_id)
+        if csv_src:
+            csv_stats = st.csv_duplicate_stats(csv_src)
+        bucket_objs = _count_dst_objects(cfg, setup.dst)
+        result["csv_summary"] = {
+            "total": csv_stats["distinct"], "success": csv_stats["distinct"] - csv_stats["failed"],
+            "failed": csv_stats["failed"], "duplicates": csv_stats["duplicates"],
+            "bucket_objects": bucket_objs,
+        }
+
+        # clean up host log(s) + bucket
+        _cleanup_transfer_log(cfg.transfer_logs_dir, tr_id)
+        if resume_id != tr_id:
+            _cleanup_transfer_log(cfg.transfer_logs_dir, resume_id)
+        _clear_dst(cfg, setup.dst)
+
+        ok, checks = _pr_neg_evaluate(setup.expect, run_info, csv_stats, bucket_objs,
+                                      setup.files, stderr_p2)
+        result.update({"status": "PASS" if ok else "FAIL", "checks": checks,
+                       "rc": run_info["rc"], "timed_out": run_info["timed_out"],
+                       "transfer_id": resume_id})
+    return result
+
+
+def _run_two_brokers(cmd, env, timeout, stderr_path) -> dict:
+    """Spawn two brokers on the same id+dir at once; wait for both."""
+    popen_kw = {"preexec_fn": os.setsid} if POSIX else {}
+    with open(stderr_path, "wb") as errfh:
+        p1 = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=errfh, env=env, **popen_kw)
+        p2 = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                              env=env, **popen_kw)
+        timed_out = False
+        try:
+            rc1 = p1.wait(timeout=timeout)
+            rc2 = p2.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            for p in (p1, p2):
+                try:
+                    os.killpg(os.getpgid(p.pid), signal.SIGKILL)
+                except (ProcessLookupError, OSError):
+                    pass
+            rc1, rc2 = p1.wait(), p2.wait()
+    return {"rc": rc1 if rc1 not in (0, None) else rc2, "timed_out": timed_out}
+
+
+def _pr_neg_evaluate(expect: dict, run_info: dict, csv_stats: dict, bucket_objs: int,
+                     files: int, stderr_path: Path) -> tuple[bool, list[str]]:
+    checks: list[str] = []
+    ok = True
+    rc, timed_out = run_info["rc"], run_info["timed_out"]
+
+    if expect.get("no_timeout"):
+        good = not timed_out
+        ok &= good
+        checks.append(f"[{'PASS' if good else 'FAIL'}] no_timeout (timed_out={timed_out})")
+
+    want = expect.get("resume_exit")
+    if want:
+        if want == "zero":
+            good = rc == 0
+        elif want == "nonzero":
+            good = rc not in (0, None)
+        else:  # handled: any real exit, not a hang
+            good = rc is not None and not timed_out
+        ok &= good
+        checks.append(f"[{'PASS' if good else 'FAIL'}] resume_exit={want} (rc={rc})")
+
+    if expect.get("no_dup"):
+        good = csv_stats.get("duplicates", 0) == 0
+        ok &= good
+        checks.append(f"[{'PASS' if good else 'FAIL'}] no_dup (duplicates={csv_stats.get('duplicates')})")
+
+    if expect.get("complete"):
+        good = bucket_objs == files
+        ok &= good
+        checks.append(f"[{'PASS' if good else 'FAIL'}] complete (bucket={bucket_objs} want={files})")
+
+    if expect.get("no_traceback"):
+        tb = False
+        try:
+            tb = b"Traceback (most recent call" in stderr_path.read_bytes()
+        except OSError:
+            pass
+        good = not tb
+        ok &= good
+        checks.append(f"[{'PASS' if good else 'FAIL'}] no_traceback (traceback={tb})")
+
+    return ok, checks
+
+
+# =====================================================================================
 # Execution
 # =====================================================================================
 def _build_cmd(cfg: NegConfig, tr_id: int, src: str, dst: str,
@@ -581,6 +891,9 @@ def run_case(case: NegCase, cfg: NegConfig, out_root: Path) -> dict:
         "status": "SKIP", "note": "", "checks": [], "rc": None,
         "csv_summary": {}, "structure": [], "expect": {},
     }
+
+    if case.pause_resume:
+        return run_pr_neg_case(case, cfg, out_root)
 
     if case.posix_only and not POSIX:
         result["note"] = "POSIX-only fault (chmod/symlink/signal); run on the Linux host"

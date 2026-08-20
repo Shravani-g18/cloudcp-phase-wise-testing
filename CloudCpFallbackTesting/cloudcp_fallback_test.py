@@ -1248,6 +1248,14 @@ class Runner:
                     t_src, t_dst = src, dst
                 else:
                     t_src, t_dst = dst, dl_dst
+                    # cloudcp skips objects whose original local copy still
+                    # exists, so clear the upload source and hand the download a
+                    # fresh, separate target dir (distinct from the upload src).
+                    src_rm = f"rm -rf {src}" if ds.tier_dir else "true"
+                    self.host.run(rec, "clear source before download",
+                                  src_rm, check=False)
+                    self.host.run(rec, "prep download target",
+                                  f"mkdir -p {dl_dst}", check=False)
                 try:
                     transfer_id = initiate_transfer(
                         self.api, rec, self.creds["cloud_type"], t_src, t_dst)
@@ -1388,22 +1396,87 @@ VERDICT_COLORS = {
 }
 
 
-def render_html(results: list[dict], meta: dict) -> str:
+def _fmt_duration(started: str | None, finished: str | None) -> str:
+    """Human-readable elapsed time between two ISO timestamps ('-' if unknown)."""
+    if not started or not finished:
+        return "-"
+    try:
+        secs = int((_dt.datetime.fromisoformat(finished)
+                    - _dt.datetime.fromisoformat(started)).total_seconds())
+    except ValueError:
+        return "-"
+    if secs < 0:
+        return "-"
+    if secs < 60:
+        return f"{secs}s"
+    m, s = divmod(secs, 60)
+    if m < 60:
+        return f"{m}m{s:02d}s"
+    h, m = divmod(m, 60)
+    return f"{h}h{m:02d}m{s:02d}s"
+
+
+def _render_step_rows(steps: list[dict], esc) -> str:
+    """Render <tr> rows for a list of recorded steps (shared by cases + finalize)."""
+    out_rows = []
+    for s in steps:
+        ok = s.get("ok")
+        ok_txt = "" if ok is None else ("&#10003;" if ok else "&#10007;")
+        ok_col = "#1a7f37" if ok else ("#cf222e" if ok is False else "#57606a")
+        out = ""
+        if s.get("stdout") or s.get("stderr"):
+            stderr_part = ("<br>[stderr] " + esc(s["stderr"])) if s.get("stderr") else ""
+            out = f'<pre class="io">{esc(s.get("stdout", ""))}{stderr_part}</pre>'
+        cmd = f'<code>{esc(s["command"])}</code>' if s.get("command") else ""
+        detail = ("<div class=detail>" + esc(s["detail"]) + "</div>") if s.get("detail") else ""
+        rc_txt = "" if s.get("rc") is None else ("rc=" + esc(s["rc"]))
+        out_rows.append(
+            f'<tr><td>{s["seq"]}</td>'
+            f'<td>{esc(s["kind"])}<br><span class="ts">{esc(s.get("ts", ""))}</span></td>'
+            f'<td>{esc(s["name"])}<br>{cmd}{detail}{out}</td>'
+            f'<td style="color:{ok_col};font-weight:700">{ok_txt} {rc_txt}</td></tr>'
+        )
+    return "".join(out_rows)
+
+
+def render_html(results: list[dict], meta: dict,
+                finalize_steps: list[dict] | None = None) -> str:
     def esc(x: Any) -> str:
         return html.escape(str(x))
 
     counts: dict[str, int] = {}
+    total_steps = 0
     for r in results:
         counts[r["verdict"]] = counts.get(r["verdict"], 0) + 1
+        total_steps += len(r.get("steps", []))
     summary_badges = " ".join(
         f'<span class="badge" style="background:{VERDICT_COLORS.get(k, "#57606a")}">'
         f'{esc(k)}: {v}</span>'
         for k, v in sorted(counts.items())
     )
 
+    # Run-level summary panel (totals + overall wall-clock span).
+    starts = [r.get("started") for r in results if r.get("started")]
+    ends = [r.get("finished") for r in results if r.get("finished")]
+    run_duration = _fmt_duration(min(starts) if starts else None,
+                                 max(ends) if ends else None)
+    stat_cells = "".join(
+        f'<div class="stat"><span class="num">{esc(v)}</span>'
+        f'<span class="lbl">{esc(k)}</span></div>'
+        for k, v in (
+            ("cases", len(results)),
+            ("passed", counts.get("PASS", 0)),
+            ("failed", counts.get("FAIL", 0)),
+            ("errored", counts.get("ERROR", 0)),
+            ("steps", total_steps),
+            ("duration", run_duration),
+        )
+    )
+
     rows = []
     for r in results:
         color = VERDICT_COLORS.get(r["verdict"], "#57606a")
+        dur = _fmt_duration(r.get("started"), r.get("finished"))
         rows.append(
             f'<tr>'
             f'<td><a href="#{esc(r["case_id"])}">{esc(r["case_id"])}</a></td>'
@@ -1414,6 +1487,8 @@ def render_html(results: list[dict], meta: dict) -> str:
             f'<td>{esc(r["hi_perf_opt"])}</td>'
             f'<td>{esc(r["fallback_enabled"])}</td>'
             f'<td>{esc(r.get("final_state") or "-")}</td>'
+            f'<td>{esc(len(r.get("steps", [])))}</td>'
+            f'<td>{esc(dur)}</td>'
             f'<td><span class="badge" style="background:{color}">{esc(r["verdict"])}</span></td>'
             f'</tr>'
         )
@@ -1421,29 +1496,14 @@ def render_html(results: list[dict], meta: dict) -> str:
     sections = []
     for r in results:
         color = VERDICT_COLORS.get(r["verdict"], "#57606a")
-        step_rows = []
-        for s in r["steps"]:
-            ok = s.get("ok")
-            ok_txt = "" if ok is None else ("&#10003;" if ok else "&#10007;")
-            ok_col = "#1a7f37" if ok else ("#cf222e" if ok is False else "#57606a")
-            out = ""
-            if s.get("stdout") or s.get("stderr"):
-                stderr_part = ("<br>[stderr] " + esc(s["stderr"])) if s.get("stderr") else ""
-                out = f'<pre class="io">{esc(s.get("stdout", ""))}{stderr_part}</pre>'
-            cmd = f'<code>{esc(s["command"])}</code>' if s.get("command") else ""
-            detail = ("<div class=detail>" + esc(s["detail"]) + "</div>") if s.get("detail") else ""
-            rc_txt = "" if s.get("rc") is None else ("rc=" + esc(s["rc"]))
-            step_rows.append(
-                f'<tr><td>{s["seq"]}</td>'
-                f'<td>{esc(s["kind"])}</td>'
-                f'<td>{esc(s["name"])}<br>{cmd}{detail}{out}</td>'
-                f'<td style="color:{ok_col};font-weight:700">{ok_txt} {rc_txt}</td></tr>'
-            )
+        step_rows = _render_step_rows(r["steps"], esc)
         reasons = "".join(f"<li>{esc(x)}</li>" for x in r.get("reasons", []))
         rep = r.get("report", {})
         cap = r.get("capture", {})
         metrics = (
             f'transfer_id={esc(r.get("transfer_id"))} · state={esc(r.get("final_state") or "-")} · '
+            f'started={esc(r.get("started") or "-")} · '
+            f'duration={esc(_fmt_duration(r.get("started"), r.get("finished")))} · '
             f'expected_files={esc(r.get("expected_files"))} · '
             f'fallback_started={esc(cap.get("logs_fallback_started", "-"))} · '
             f'retried_rows={esc(rep.get("retried_rows"))} · '
@@ -1460,9 +1520,25 @@ def render_html(results: list[dict], meta: dict) -> str:
             f'<p class="meta">{metrics}</p>'
             f'{("<ul class=reasons>" + reasons + "</ul>") if reasons else ""}'
             f'<details open><summary>Steps &amp; commands ({len(r["steps"])})</summary>'
-            f'<table class="steps"><thead><tr><th>#</th><th>kind</th>'
+            f'<table class="steps"><thead><tr><th>#</th><th>kind / ts</th>'
             f'<th>step / command</th><th>result</th></tr></thead>'
-            f'<tbody>{"".join(step_rows)}</tbody></table></details>'
+            f'<tbody>{step_rows}</tbody></table></details>'
+            f'</section>'
+        )
+
+    # Teardown / finalize flow (config restore etc.) — part of the run flow, so
+    # it is surfaced in the HTML instead of being hidden in finalize.json.
+    finalize_section = ""
+    if finalize_steps:
+        finalize_section = (
+            f'<section id="__finalize__" class="case">'
+            f'<h3>Finalize / teardown</h3>'
+            f'<p class="desc">Post-run steps shared across the suite '
+            f'(config restore, session cleanup).</p>'
+            f'<details open><summary>Steps &amp; commands ({len(finalize_steps)})</summary>'
+            f'<table class="steps"><thead><tr><th>#</th><th>kind / ts</th>'
+            f'<th>step / command</th><th>result</th></tr></thead>'
+            f'<tbody>{_render_step_rows(finalize_steps, esc)}</tbody></table></details>'
             f'</section>'
         )
 
@@ -1472,6 +1548,10 @@ def render_html(results: list[dict], meta: dict) -> str:
     header h1{margin:0;font-size:20px}
     .wrap{padding:20px 28px}
     .badge{color:#fff;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:700}
+    .stats{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}
+    .stat{background:#fff;border:1px solid #d0d7de;border-radius:8px;padding:10px 16px;min-width:88px;text-align:center}
+    .stat .num{display:block;font-size:22px;font-weight:700}
+    .stat .lbl{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#57606a}
     table{border-collapse:collapse;width:100%;background:#fff;margin:12px 0;font-size:13px}
     th,td{border:1px solid #d0d7de;padding:6px 8px;text-align:left;vertical-align:top}
     th{background:#eaeef2}
@@ -1483,6 +1563,7 @@ def render_html(results: list[dict], meta: dict) -> str:
     .reasons{margin:8px 0;color:#9a6700}
     code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;color:#0550ae;word-break:break-all}
     .detail{color:#57606a;font-size:12px;margin-top:2px}
+    .ts{color:#8c959f;font-size:10px;font-family:ui-monospace,Consolas,monospace}
     pre.io{background:#0d1117;color:#c9d1d9;padding:8px;border-radius:6px;overflow:auto;max-height:220px;font-size:11px;margin:6px 0 0}
     table.steps td:first-child{width:32px;text-align:right;color:#57606a}
     summary{cursor:pointer;font-weight:600;margin:6px 0}
@@ -1490,17 +1571,21 @@ def render_html(results: list[dict], meta: dict) -> str:
     head = (
         f'<tr><th>case</th><th>group</th><th>dir</th><th>dataset</th>'
         f'<th>profile (F/C%)</th><th>HI_PERF</th><th>FALLBACK</th>'
-        f'<th>state</th><th>verdict</th></tr>'
+        f'<th>state</th><th>steps</th><th>dur</th><th>verdict</th></tr>'
     )
     return (
         f'<!doctype html><html><head><meta charset="utf-8">'
         f'<title>CloudCp Fallback Test Report</title><style>{style}</style></head><body>'
         f'<header><h1>CloudCp Fallback Test Report</h1>'
         f'<div>{esc(meta.get("generated"))} · host {esc(meta.get("host"))} · '
-        f'seed {esc(meta.get("seed"))} · {len(results)} case(s)</div></header>'
-        f'<div class="wrap"><p>{summary_badges}</p>'
+        f'seed {esc(meta.get("seed"))} · {len(results)} case(s)'
+        f'{" · DRY-RUN" if meta.get("dry_run") else ""}'
+        f'{" · INTERRUPTED" if meta.get("interrupted") else ""}</div></header>'
+        f'<div class="wrap">'
+        f'<div class="stats">{stat_cells}</div>'
+        f'<p>{summary_badges}</p>'
         f'<table class="summary"><thead>{head}</thead><tbody>{"".join(rows)}</tbody></table>'
-        f'{"".join(sections)}</div></body></html>'
+        f'{"".join(sections)}{finalize_section}</div></body></html>'
     )
 
 
@@ -1557,6 +1642,32 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     paths.add_argument("--src-base", default=DEF_SRC_BASE)
     paths.add_argument("--bucket-base", default=DEF_BUCKET_BASE)
     paths.add_argument("--dl-base", default=DEF_DL_BASE)
+
+    # -- component-level fallback tests (fallback_worker + mp_batch_retry) -----
+    # These run the two internal fallback mechanisms in isolation via SSH,
+    # staging their exact on-disk inputs (see plan_cp_component_fallback.md).
+    comp = p.add_argument_group("component tests (internal fallback mechanisms)")
+    comp.add_argument("--component", action="store_true",
+                      help="Run the component fallback suite (fallback_worker + mp_batch_retry).")
+    comp.add_argument("--component-one",
+                      help="Run one/comma-separated component case(s) by # index or id.")
+    comp.add_argument("--component-negative", action="store_true",
+                      help="Run only the component negative cases.")
+    comp.add_argument("--component-list", action="store_true",
+                      help="List all component cases and exit.")
+    comp.add_argument("--heavy", action="store_true",
+                      help="Include heavy datasets (large, scale) in the component suite.")
+    comp.add_argument("--component-bucket", default="omicron",
+                      help="Destination bucket for both component mechanisms (default: omicron).")
+    comp.add_argument("--region", default="us-west-1",
+                      help="AWS region passed to retry_whole_batch (default: us-west-1).")
+    comp.add_argument("--venv-python", default="/opt/bryck/.venv/bryck/bin/python3",
+                      help="Target interpreter that imports bryckcloud.")
+    comp.add_argument("--batchmeta-dir",
+                      default="/opt/bryck/bryckapi/downloads/bcloud_batchmeta",
+                      help="BATCH_FILE_DIR (batch-meta root) on the target.")
+    comp.add_argument("--pool-size", type=int, default=16,
+                      help="Fallback worker --pool-size (default: 16).")
     return p.parse_args(argv)
 
 
@@ -1676,10 +1787,18 @@ def main(argv: list[str] | None = None) -> int:
               + ", ".join(f"{k}={v.fail_pct}/{v.crash_pct}" for k, v in PROFILES.items()))
         return 0
 
+    if args.component_list:
+        from cloudcp_component_fallback_test import print_component_list
+        print_component_list()
+        return 0
+
+    component_mode = bool(args.component or args.component_one or args.component_negative)
+
     selected = select_cases(args, catalog)
-    if not selected:
+    if not selected and not component_mode:
         print("No cases selected. Use --all, --one, --from/--to, --negative, "
-              "or --list.", file=sys.stderr)
+              "--component, --component-one, --component-negative, or --list.",
+              file=sys.stderr)
         return 2
 
     cli_dir = Path(args.cli_dir)
@@ -1719,6 +1838,24 @@ def main(argv: list[str] | None = None) -> int:
         ssh.connect()
         host = RemoteHost(ssh, dry_run=False)
         host_ip = session.host
+
+    if component_mode:
+        # Delegate to the component-level fallback suite, then tidy up the
+        # shared SSH/API session before returning.
+        try:
+            from cloudcp_component_fallback_test import run_component_suite
+            return run_component_suite(args, host, session)
+        finally:
+            if session is not None:
+                try:
+                    session.close()
+                except Exception:  # noqa: BLE001
+                    pass
+            if host.ssh is not None:
+                try:
+                    host.ssh.close()
+                except Exception:  # noqa: BLE001
+                    pass
 
     runner = Runner(args, api, host, creds, session=session)
     results: list[dict] = []
@@ -1767,16 +1904,18 @@ def main(argv: list[str] | None = None) -> int:
             except Exception:  # noqa: BLE001
                 pass
 
-    meta = {"generated": _now(), "host": host_ip, "seed": args.seed,
-            "dry_run": args.dry_run, "interrupted": interrupted}
-    combined = {"meta": meta, "results": results}
-    _write_json(out_dir / "fallback_report.json", combined)
-    (out_dir / "fallback_report.html").write_text(
-        render_html(results, meta), encoding="utf-8")
-
     tally: dict[str, int] = {}
     for r in results:
         tally[r["verdict"]] = tally.get(r["verdict"], 0) + 1
+
+    finalize_steps = fin_rec.steps if "fin_rec" in locals() else []
+    meta = {"generated": _now(), "host": host_ip, "seed": args.seed,
+            "dry_run": args.dry_run, "interrupted": interrupted,
+            "total_cases": len(results), "summary": tally, "skipped": skipped}
+    combined = {"meta": meta, "results": results, "finalize_steps": finalize_steps}
+    _write_json(out_dir / "fallback_report.json", combined)
+    (out_dir / "fallback_report.html").write_text(
+        render_html(results, meta, finalize_steps), encoding="utf-8")
     if skipped:
         LOG.info("Manual mode skipped %d case(s): %s",
                  len(skipped), ", ".join(skipped))
