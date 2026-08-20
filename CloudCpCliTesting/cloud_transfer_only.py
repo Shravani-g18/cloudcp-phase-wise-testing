@@ -125,6 +125,11 @@ def parse_args(argv: Optional[list] = None) -> argparse.Namespace:
                    help="S3 endpoint used for cleanup. Pass an empty string to omit --endpoint-url.")
     p.add_argument("--aws-no-verify-ssl", dest="aws_verify_ssl", action="store_false", default=False)
     p.add_argument("--aws-verify-ssl", dest="aws_verify_ssl", action="store_true")
+    p.add_argument("--background-cleanup", action="store_true",
+                   help="Fire off the S3 'aws s3 rm --recursive' cleanup as a detached background "
+                        "process instead of waiting for it to finish -- useful for large datasets where "
+                        "deletion takes a long time. Local /bryck directory cleanup still runs "
+                        "synchronously (it's fast). Check --results-dir/<run-id>/*/cleanup_s3.log for progress.")
 
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--verbose", action="store_true")
@@ -269,7 +274,8 @@ def poll_until_terminal(args: argparse.Namespace, transfer_id: str,
     return state or "UNKNOWN"
 
 
-def cleanup(args: argparse.Namespace, tier: str, redact, tcr: ccr.TestCaseResult) -> None:
+def cleanup(args: argparse.Namespace, tier: str, redact, tcr: ccr.TestCaseResult,
+           log_dir: Optional[pathlib.Path] = None) -> None:
     if args.dry_run or args.keep:
         LOG.info("cleanup skipped (dry-run or --keep)")
         tcr.notes.append("cleanup skipped (dry-run or --keep)")
@@ -289,6 +295,21 @@ def cleanup(args: argparse.Namespace, tier: str, redact, tcr: ccr.TestCaseResult
         argv += ["--endpoint-url", args.aws_endpoint_url]
     if not args.aws_verify_ssl:
         argv += ["--no-verify-ssl"]
+
+    if args.background_cleanup:
+        import subprocess
+        log_path = (log_dir or pathlib.Path(".")) / "cleanup_s3.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        LOG.info("$ %s  (backgrounded, log: %s)", " ".join(argv), log_path)
+        with open(log_path, "w", encoding="utf-8") as log_handle:
+            proc = subprocess.Popen(
+                argv, stdout=log_handle, stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+        LOG.info("S3 cleanup backgrounded (pid=%s); not waiting for it to finish", proc.pid)
+        tcr.notes.append(f"S3 cleanup backgrounded: pid={proc.pid} log={log_path} argv={' '.join(argv)}")
+        return
+
     cmd = ccr.run_argv("aws s3 cleanup", argv, LOG, args.dry_run, redact)
     tcr.commands.append(cmd.as_dict())
 
@@ -555,7 +576,7 @@ def main(argv: Optional[list] = None) -> int:
         for leg in legs:
             leg["tcr"].notes.append("cleanup skipped: logs not collected (use --force-cleanup to override)")
     else:
-        cleanup(args, tier, redact, legs[-1]["tcr"])
+        cleanup(args, tier, redact, legs[-1]["tcr"], log_dir=run_dir)
 
     overall_ok = all(leg["error"] is None and leg["final_state"] == TERMINAL_SUCCESS for leg in legs) or args.dry_run
     result = {
