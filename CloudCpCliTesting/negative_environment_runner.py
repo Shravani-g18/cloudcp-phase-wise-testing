@@ -441,12 +441,14 @@ class EnvironmentManager:
         info = self.cap(f"create_transfer:{direction}:check_mounted", self.ctx.bryck_info(f"pre-initiate mount check ({direction})"))
         if ctr._parse_bryck_state(info.stdout) != " Mounted" and not self.ensure_mounted():
             return None
+        self._ensure_unique_destination()
         sr, ids = self.ctx.initiate_transfer(direction)
         self.cap(f"create_transfer:{direction}", sr)
         if not ids:
             self.recover_environment()
             if not self.ensure_mounted():
                 return None
+            self._ensure_unique_destination()
             sr, ids = self.ctx.initiate_transfer(direction)
             self.cap(f"create_transfer:{direction}:retry", sr)
             if not ids:
@@ -454,6 +456,28 @@ class EnvironmentManager:
         tid = ids[0]
         wait = self.cap(f"wait_for_state:{wanted}", self.ctx.wait_for_state(tid, {wanted}, timeout=timeout))
         return tid if wait.passed else None
+
+    def _ensure_unique_destination(self) -> None:
+        """Give this transfer its own cloud_bucket sub-path (a fresh uuid suffix
+        each call) so it can never collide with a leftover active/paused transfer
+        to the same destination -- the device only allows one active transfer per
+        destination, so a stuck/paused transfer from an earlier case otherwise
+        blocks every later case's initiate_transfer() with "Transfer is triggered
+        already with ID: N" (and can also block eject: "Cloud transfers are
+        paused. Bryck cannot be ejected."). Only cloud_bucket changes here, not
+        bryck_src -- the dataset a case already generated via ensure_dataset()
+        stays valid as the transfer's source.
+        """
+        try:
+            cfg = json.loads(self.ctx.cloud_ops_json.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return
+        base_bucket = re.sub(r"/neg-[0-9a-f]{8}$", "", str(cfg.get("cloud_bucket", "")).rstrip("/"))
+        if not base_bucket:
+            return
+        cfg["cloud_bucket"] = f"{base_bucket}/neg-{uuid.uuid4().hex[:8]}"
+        self.ctx.cloud_ops_json.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+        self.cap("unique_destination:reconfigure", self.ctx.configure_cloud())
 
     def create_transfer_at(self, direction: str, target_state: str, timeout: int = 7200) -> Optional[str]:
         """Drive a fresh transfer all the way to the requested terminal/lifecycle state."""
