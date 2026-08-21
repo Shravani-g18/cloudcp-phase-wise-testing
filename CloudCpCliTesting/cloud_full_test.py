@@ -1033,7 +1033,17 @@ def manual_confirm(index: int, total: int, entry: dict) -> str:
 def _atomic_write_json(path: pathlib.Path, data) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
-    tmp.replace(path)  # atomic on POSIX and Windows -- a crash mid-write never corrupts the prior journal
+    # tmp.replace(path) is atomic on POSIX and Windows, but on a OneDrive-synced folder a
+    # sync/AV process can transiently hold the destination handle (WinError 5); retry briefly
+    # instead of crashing the whole run over a journal write.
+    for attempt in range(6):
+        try:
+            tmp.replace(path)
+            return
+        except PermissionError:
+            if attempt == 5:
+                raise
+            time.sleep(0.25 * (attempt + 1))
 
 
 def init_execution_journal(run_id: str, selected: List[dict]) -> dict:
