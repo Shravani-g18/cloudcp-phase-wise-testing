@@ -412,6 +412,13 @@ class EnvironmentManager:
                 fh.write(spec_text)
                 spec_path = fh.name
 
+        # datagen does not create missing directories itself -- if bryck_src
+        # points at a path that has never been mkdir'd on the device, the
+        # run fails instantly (~0.3s) instead of generating anything.
+        if target_root:
+            self.cap(f"ensure_dataset:mkdir:{target_root}",
+                     self.ctx.run_ssh(f"mkdir -p {target_root}", f"mkdir -p {target_root}", timeout=30))
+
         sr = self.cap(f"ensure_dataset:{Path(spec_path).name}->{target_root or 'default'}",
                       self.ctx.run_datagen(spec_path, timeout=3600))
         if sr.passed:
