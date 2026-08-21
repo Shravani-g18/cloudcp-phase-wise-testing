@@ -1778,12 +1778,21 @@ def handle_race(case_id: str, desc: str, mgr: EnvironmentManager, args, work: Pa
             return blocked(case_id, "RACE", desc, baseline, "could not establish an active transfer", env_before, mgr)
 
         def run_bogus():
-            bogus = "99999999"
-            return [
-                ("bogus_resume", ctx.resume_transfer(bogus, expect_fail=True)),
-                ("bogus_cancel", ctx.cancel_transfer(bogus, expect_fail=True)),
-                ("bogus_report", ctx.download_report(bogus, "concurrent with live transfer", expect_fail=True)),
-            ]
+            # Exercise every TID_VALUES bogus ID (status/pause/resume/cancel/report)
+            # against the one real, live transfer -- not just a single hardcoded ID.
+            results = []
+            for tid_case, (bogus, label) in TID_VALUES.items():
+                if not bogus:
+                    continue  # TID-02's empty ID has no meaningful --transfer-id form here
+                results.append((f"bogus_status:{tid_case}", ctx.run_py(
+                    f"{desc}:status:{tid_case}", "bryck_cloud_transfer_status.py",
+                    "--login", str(ctx.login_json), "--transfer-id", bogus, expect_fail=True)))
+                results.append((f"bogus_pause:{tid_case}", ctx.pause_transfer(bogus, expect_fail=True)))
+                results.append((f"bogus_resume:{tid_case}", ctx.resume_transfer(bogus, expect_fail=True)))
+                results.append((f"bogus_cancel:{tid_case}", ctx.cancel_transfer(bogus, expect_fail=True)))
+                results.append((f"bogus_report:{tid_case}", ctx.download_report(
+                    bogus, f"concurrent with live transfer ({label})", expect_fail=True)))
+            return results
 
         barrier = threading.Barrier(2)
 
