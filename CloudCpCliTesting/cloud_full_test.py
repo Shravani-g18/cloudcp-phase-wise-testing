@@ -696,13 +696,29 @@ def build_ner_context(args: argparse.Namespace) -> ctr.TestContext:
     login_cfg = ctr._load_json(login_json)
     ssh_user = login_cfg.get("bryckserver_username", "bryck")
     ssh_host = login_cfg.get("bryckapi_host")
-    return ctr.TestContext(
+    ctx = ctr.TestContext(
         login_json=login_json, cloud_ops_json=cloud_ops_json, fmt_mount_json=fmt_mount_json,
         change_time_json=change_time_json, report_dir=ctr.DEFAULT_REPORT_DIR,
         results_dir=pathlib.Path(args.results_dir), ssh_user=ssh_user, ssh_host=ssh_host,
         datagen_bin=args.datagen_bin, spec_dir=pathlib.Path(args.spec_dir), dry_run=(not args.live),
         iteration=1, scenario_name="cloud_full_test",
     )
+    if args.skip_cancel_ops:
+        # --skip-cancel-ops: every ner.py handler calls ctx.cancel_transfer() for its
+        # actual "cancel the transfer" step -- patching it here (not in
+        # cloud_transfer_test_runner.py/negative_environment_runner.py, which stay
+        # untouched) makes that one step a no-op recorded as PASS/SKIPPED while every
+        # other step in the case (mount, configure, initiate, pause/resume, etc.)
+        # still runs exactly as before.
+        def _skipped_cancel_transfer(transfer_id: str, expect_fail: bool = False) -> ctr.StepResult:
+            return ctx._record(
+                f"Cancel transfer {transfer_id}", "bryck_cloud_transfer_cancel.py",
+                0, "", "SKIPPED: --skip-cancel-ops set -- cancel step not issued", 0.0,
+                notes="cancel operation skipped via --skip-cancel-ops; rest of the case still ran",
+                outcome="SKIPPED", validation_passed=True,
+            )
+        ctx.cancel_transfer = _skipped_cancel_transfer
+    return ctx
 
 
 def run_negative_case_via_ner(mgr: "ner.EnvironmentManager", args: argparse.Namespace, work: pathlib.Path,
@@ -764,8 +780,6 @@ def build_catalog() -> List[dict]:
             })
     for cid in negtest.NEG_CATALOG_ORDER:
         tc = negtest.NEG_CATALOG[cid]
-        if "cancel" in tc.name.lower() or "cancelled" in tc.name.lower():
-            continue  # cancel-transfer test cases excluded from this harness's catalog entirely
         # "implemented" reflects negative_environment_runner.py's actual handler
         # coverage (ner.HANDLERS keyed by the case ID's own prefix -- the same
         # prefix ner.dispatch() itself derives via re.match(r"[A-Z]+", case_id)),
@@ -1056,6 +1070,11 @@ def parse_args(argv: Optional[list] = None) -> argparse.Namespace:
                     help="Allow REC-03 to block/restore outbound network traffic on the device.")
     ex.add_argument("--allow-reboot", action="store_true",
                     help="No-op: reboot test cases are excluded from negative_environment_runner.py per its own design.")
+    ex.add_argument("--skip-cancel-ops", action="store_true",
+                    help="Skip only the actual 'cancel transfer' step inside every negative case's own "
+                         "flow (bryck_cloud_transfer_cancel.py is never invoked) -- every other step in "
+                         "that case (mount, configure, initiate, pause/resume, etc.) still runs normally "
+                         "and the skipped step is recorded as SKIPPED/PASS, not a failure.")
 
     ph = p.add_argument_group("paths / hosts")
     ph.add_argument("--cli-dir", default=str(BRYCK_CLI_DIR), help="bryckclient-cli directory.")
