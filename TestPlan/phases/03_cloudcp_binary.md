@@ -48,6 +48,12 @@ path directly and owns key composition (including UTF-8 normalization at upload 
 
 ## 3. Test Cases
 
+> **Test-case register (Excel):** the full binary case list — positive datasets, plan
+> correctness/tier/encoding cases, the negative/hostile suite, and the pause/resume suite —
+> is maintained as a shareable workbook at
+> [../../CloudCpBinaryTesting/CloudCpBinary_TestCases.xlsx](../../CloudCpBinaryTesting/CloudCpBinary_TestCases.xlsx)
+> (sheets: *Overview*, *Plan Cases (P3)*, *Positive Datasets*, *Negative Suite*, *Pause & Resume*).
+
 ### 3.1 Upload Correctness (P0)
 
 | ID | Case | Dataset | Pass when |
@@ -85,6 +91,7 @@ errors; clean exit-code contract.
 | Hostile filesystem objects | N01–N11 | broken symlink, symlink→file/dir, unreadable (`chmod 000`), FIFO, 0-byte, spaces, newline/CR, non-UTF-8, ~255-byte name, ~PATH_MAX path |
 | Hostile extended attributes | N12–N16 | valid user xattr, oversized (>64 KiB) value, non-UTF-8/binary value, many (64) xattrs, corrupted checksum-style attr (Linux-only; via `batch_xattr.txt`) |
 | Malformed batch framing | B01–B12 | empty, missing terminator, double/leading/only NULs, dangling paths, directory entry, CRLF paths, non-UTF-8, over-long path, whitespace-only, mixed valid/invalid |
+| Corrupted batch over **real data** (Scenario B) | C01–C06 | truncated tail, missing terminator, double NUL, leading NUL, whitespace record, mixed valid/dangling — valid records **before** the corruption must still upload |
 
 Pass: valid records in a mixed batch (B12) still succeed; invalid ones reported; exit code
 reflects partial vs total failure. **Xattr (N12–N16):** per the confirmed policy — preserved
@@ -92,14 +99,40 @@ metadata round-trips byte-exact with size limits enforced and bad checksums caug
 xattrs are ignored and object bytes still upload cleanly; no case crashes reading an attribute
 (see [plan_cp_binary.md §4c](../../CloudCpBinaryTesting/plan_cp_binary.md)).
 
-### 3.5 Configuration (P0)
+### 3.5 Pause / Resume (P0)
+
+The orchestrator kills the running `cloudcp` process mid-transfer and later restarts it with
+**identical arguments** (same batch file, same `--transfer-id`). On restart `cloudcp` reads
+`/opt/bryck/bryckapi/downloads/cloud_transfer_logs/cloudcp.log` as the source of truth for
+which files are already durably uploaded, then continues from the remaining records. The
+suite (`run_cloudcp_tests.py --pause-resume`) reproduces this SIGKILL kill–restart cycle.
+
+| ID | Dataset | Kill after | Cycles | Pass when |
+|---|---|---|---|---|
+| PR01 | `tiny_files` | 5 s (~32%) | 1 | Basic resume from log; final report all `SUCCESS`; count == expected |
+| PR02 | `small_files` | 8 s | 1 | Resume that crosses the 8 MiB multipart cutoff; partial multipart objects resumed |
+| PR03 | `tiny_files` | 2 s (~13%) | 1 | Very early kill still completes the full dataset on resume |
+| PR04 | `tiny_files` | 12 s (~75%) | 1 | Only the tail of the batch is uploaded on resume; report still complete |
+| PR05 | `tiny_files` | 5 s × 2 | 2 | Double kill/resume; `cloudcp.log` accumulates state; committed files never re-uploaded |
+| PR06 | `unicode_names` | 5 s | 1 | Non-ASCII paths in `cloudcp.log` round-trip byte-exact on resume |
+
+**Pass (all PR):** final `transfer_report_<id>.csv` lists every expected file as `SUCCESS`;
+row count == spec's expected count; `cloudcp` never crashes/hangs on resume (exit 0 or a
+meaningful non-zero, never a signal kill); the pre-resume `cloudcp.log` baseline shows some
+files were committed before the kill (confirming the kill landed mid-transfer).
+
+> Deferred (out of scope this iteration): **PR07** tampered/truncated `cloudcp.log`, and
+> pause/resume over a malformed batch — see
+> [plan_cp_binary.md §9.6](../../CloudCpBinaryTesting/plan_cp_binary.md).
+
+### 3.6 Configuration (P0)
 
 | Setting | Value | Validate |
 |---|---|---|
 | `CHUNK_SIZE_MB` | `8` | Multipart parts are 8 MiB (S3 access log) |
 | `LOCAL_AWS` | MinIO endpoint | All S3 calls hit the configured endpoint |
 
-### 3.6 Performance (P2)
+### 3.7 Performance (P2)
 
 | ID | Case | Dataset | Measure |
 |---|---|---|---|
@@ -134,9 +167,13 @@ Runnable plan: [../../CloudCpBinaryTesting/plan_cp_binary.md](../../CloudCpBinar
 
 - Wire the binary suite to **broker-produced** batch files (currently uses
   `make_batches.py`-staged batches).
-- Integrate `run_cloudcp_tests.py` results into
-  [../../docs/testcaselist.xlsx](../../docs/testcaselist.xlsx).
+- Integrate `run_cloudcp_tests.py` results into the binary test-case register
+  [../../CloudCpBinaryTesting/CloudCpBinary_TestCases.xlsx](../../CloudCpBinaryTesting/CloudCpBinary_TestCases.xlsx).
 - Automated S3-access-log assertions for single-part vs multipart.
+- Pause/resume follow-ups: **PR07** tampered/truncated `cloudcp.log`, and pause/resume over a
+  malformed batch (deferred — see [plan_cp_binary.md §9.6](../../CloudCpBinaryTesting/plan_cp_binary.md)).
 
-Existing today: complete binary suite (plan + runner + positive/negative datasets).
+Existing today: complete binary suite (plan + runner + positive/negative datasets +
+pause/resume suite) and the test-case register
+[../../CloudCpBinaryTesting/CloudCpBinary_TestCases.xlsx](../../CloudCpBinaryTesting/CloudCpBinary_TestCases.xlsx).
 Narrative reference: [../../docs/planv2.md](../../docs/planv2.md) Phase 2.1.

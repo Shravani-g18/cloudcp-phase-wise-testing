@@ -6,7 +6,7 @@
     "keyfile": "",
     "tenant_id": "",
     "bryck_src": "/bryck/source-directory",
-    "cloud_bucket": "s3://shravani",
+    "cloud_bucket": "s3://shrav-test-bkt",
     "bryck_dst": "/bryck/download-directory",
     "notification": {
         "sns_topic": "sns-testing",

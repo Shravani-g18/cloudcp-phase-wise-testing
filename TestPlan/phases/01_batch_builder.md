@@ -58,6 +58,11 @@ triggering file opens a new batch (never overflows the sealed one).
 
 ## 3. Test Cases
 
+> **Test-case register (Excel):** the full Phase 1 case list below — plus the currently
+> automated unit tests and assertion functions — is maintained as a shareable workbook at
+> [../../CloudCpBatchBuilderTesting/BatchBuilder_TestCases.xlsx](../../CloudCpBatchBuilderTesting/BatchBuilder_TestCases.xlsx)
+> (sheets: *Overview*, *Plan Test Cases*, *Automated Checks*).
+
 ### 3.1 Functional (P0)
 
 | ID | Case | Dataset(s) | Pass when |
@@ -136,11 +141,15 @@ See [../tools_guide.md](../tools_guide.md) for full `--help`.
 
 - Automated `batch_summary_expect.py` (expected summary from manifest + config; diff vs
   generated CSV; tolerance + PASS/FAIL exit code).
-- Harness to run all 54 datasets unattended and roll results into
-  [../../docs/testcaselist.xlsx](../../docs/testcaselist.xlsx).
+- Harness to run all 54 datasets unattended and roll results into the Phase 1 test-case
+  register
+  [../../CloudCpBatchBuilderTesting/BatchBuilder_TestCases.xlsx](../../CloudCpBatchBuilderTesting/BatchBuilder_TestCases.xlsx).
 - Config-matrix driver (sweep `BATCH.*` seals and `NETWORK_PROFILE`).
 - Resume/crash-injection automation (kill points at 25/50/75%).
 
-Existing today: this plan, the dataset catalog + manifest, and
+Existing today: this plan, the Phase 1 test-case register
+[../../CloudCpBatchBuilderTesting/BatchBuilder_TestCases.xlsx](../../CloudCpBatchBuilderTesting/BatchBuilder_TestCases.xlsx),
+the `CloudCpBatchBuilderTesting` validation suite (remote `bcloud_src_enum.py --batch-only`
+runner + assertions + reports), the dataset catalog + manifest, and
 [../../dataset_cloudcp/spec_files/dataset_validator.py](../../dataset_cloudcp/spec_files/dataset_validator.py)
 for generation/validation. Narrative reference: [../../docs/planv2.md](../../docs/planv2.md) Phase 1.
