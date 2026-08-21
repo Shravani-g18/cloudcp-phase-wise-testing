@@ -3856,10 +3856,11 @@ def parse_args(argv=None) -> argparse.Namespace:
     p.add_argument("--allow-service-faults", action="store_true")
     p.add_argument("--allow-network-faults", action="store_true")
     p.add_argument("--allow-reboot", action="store_true")
-    p.add_argument("--direction", choices=("upload", "download"), default="upload",
+    p.add_argument("--direction", choices=("upload", "download", "both"), default="upload",
                     help="Primary transfer direction (bryck->s3 vs s3->bryck) used to build each "
                          "case's own transfer fixture, for cases where that direction isn't fixed "
-                         "by the case's own name/scenario.")
+                         "by the case's own name/scenario. --direction both runs the whole selection "
+                         "twice in one command (upload pass, then download pass).")
     p.add_argument("--sections", default="", help="comma-separated case-ID prefixes, e.g. CLI,AUTH,TID")
     p.add_argument("--test-id", default="", help="run only this test ID, or a comma-separated list, e.g. AWS-03,XFER-11,STATE-01")
     p.add_argument("--range", default="", help="1-indexed inclusive position range in the (possibly section-filtered) catalog, e.g. 3-88")
@@ -3881,6 +3882,18 @@ def parse_args(argv=None) -> argparse.Namespace:
 
 def main(argv=None) -> int:
     args = parse_args(argv)
+    if args.direction == "both":
+        # Run the whole selection twice in one command -- upload pass, then download pass.
+        # Each pass gets its own --results-dir subfolder so run_id-based output filenames
+        # (results_dir/<run_id>_results.json etc.) can never collide between the two passes.
+        base_argv = list(argv) if argv is not None else list(sys.argv[1:])
+        base_results_dir = Path(args.results_dir)
+        print("--direction both: running the full selection twice (upload pass, then download pass)")
+        rc_upload = main(base_argv + ["--direction", "upload",
+                                     "--results-dir", str(base_results_dir / "upload")])
+        rc_download = main(base_argv + ["--direction", "download",
+                                        "--results-dir", str(base_results_dir / "download")])
+        return rc_upload if rc_upload != 0 else rc_download
     ctx = build_context(args)
     mgr = EnvironmentManager(ctx)
     overrides = parse_overrides(args.override)

@@ -1135,6 +1135,10 @@ def parse_args(argv: Optional[list] = None) -> argparse.Namespace:
                     help="Do not empty the bucket / remove generated /bryck data after each case, "
                          "even if --cleanup is also given.")
     ex.add_argument("--seed", type=int, default=1337, help="Random seed for reproducibility (default 1337).")
+    ex.add_argument("--run-id", dest="run_id", default=None,
+                    help="Explicit run-id (results/full_test/<run-id>/). Default: full_test_<timestamp>. "
+                         "--direction both auto-derives <run-id>_upload/<run-id>_download from this (or "
+                         "from an auto-generated timestamp base) so the two passes never collide.")
     ex.add_argument("--poll-interval", type=int, default=10)
     ex.add_argument("--poll-timeout", dest="wait_timeout", type=int, default=600,
                     help="Per-leg terminal-state wait cap in seconds (default 600 = 10min). Real transfer "
@@ -1156,12 +1160,13 @@ def parse_args(argv: Optional[list] = None) -> argparse.Namespace:
                          "flow (bryck_cloud_transfer_cancel.py is never invoked) -- every other step in "
                          "that case (mount, configure, initiate, pause/resume, etc.) still runs normally "
                          "and the skipped step is recorded as SKIPPED/PASS, not a failure.")
-    ex.add_argument("--direction", choices=("upload", "download"), default="upload",
+    ex.add_argument("--direction", choices=("upload", "download", "both"), default="upload",
                     help="Primary transfer direction (bryck->s3 vs s3->bryck) used to build each negative "
                          "case's own transfer fixture (default upload). Cases whose name/scenario is "
                          "inherently direction-specific (DOWNLOAD-*, XFER-09/10, etc.) ignore this and "
-                         "always use their own fixed direction. Run the same --range twice, once per "
-                         "--direction, to get upload-side and download-side coverage under the same case IDs.")
+                         "always use their own fixed direction. --direction both runs the same selection "
+                         "twice in one command (upload pass, then download pass), each its own run-id, "
+                         "instead of you invoking this script twice by hand.")
 
     ph = p.add_argument_group("paths / hosts")
     ph.add_argument("--cli-dir", default=str(BRYCK_CLI_DIR), help="bryckclient-cli directory.")
@@ -1228,6 +1233,19 @@ def main(argv: Optional[list] = None) -> int:
     args = parse_args(argv)
     setup_logging(args.verbose)
     random.seed(args.seed)
+
+    if args.direction == "both":
+        # Run the exact same selection twice in one command -- an upload pass, then a
+        # download pass -- each into its own run-id, instead of invoking this script twice
+        # by hand. A shared base run-id is fixed here (not left to each sub-call's own
+        # timestamp) so the two passes can never collide even if they land in the same second.
+        base_argv = list(argv) if argv is not None else list(sys.argv[1:])
+        base_run_id = args.run_id or f"full_test_{dt.datetime.now():%Y%m%d_%H%M%S}"
+        LOG.info("--direction both: running the full selection twice under %s_upload/%s_download",
+                 base_run_id, base_run_id)
+        rc_upload = main(base_argv + ["--direction", "upload", "--run-id", f"{base_run_id}_upload"])
+        rc_download = main(base_argv + ["--direction", "download", "--run-id", f"{base_run_id}_download"])
+        return rc_upload if rc_upload != 0 else rc_download
 
     if args.component_list or args.component or args.component_one or args.component_negative:
         return run_component_suite(args)

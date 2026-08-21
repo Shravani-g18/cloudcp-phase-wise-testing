@@ -134,7 +134,7 @@ Modeled on `CloudCpFallbackTesting/cloudcp_fallback_test.py`'s argument surface.
 | `--seed N` | Random seed for reproducibility (default `1337`). |
 | `--poll-interval` / `--poll-timeout` | Status-poll cadence / overall wait timeout. |
 | `--verbose` | Debug-level logging. |
-| `--direction {upload,download}` | Primary bryck<->s3 direction (default `upload`) used to build each negative case's own transfer fixture. Cases whose scenario is inherently direction-specific (`DOWNLOAD-*`, `XFER-01..10/18`, and any `F-*` case whose name says "Upload"/"Download") ignore this and always use their own fixed direction. Run the same `--range`/`--negative` selection twice, once per `--direction`, to get upload-side and download-side coverage under the same case IDs (each run writes to its own `run-id` folder). |
+| `--direction {upload,download,both}` | Primary bryck<->s3 direction (default `upload`) used to build each negative case's own transfer fixture. Cases whose scenario is inherently direction-specific (`DOWNLOAD-*`, `XFER-01..10/18`, and any `F-*` case whose name says "Upload"/"Download") ignore this and always use their own fixed direction. `--direction both` runs the exact same selection **twice in one command** (an upload pass, then a download pass), each into its own `<run-id>_upload` / `<run-id>_download` folder, instead of you invoking this script twice by hand. |
 
 
 ### Paths / hosts
