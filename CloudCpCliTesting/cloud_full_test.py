@@ -1078,7 +1078,12 @@ def parse_args(argv: Optional[list] = None) -> argparse.Namespace:
 
     ph = p.add_argument_group("paths / hosts")
     ph.add_argument("--cli-dir", default=str(BRYCK_CLI_DIR), help="bryckclient-cli directory.")
-    ph.add_argument("--spec-dir", default=str(negtest.SPEC_ROOT))
+    # CloudCpCliTesting/spec_files -- where ensure_dataset()'s real specs
+    # (small_1gb_fast.yaml, priority_2gb.yaml, DATASET_SPEC_ROTATION) live.
+    # negtest.SPEC_ROOT (dataset_cloudcp/spec_files) is a *different* folder
+    # used only by discover_dataset_ids() for the 162 positive TRANSFER-*
+    # cases -- using it here silently broke every negative dataset generation.
+    ph.add_argument("--spec-dir", default=str(ctr.SPEC_DIR))
     ph.add_argument("--out-dir", dest="results_dir", default=str(RESULTS_ROOT / "full_test"))
     ph.add_argument("--login", default=None, help="Path to login.json (default: <cli-dir>/login.json).")
     ph.add_argument("--cloud-ops", dest="params", default=None,
