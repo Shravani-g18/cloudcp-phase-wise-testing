@@ -1,0 +1,41 @@
+version: 1
+mode: tree
+root: /bryck/priority_2gb
+threads: 8
+seed: 7
+
+# Dataset fixture for negative_environment_runner.py's REC-01/SVC service-
+# restart-during-transfer fixtures (ensure_dataset(spec="priority_2gb.yaml")).
+# These need a transfer that stays IN_PROGRESS long enough to stop/restart
+# services mid-flight, so files are deliberately larger than small_1gb_fast.yaml
+# -- tens of MB each, ~50-100MB total -- a practical middle ground that gives a
+# real timing window without requiring an actual multi-GB transfer for a test
+# fixture. Adjust min/max below if the target device needs a longer window.
+content:
+  type: random
+  buffer_size: 1MB
+
+naming:
+  charset: mixed
+  alphabet: [lower, upper, digit]
+  prefix: "pri-"
+  length: 10
+  collision_strategy: append-index
+
+tree:
+  fanout: 2
+  depth: 2
+  files_per_dir: 3
+  files_in_each_dir: false
+
+size:
+  type: range
+  min: 4MB
+  max: 16MB
+  distribution: log-uniform
+
+extensions:
+  - ext: .bin
+    weight: 60
+  - ext: .dat
+    weight: 40

@@ -1,0 +1,45 @@
+version: 1
+mode: tree
+root: /bryck/small_1gb
+threads: 4
+seed: 42
+
+# Default dataset fixture for negative_environment_runner.py's ensure_dataset()
+# (hardcoded as spec="small_1gb_fast.yaml" everywhere in that file). Despite
+# the name, kept deliberately small/fast (a few hundred KB total, ~45 files)
+# so every negative case that just needs "some real files present" completes
+# datagen in a couple of seconds instead of timing out -- the actual root/
+# destination is rewritten by ensure_dataset() to match cloud_ops.json's
+# bryck_src at run time, so the root value above is only a fallback default.
+content:
+  type: random
+  buffer_size: 64KB
+
+naming:
+  charset: mixed
+  alphabet: [lower, upper, digit]
+  prefix: "obj-"
+  length: 10
+  collision_strategy: append-index
+
+tree:
+  fanout: 3
+  depth: 2
+  files_per_dir: 5
+  files_in_each_dir: false
+
+size:
+  type: range
+  min: 1KB
+  max: 256KB
+  distribution: log-uniform
+
+extensions:
+  - ext: .txt
+    weight: 40
+  - ext: .json
+    weight: 25
+  - ext: .csv
+    weight: 20
+  - ext: .bin
+    weight: 15
