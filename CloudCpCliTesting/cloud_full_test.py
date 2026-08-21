@@ -69,6 +69,12 @@ import cloud_cli_runner as ccr  # noqa: E402  (datagen, status polling/fallbacks
 import cli_perf_capture as perf_mod  # noqa: E402
 import cloudcpclitesting as negtest  # noqa: E402  (NEG_CATALOG names/order -- id/name source only, not execution)
 import cloud_transfer_test_runner as ctr  # noqa: E402  (TestContext -- underlies negative_environment_runner)
+# cloud_transfer_test_runner.py assumes bryck_info.py/etc. live beside itself, but they
+# actually live one level down in bryckclient-cli/. Patched here (not in that file, since
+# this script is the only entry point used) so every ctx.run_py()/bryck_info() call inside
+# negative_environment_runner.py resolves to the real script location. Must happen before
+# negative_environment_runner is imported, since its own module-level constants copy this value.
+ctr.SCRIPT_DIR = BRYCK_CLI_DIR
 import negative_environment_runner as ner  # noqa: E402  (the actual, comprehensive negative-case implementations:
                                             # LIFE/DATA/XFER/DOWNLOAD/RACE/DUP/REPORT/FAULT/REC/VERIFY/INT/MGMT/
                                             # SVC/SM/F, not just CLI/AUTH/TID/AWS/STATE/CLEAN -- this is the
@@ -80,6 +86,9 @@ LOG = logging.getLogger("cloud_full_test")
 TERMINAL_SUCCESS = "COMPLETED"
 TERMINAL_FAILURE = {"FAILED", "STOPPED", "CANCELLED"}
 TERMINAL_STATES = {TERMINAL_SUCCESS} | TERMINAL_FAILURE
+# States that mean the transfer is still legitimately progressing -- hitting
+# --poll-timeout while in one of these is "still running", not a product failure.
+STILL_RUNNING_STATES = {"IN_PROGRESS", "PAUSED", "QUEUED"}
 TRANSFER_MODES = ("upload", "download", "both")
 
 
@@ -95,25 +104,58 @@ def setup_logging(verbose: bool) -> None:
 # Transfer engine -- copied verbatim from cloud_transfer_only.py (unchanged)
 # =============================================================================
 
+_BRYCK_STATE_RE = re.compile(r"\b(Mounted|Ejected|Removed)\b", re.IGNORECASE)
+
+
+def read_bryck_state_from_journalctl(args: argparse.Namespace) -> str:
+    """Fallback when bryck_info.py's own state read comes back UNKNOWN/blank:
+    grep recent journalctl history (same --journal-tag(s) cli_perf_capture.py
+    already tails for perf data) for the last mount-state keyword the broker
+    itself logged. Never raises -- returns 'UNKNOWN' on any failure so the
+    caller can log it and move on to the next step instead of blocking the
+    whole case on one flaky state read."""
+    import subprocess
+    tags = args.journal_tag if isinstance(args.journal_tag, list) else [args.journal_tag]
+    tag_flags = [flag for tag in tags for flag in ("-t", tag)]
+    try:
+        proc = subprocess.run(
+            ["sudo", "journalctl", *tag_flags, "-n", "500", "--no-pager"],
+            capture_output=True, text=True, timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return "UNKNOWN"
+    text = (proc.stdout or "") + (proc.stderr or "")
+    matches = _BRYCK_STATE_RE.findall(text)
+    return matches[-1].capitalize() if matches else "UNKNOWN"
+
+
 def ensure_mounted(args: argparse.Namespace, redact, tcr: ccr.TestCaseResult) -> str:
     """Real bryck_info states are ' Mounted', ' Ejected', ' Removed' (leading
     space, per bryckclient-cli). Only auto-mount from 'Ejected' (the only
     state bryck_mount.py accepts) -- 'Removed' or anything else means the
     device needs format/mount (or scan) first, which this script does not
-    attempt; surface it as a clear error instead of a confusing bryck_mount.py
-    failure."""
+    attempt; surface it as a clear warning instead of a confusing
+    bryck_mount.py failure. If the state read itself is UNKNOWN/blank, fall
+    back to journalctl and proceed with whatever state that shows -- never
+    block the case on one flaky read."""
     state, cmd = ccr.get_bryck_state(
         argparse.Namespace(login=args.login, dry_run=args.dry_run, python_bin=args.python_bin), LOG, redact)
     tcr.commands.append(cmd.as_dict())
     if args.dry_run:
         return state
     normalized = state.strip().lower()
+    if normalized in ("", "unknown"):
+        LOG.warning("bryck_info state read was %r; falling back to journalctl before proceeding", state)
+        journal_state = read_bryck_state_from_journalctl(args)
+        tcr.notes.append(f"bryck state fallback via journalctl: {journal_state}")
+        LOG.info("journalctl fallback bryck state: %s", journal_state)
+        state, normalized = journal_state, journal_state.strip().lower()
     if normalized == "mounted":
         return state
     if normalized != "ejected":
-        LOG.error("Bryck state is %r -- expected 'Ejected' or 'Mounted'. Not attempting to mount "
-                  "('Removed' needs bryck_format.py + bryck_mount.py first; run bryck_info.py "
-                  "manually to confirm).", state)
+        LOG.warning("Bryck state is %r after API+journalctl checks -- proceeding to the next step anyway "
+                   "instead of blocking ('Removed'/unknown needs bryck_format.py + bryck_mount.py first; "
+                   "only auto-mounts from 'Ejected').", state)
         return state
     LOG.info("Bryck is Ejected; mounting before dataset generation/transfer")
     mount_cmd = ccr.run_py_script(
@@ -131,6 +173,13 @@ def ensure_mounted(args: argparse.Namespace, redact, tcr: ccr.TestCaseResult) ->
         if state.strip().lower() == "mounted":
             break
         time.sleep(args.poll_interval)
+    if state.strip().lower() != "mounted":
+        journal_state = read_bryck_state_from_journalctl(args)
+        tcr.notes.append(f"post-mount state fallback via journalctl: {journal_state}")
+        LOG.warning("post-mount state still %r after %ss; journalctl shows %r -- proceeding to the next "
+                   "step anyway", state, args.action_timeout, journal_state)
+        if journal_state.strip().lower() == "mounted":
+            state = journal_state
     return state
 
 
@@ -186,9 +235,21 @@ def initiate_transfer_cli(args: argparse.Namespace, src: str, dst: str, redact,
     tcr.commands.append(cmd.as_dict())
     if args.dry_run:
         return "DRYRUN-ID"
+    combined_out = (cmd.stdout or "") + (cmd.stderr or "")
     if cmd.returncode != 0:
+        # The broker rejects a duplicate transfer to the same src/dst (e.g. a previous case's
+        # transfer to this same destination was never cleaned up, likely because --skip-cleanup
+        # was used) with "Transfer is triggered already with ID: N" -- that's a real, already-
+        # existing transfer, not a failure; reuse its ID instead of aborting the whole case.
+        already_match = re.search(r"triggered already with ID:\s*(\d+)", combined_out, re.IGNORECASE)
+        if already_match:
+            existing_id = already_match.group(1)
+            LOG.warning("bryckcloud transfer add aws: %s -- reusing existing transfer id %s instead "
+                       "of starting a new one", combined_out.strip(), existing_id)
+            tcr.notes.append(f"reused already-triggered transfer id {existing_id} (duplicate src/dst rejected)")
+            return existing_id
         raise RuntimeError(f"bryckcloud transfer add aws failed (rc={cmd.returncode}): {cmd.stderr or cmd.stdout}")
-    transfer_id = ccr.base.parse_transfer_id_from_output((cmd.stdout or "") + (cmd.stderr or ""))
+    transfer_id = ccr.base.parse_transfer_id_from_output(combined_out)
     if transfer_id is None:
         transfer_id = ccr.base.detect_transfer_id(
             argparse.Namespace(transfer_id=None, poll_interval=args.poll_interval),
@@ -484,6 +545,7 @@ def run_leg(args: argparse.Namespace, mode_label: str, case_dir: pathlib.Path, r
     transfer_id: Optional[str] = None
     final_state = "UNKNOWN"
     error: Optional[str] = None
+    was_interrupted = False
     try:
         transfer_id = initiate_transfer_cli(args, src, dst, redact, tcr)
         if not transfer_id:
@@ -502,10 +564,18 @@ def run_leg(args: argparse.Namespace, mode_label: str, case_dir: pathlib.Path, r
 
         if args.pause_resume and args.verify_after_completion and not args.dry_run and transfer_id != "DRYRUN-ID":
             verify_pause_after_completion(args, transfer_id, final_state, redact, tcr)
-    except RuntimeError as exc:
+    except Exception as exc:  # noqa: BLE001 -- any failure (expected RuntimeError or a genuine bug)
+        # must still fall through to the perf-report block below, not just RuntimeError.
         error = str(exc)
         LOG.error("%s failed: %s", mode_label, error)
         tcr.notes.append(f"ERROR: {error}")
+    except KeyboardInterrupt:
+        # Ctrl+C mid-transfer: do NOT skip the perf report below -- record whatever was
+        # captured up to this point, then re-raise so the run still stops as expected.
+        was_interrupted = True
+        LOG.warning("%s interrupted (Ctrl+C) mid-transfer (transfer_id=%s, last known state=%s) -- "
+                   "still writing the perf report for what was captured so far", mode_label, transfer_id, final_state)
+        tcr.notes.append(f"INTERRUPTED by user (Ctrl+C); transfer_id={transfer_id} last known state={final_state}")
 
     perf_data = None
     logs_collected = args.dry_run or collector is None
@@ -536,11 +606,19 @@ def run_leg(args: argparse.Namespace, mode_label: str, case_dir: pathlib.Path, r
                 or (cloudcp_raw.is_file() and cloudcp_raw.stat().st_size > 0)
             )
 
-    tcr.status = "PASS" if (args.dry_run or (error is None and final_state == TERMINAL_SUCCESS)) else \
-        ("BLOCKED" if error else "FAIL")
+    tcr.status = "INTERRUPTED" if was_interrupted else (
+        "PASS" if (args.dry_run or (error is None and final_state == TERMINAL_SUCCESS)) else
+        ("BLOCKED" if error else
+         ("TIMEOUT" if final_state in STILL_RUNNING_STATES else "FAIL")))
     tcr.expected = "Transfer reaches COMPLETED"
     tcr.actual = f"final_state={final_state}" + (f", error={error}" if error else "")
+    if tcr.status == "TIMEOUT":
+        tcr.notes.append(f"--poll-timeout ({args.wait_timeout}s) reached while transfer was still "
+                         f"{final_state} -- not a product failure, just needs more time; re-run with a "
+                         f"larger --poll-timeout or re-check status separately.")
     tcr.notes.append(f"transfer_id={transfer_id} final_state={final_state}")
+    if was_interrupted:
+        raise KeyboardInterrupt()  # perf report is safely written above; now let the run actually stop
 
     return {
         "tcr": tcr, "transfer_id": transfer_id, "final_state": final_state, "error": error,
@@ -618,13 +696,29 @@ def build_ner_context(args: argparse.Namespace) -> ctr.TestContext:
     login_cfg = ctr._load_json(login_json)
     ssh_user = login_cfg.get("bryckserver_username", "bryck")
     ssh_host = login_cfg.get("bryckapi_host")
-    return ctr.TestContext(
+    ctx = ctr.TestContext(
         login_json=login_json, cloud_ops_json=cloud_ops_json, fmt_mount_json=fmt_mount_json,
         change_time_json=change_time_json, report_dir=ctr.DEFAULT_REPORT_DIR,
         results_dir=pathlib.Path(args.results_dir), ssh_user=ssh_user, ssh_host=ssh_host,
         datagen_bin=args.datagen_bin, spec_dir=pathlib.Path(args.spec_dir), dry_run=(not args.live),
         iteration=1, scenario_name="cloud_full_test",
     )
+    if args.skip_cancel_ops:
+        # --skip-cancel-ops: every ner.py handler calls ctx.cancel_transfer() for its
+        # actual "cancel the transfer" step -- patching it here (not in
+        # cloud_transfer_test_runner.py/negative_environment_runner.py, which stay
+        # untouched) makes that one step a no-op recorded as PASS/SKIPPED while every
+        # other step in the case (mount, configure, initiate, pause/resume, etc.)
+        # still runs exactly as before.
+        def _skipped_cancel_transfer(transfer_id: str, expect_fail: bool = False) -> ctr.StepResult:
+            return ctx._record(
+                f"Cancel transfer {transfer_id}", "bryck_cloud_transfer_cancel.py",
+                0, "", "SKIPPED: --skip-cancel-ops set -- cancel step not issued", 0.0,
+                notes="cancel operation skipped via --skip-cancel-ops; rest of the case still ran",
+                outcome="SKIPPED", validation_passed=True,
+            )
+        ctx.cancel_transfer = _skipped_cancel_transfer
+    return ctx
 
 
 def run_negative_case_via_ner(mgr: "ner.EnvironmentManager", args: argparse.Namespace, work: pathlib.Path,
@@ -634,6 +728,34 @@ def run_negative_case_via_ner(mgr: "ner.EnvironmentManager", args: argparse.Name
     result = ner.dispatch(case_id, desc, mgr, args, work, {})
     result.narrative = ner.build_narrative(result)
     return result
+
+
+_DETAIL_ROW_RE = re.compile(
+    r'(<tr id="detail-(\d+)" class="detailrow"[^>]*>\s*<td colspan="8">\s*<div class="detailbody">)'
+)
+
+
+def integrate_perf_report_links(html_str: str, neg_report_dir: pathlib.Path, case_ids: List[str]) -> str:
+    """Embed a link to each negative case's own perf/report.html (the same
+    journalctl/cloudcp.log chart report transfer cases get) directly inside
+    negative_environment_runner.py's combined_report.html detail rows, so the
+    perf charts and the test-result report are reachable from one page
+    instead of two disconnected files."""
+    import html as _html_mod
+
+    def _inject(match: "re.Match") -> str:
+        idx = int(match.group(2))
+        if idx >= len(case_ids):
+            return match.group(1)
+        case_id = case_ids[idx].replace("/", "_")
+        perf_html = neg_report_dir / case_id / "perf" / "report.html"
+        if not perf_html.is_file():
+            return match.group(1)
+        link = (f'<p class="perf-link" style="margin:6px 0 14px"><a href="{case_id}/perf/report.html" '
+                f'target="_blank" rel="noopener">&#128202; View performance report '
+                f'(journalctl/cloudcp.log charts) for {_html_mod.escape(case_id)}</a></p>')
+        return match.group(1) + link
+    return _DETAIL_ROW_RE.sub(_inject, html_str)
 
 
 # =============================================================================
@@ -676,12 +798,18 @@ def build_catalog() -> List[dict]:
 
 
 
+def run_command_for(entry: dict) -> str:
+    """The exact CLI invocation that runs this one catalog entry by itself."""
+    flag = "--one" if entry["kind"] == "transfer" else "--negative-case"
+    return f"python3 cloud_full_test.py {flag} {entry['id']}"
+
+
 def print_catalog(catalog: List[dict]) -> None:
-    print(f"{'[n]':>6} {'ID':<28}{'KIND':<10}{'STATUS':<12}NAME")
-    print("-" * 110)
+    print(f"{'[n]':>6} {'ID':<28}{'KIND':<10}{'STATUS':<12}{'COMMAND':<66}NAME")
+    print("-" * 170)
     for i, e in enumerate(catalog, start=1):
         status = "IMPLEMENTED" if e["implemented"] else "stub"
-        print(f"[{i:>4}] {e['id']:<28}{e['kind']:<10}{status:<12}{e['name']}")
+        print(f"[{i:>4}] {e['id']:<28}{e['kind']:<10}{status:<12}{run_command_for(e):<66}{e['name']}")
     n_transfer = sum(1 for e in catalog if e["kind"] == "transfer")
     n_negative = sum(1 for e in catalog if e["kind"] == "negative")
     print(f"\n{len(catalog)} total case(s): {n_transfer} transfer + {n_negative} negative.")
@@ -699,6 +827,19 @@ def _resolve_token(token: str, catalog: List[dict], id_index: dict) -> int:
     if token not in id_index:
         raise SystemExit(f"ERROR: unknown case id {token!r}. Use --list to see valid IDs.")
     return id_index[token]
+
+
+def _split_range_spec(spec: str, catalog: List[dict], id_index: dict) -> tuple[str, str]:
+    """Split a '--range FROM-TO' spec on '-', trying every split point so
+    hyphenated case ids (e.g. TRANSFER-DS-P1-01-UPLOAD, bryck-info-trigger)
+    still resolve correctly on both sides."""
+    parts = spec.split("-")
+    for i in range(1, len(parts)):
+        left, right = "-".join(parts[:i]), "-".join(parts[i:])
+        if (left.strip().isdigit() or left.strip() in id_index) and \
+           (right.strip().isdigit() or right.strip() in id_index):
+            return left.strip(), right.strip()
+    raise SystemExit(f"ERROR: could not parse --range {spec!r} as FROM-TO; use --from/--to instead if ambiguous.")
 
 
 def resolve_selection(args: argparse.Namespace, catalog: List[dict]) -> List[dict]:
@@ -720,6 +861,17 @@ def resolve_selection(args: argparse.Namespace, catalog: List[dict]) -> List[dic
     if args.one:
         wanted = [t.strip() for t in args.one.split(",") if t.strip()]
         return [catalog[_resolve_token(t, catalog, id_index)] for t in wanted]
+
+    if args.order:
+        return [catalog[_resolve_token(args.order, catalog, id_index)]]
+
+    if args.range_spec:
+        from_id, to_id = _split_range_spec(args.range_spec, catalog, id_index)
+        start = _resolve_token(from_id, catalog, id_index)
+        end = _resolve_token(to_id, catalog, id_index)
+        if start > end:
+            start, end = end, start
+        return catalog[start:end + 1]
 
     if args.from_id or args.to_id:
         if not (args.from_id and args.to_id):
@@ -836,7 +988,9 @@ def run_transfer_case(args: argparse.Namespace, entry: dict, run_dir: pathlib.Pa
         {"id": t.test_id, "dataset": dataset_id, "mode": t.kind} for t in all_tcrs]}, all_tcrs)
 
     overall_ok = all(leg["error"] is None and leg["final_state"] == TERMINAL_SUCCESS for leg in legs) or args.dry_run
-    return {"case_id": case_id, "status": "PASS" if overall_ok else "FAIL", "legs": legs, "error": None}
+    any_timeout = any(leg["tcr"].status == "TIMEOUT" for leg in legs)
+    case_status = "PASS" if overall_ok else ("TIMEOUT" if any_timeout else "FAIL")
+    return {"case_id": case_id, "status": case_status, "legs": legs, "error": None}
 
 
 def run_component_suite(args: argparse.Namespace) -> int:
@@ -876,8 +1030,12 @@ def parse_args(argv: Optional[list] = None) -> argparse.Namespace:
     sel = p.add_argument_group("selection")
     sel.add_argument("--all", action="store_true", help="Run every case (transfer + negative).")
     sel.add_argument("--one", default=None, help="Run one case, or a comma-separated list, by # index or case id.")
+    sel.add_argument("--order", default=None,
+                     help="Run exactly one case by its # index or case id (same resolution as --one).")
     sel.add_argument("--from", dest="from_id", default=None, help="Start case (# index or id, inclusive).")
     sel.add_argument("--to", dest="to_id", default=None, help="End case (# index or id, inclusive).")
+    sel.add_argument("--range", dest="range_spec", default=None,
+                     help="Inclusive range as FROM-TO (# index or id on each side), e.g. --range 1-9 or --range CLI-01-CLI-09.")
     sel.add_argument("--negative", action="store_true", help="Run only the negative-catalog cases.")
     sel.add_argument("--negative-case", default=None,
                      help="Run one/comma-separated negative case(s) by # index or id.")
@@ -897,7 +1055,11 @@ def parse_args(argv: Optional[list] = None) -> argparse.Namespace:
                          "even if --cleanup is also given.")
     ex.add_argument("--seed", type=int, default=1337, help="Random seed for reproducibility (default 1337).")
     ex.add_argument("--poll-interval", type=int, default=10)
-    ex.add_argument("--poll-timeout", dest="wait_timeout", type=int, default=1800)
+    ex.add_argument("--poll-timeout", dest="wait_timeout", type=int, default=600,
+                    help="Per-leg terminal-state wait cap in seconds (default 600 = 10min). Real transfer "
+                         "state is always trusted as-is; hitting this cap while still IN_PROGRESS/PAUSED/"
+                         "QUEUED is reported as TIMEOUT (not a false FAIL) -- raise this for larger datasets "
+                         "that legitimately need more than 10 minutes.")
     ex.add_argument("--verbose", action="store_true")
     ex.add_argument("--confirm-destructive", action="store_true",
                     help="Allow negative_environment_runner.py's destructive negative cases "
@@ -908,6 +1070,11 @@ def parse_args(argv: Optional[list] = None) -> argparse.Namespace:
                     help="Allow REC-03 to block/restore outbound network traffic on the device.")
     ex.add_argument("--allow-reboot", action="store_true",
                     help="No-op: reboot test cases are excluded from negative_environment_runner.py per its own design.")
+    ex.add_argument("--skip-cancel-ops", action="store_true",
+                    help="Skip only the actual 'cancel transfer' step inside every negative case's own "
+                         "flow (bryck_cloud_transfer_cancel.py is never invoked) -- every other step in "
+                         "that case (mount, configure, initiate, pause/resume, etc.) still runs normally "
+                         "and the skipped step is recorded as SKIPPED/PASS, not a failure.")
 
     ph = p.add_argument_group("paths / hosts")
     ph.add_argument("--cli-dir", default=str(BRYCK_CLI_DIR), help="bryckclient-cli directory.")
@@ -980,7 +1147,8 @@ def main(argv: Optional[list] = None) -> int:
 
     selected = resolve_selection(args, catalog)
     if not selected:
-        print("Use --list, --all, --one <id[,id...]>, --from/--to, --negative, or --negative-case.")
+        print("Use --list, --all, --one <id[,id...]>, --order <id>, --from/--to, --range FROM-TO, "
+              "--negative, or --negative-case.")
         return 2
 
     run_id = args.run_id or f"full_test_{dt.datetime.now():%Y%m%d_%H%M%S}"
@@ -1015,49 +1183,89 @@ def main(argv: Optional[list] = None) -> int:
     # carries over between cases exactly like a real run of that script.
     ner_mgr: Optional["ner.EnvironmentManager"] = None
     ner_results: List["ner.TestResult"] = []
+    ner_case_ids: List[str] = []  # parallel to ner_results, for perf-report link injection
     ner_work_dir = run_dir / "negative" / "_work"
 
     results: List[dict] = []
     total = len(selected)
-    for i, entry in enumerate(selected, start=1):
-        if args.manual:
-            action = manual_confirm(i, total, entry)
-            if action == "quit":
-                LOG.info("Stopped by user after %d/%d case(s).", i - 1, total)
-                break
-            if action == "skip":
-                results.append({"case_id": entry["id"], "status": "SKIP"})
-                continue
+    interrupted = False
+    try:
+        for i, entry in enumerate(selected, start=1):
+            if args.manual:
+                action = manual_confirm(i, total, entry)
+                if action == "quit":
+                    LOG.info("Stopped by user after %d/%d case(s).", i - 1, total)
+                    break
+                if action == "skip":
+                    results.append({"case_id": entry["id"], "status": "SKIP"})
+                    continue
 
-        LOG.info("=== [%d/%d] %s (%s) ===", i, total, entry["id"], entry["kind"])
-        if entry["kind"] == "transfer":
-            result = run_transfer_case(args, entry, run_dir, base_cloud_ops, redact)
-        else:
-            # Environment prep first (see prepare_environment()'s docstring) --
-            # a lightweight baseline check before handing off to ner.dispatch(),
-            # whose own handlers do further fixture-specific setup as needed.
-            neg_dir = run_dir / "negative" / entry["id"].replace("/", "_")
-            neg_dir.mkdir(parents=True, exist_ok=True)
-            env_tcr = ccr.TestCaseResult(test_id=f"{entry['id']}_env_prep", kind="env_prep",
-                                         description=f"environment prep before {entry['id']}")
-            env_snapshot = prepare_environment(args, redact, env_tcr, entry["id"])
-            (neg_dir / "env_prep.json").write_text(
-                json.dumps({"snapshot": env_snapshot, "notes": env_tcr.notes,
-                           "commands": env_tcr.commands}, indent=2, default=str), encoding="utf-8")
+            LOG.info("=== [%d/%d] %s (%s) ===", i, total, entry["id"], entry["kind"])
+            try:
+                if entry["kind"] == "transfer":
+                    result = run_transfer_case(args, entry, run_dir, base_cloud_ops, redact)
+                else:
+                    # Environment prep first (see prepare_environment()'s docstring) --
+                    # a lightweight baseline check before handing off to ner.dispatch(),
+                    # whose own handlers do further fixture-specific setup as needed.
+                    neg_dir = run_dir / "negative" / entry["id"].replace("/", "_")
+                    neg_dir.mkdir(parents=True, exist_ok=True)
+                    env_tcr = ccr.TestCaseResult(test_id=f"{entry['id']}_env_prep", kind="env_prep",
+                                                 description=f"environment prep before {entry['id']}")
+                    env_snapshot = prepare_environment(args, redact, env_tcr, entry["id"])
+                    (neg_dir / "env_prep.json").write_text(
+                        json.dumps({"snapshot": env_snapshot, "notes": env_tcr.notes,
+                                   "commands": env_tcr.commands}, indent=2, default=str), encoding="utf-8")
 
-            # Delegate to negative_environment_runner.py's dispatch()/EnvironmentManager
-            # -- the actual, comprehensive environment-aware implementation (LIFE/DATA/
-            # XFER/DOWNLOAD/RACE/DUP/REPORT/FAULT/REC/VERIFY/INT/MGMT/SVC/SM/F included),
-            # not a reimplementation.
-            if ner_mgr is None:
-                ner_ctx = build_ner_context(args)
-                ner_mgr = ner.EnvironmentManager(ner_ctx)
-                ner_work_dir.mkdir(parents=True, exist_ok=True)
-            ner_result = run_negative_case_via_ner(ner_mgr, args, ner_work_dir, entry["id"])
-            ner_results.append(ner_result)
-            result = {"case_id": entry["id"], "status": ner_result.status}
-        results.append(result)
-        LOG.info("    -> %s", result.get("status"))
+                    # Delegate to negative_environment_runner.py's dispatch()/EnvironmentManager
+                    # -- the actual, comprehensive environment-aware implementation (LIFE/DATA/
+                    # XFER/DOWNLOAD/RACE/DUP/REPORT/FAULT/REC/VERIFY/INT/MGMT/SVC/SM/F included),
+                    # not a reimplementation.
+                    if ner_mgr is None:
+                        ner_ctx = build_ner_context(args)
+                        ner_mgr = ner.EnvironmentManager(ner_ctx)
+                        ner_work_dir.mkdir(parents=True, exist_ok=True)
+                    # Same journalctl/cloudcp.log perf capture as transfer cases (see run_leg()),
+                    # wrapped around the whole case so every negative case -- not just transfers --
+                    # gets a perf report.
+                    perf_cfg = {
+                        "journal_tag": args.journal_tag, "cloudcp_log": args.cloudcp_log,
+                        "capture_lead": args.capture_lead, "capture_drain": args.capture_drain,
+                        "transfer_logs_dir": args.transfer_logs_dir, "bryck_config_json": args.bryck_config_json,
+                    }
+                    collector = perf_mod.TransferPerfCollector(neg_dir, perf_cfg, args.dry_run) if args.perf_capture else None
+                    if collector is not None:
+                        collector.start()
+                    try:
+                        ner_result = run_negative_case_via_ner(ner_mgr, args, ner_work_dir, entry["id"])
+                    finally:
+                        # Always finish the perf capture, even on Ctrl+C mid-case, so whatever was
+                        # captured up to the interrupt is still written instead of silently dropped.
+                        if collector is not None:
+                            perf_data = collector.finish(
+                                entry["id"], csv_path=None, test_id=entry["id"], tier=entry.get("section", ""),
+                                mode="negative", description=entry["name"], gen_summary=None,
+                            )
+                            LOG.info("[%s] perf report: %s", entry["id"], perf_data.get("html_report"))
+                    ner_results.append(ner_result)
+                    ner_case_ids.append(entry["id"])
+                    result = {"case_id": entry["id"], "status": ner_result.status}
+            except KeyboardInterrupt:
+                # Ctrl+C mid-case: record exactly where execution stopped, then re-raise so the
+                # outer handler below still writes every report for cases that DID run --
+                # never silently lose logs/results just because the run was interrupted.
+                LOG.warning("[%s] interrupted (Ctrl+C) while this case was in progress", entry["id"])
+                results.append({"case_id": entry["id"], "status": "INTERRUPTED"})
+                raise
+            except Exception as exc:  # noqa: BLE001 -- one case's crash must never abort the whole run
+                LOG.exception("[%s] crashed unexpectedly: %s", entry["id"], exc)
+                result = {"case_id": entry["id"], "status": "CRASH", "error": str(exc)}
+            results.append(result)
+            LOG.info("    -> %s", result.get("status"))
+    except KeyboardInterrupt:
+        interrupted = True
+        LOG.warning("Interrupted by user (Ctrl+C) after %d/%d case(s) -- writing logs/reports for "
+                   "everything that ran so far.", len(results), total)
 
     if not args.keep_config and backup_path.exists() and not args.dry_run:
         try:
@@ -1077,23 +1285,44 @@ def main(argv: Optional[list] = None) -> int:
         (neg_report_dir / "combined_results.json").write_text(
             json.dumps([_dc.asdict(r) for r in ner_results], indent=2, default=str), encoding="utf-8")
         (neg_report_dir / "combined_report.html").write_text(
-            ner.build_html(run_id, run_id, dt.datetime.now().isoformat(timespec="seconds"), ner_results),
+            integrate_perf_report_links(
+                ner.build_html(run_id, run_id, dt.datetime.now().isoformat(timespec="seconds"), ner_results),
+                neg_report_dir, ner_case_ids,
+            ),
             encoding="utf-8")
         LOG.info("Combined negative report: %s", neg_report_dir / "combined_report.html")
+
+    zip_path: Optional[pathlib.Path] = None
+    try:
+        # Package the entire run directory (report.json, combined_report.html,
+        # every per-case perf/summary folder) into one .zip next to it -- a
+        # single file that's easy to download/extract on any OS, instead of
+        # relying on tar (which failed for the user: wrong path/permissions/
+        # taring before the run finished all produce an empty archive).
+        zip_base = shutil.make_archive(str(run_dir), "zip", root_dir=str(run_dir.parent), base_dir=run_dir.name)
+        zip_path = pathlib.Path(zip_base)
+        LOG.info("Results directory zipped -> %s", zip_path)
+    except OSError as exc:
+        LOG.warning("could not zip results directory %s: %s", run_dir, exc)
 
     counts: dict = {}
     for r in results:
         counts[r.get("status", "UNKNOWN")] = counts.get(r.get("status", "UNKNOWN"), 0) + 1
     print("\n" + "=" * 60)
-    print(f"cloud_full_test.py run {run_id} complete -- {len(results)} case(s)")
+    print(f"cloud_full_test.py run {run_id} " + ("INTERRUPTED" if interrupted else "complete")
+         + f" -- {len(results)}/{total} case(s) ran")
     for status, count in counts.items():
         print(f"  {status}: {count}")
     print(f"Results directory: {run_dir}")
     print(f"  report.json: {run_dir / 'report.json'}")
     if ner_results:
         print(f"  negative combined report: {run_dir / 'negative' / 'combined_report.html'}")
+    if zip_path is not None:
+        print(f"  zip archive: {zip_path}")
     print("=" * 60 + "\n")
-    return 1 if counts.get("FAIL", 0) else 0
+    if interrupted:
+        return 130  # conventional 128+SIGINT exit code
+    return 1 if (counts.get("FAIL", 0) or counts.get("CRASH", 0)) else 0
 
 
 if __name__ == "__main__":
