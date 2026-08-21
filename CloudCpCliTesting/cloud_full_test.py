@@ -1020,6 +1020,87 @@ def manual_confirm(index: int, total: int, entry: dict) -> str:
             return "quit"
 
 
+# =============================================================================
+# Execution journal -- a persistent, incrementally-updated record of every
+# selected case's status (NOT_EXECUTED -> IN_PROGRESS -> PASS/FAIL/BLOCKED/
+# CRASH/INTERRUPTED/SKIP), saved to disk after every single case so a Ctrl+C
+# or crash mid-run still leaves an accurate, complete record of exactly how
+# far the run got. This does NOT replace report.json/combined_results.json
+# (still written once at the end, unchanged) -- it is the additional,
+# continuously-persisted journal requested on top of that existing report.
+# =============================================================================
+
+def _atomic_write_json(path: pathlib.Path, data) -> None:
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
+    tmp.replace(path)  # atomic on POSIX and Windows -- a crash mid-write never corrupts the prior journal
+
+
+def init_execution_journal(run_id: str, selected: List[dict]) -> dict:
+    return {
+        "run_id": run_id, "execution_status": "RUNNING",
+        "current_test_id": None, "current_test_index": 0, "total_test_count": len(selected),
+        "started": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"), "finished": None,
+        "tests": [
+            {"test_id": e["id"], "kind": e["kind"], "name": e["name"], "execution_order": i,
+             "status": "NOT_EXECUTED", "start_time": None, "end_time": None,
+             "duration_sec": None, "error": None}
+            for i, e in enumerate(selected, start=1)
+        ],
+    }
+
+
+def save_execution_journal(journal_path: pathlib.Path, journal: dict) -> None:
+    _atomic_write_json(journal_path, journal)
+
+
+def mark_journal_entry(journal: dict, order: int, status: str,
+                       error: Optional[str] = None, start: bool = False) -> None:
+    if not (1 <= order <= len(journal["tests"])):
+        return
+    entry = journal["tests"][order - 1]
+    now = dt.datetime.now(dt.timezone.utc)
+    entry["status"] = status
+    if start:
+        entry["start_time"] = now.isoformat(timespec="seconds")
+    else:
+        entry["end_time"] = now.isoformat(timespec="seconds")
+        if entry.get("start_time"):
+            try:
+                started = dt.datetime.fromisoformat(entry["start_time"])
+                entry["duration_sec"] = (now - started).total_seconds()
+            except ValueError:
+                pass
+    if error:
+        entry["error"] = error
+
+
+def journal_counts(journal: dict) -> dict:
+    counts: dict = {}
+    for t in journal["tests"]:
+        counts[t["status"]] = counts.get(t["status"], 0) + 1
+    return counts
+
+
+def print_journal_summary(journal: dict, journal_path: pathlib.Path, header: str) -> None:
+    counts = journal_counts(journal)
+    print("\n" + "=" * 60)
+    print(header)
+    print("=" * 60 + "\n")
+    print(f"Total Tests      : {journal['total_test_count']}")
+    print(f"Passed           : {counts.get('PASS', 0)}")
+    print(f"Failed           : {counts.get('FAIL', 0)}")
+    print(f"Blocked          : {counts.get('BLOCKED', 0)}")
+    print(f"Crashed          : {counts.get('CRASH', 0)}")
+    print(f"Interrupted      : {counts.get('INTERRUPTED', 0)}")
+    print(f"Not Executed     : {counts.get('NOT_EXECUTED', 0)}")
+    print(f"\nExecution Status : {journal['execution_status']}")
+    if journal.get("current_test_id"):
+        print(f"Current Test     : {journal['current_test_id']}")
+    print(f"\nExecution Journal:\n{journal_path}")
+    print("=" * 60 + "\n")
+
+
 def parse_args(argv: Optional[list] = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description="Unified transfer + negative-catalog test harness "
@@ -1194,6 +1275,14 @@ def main(argv: Optional[list] = None) -> int:
     results: List[dict] = []
     total = len(selected)
     interrupted = False
+    crashed = False
+
+    # Incremental execution journal (see its own section above) -- initialized with every
+    # selected case as NOT_EXECUTED and saved immediately, before any case runs, so the
+    # journal file exists and is accurate even if the process is killed before case 1 starts.
+    journal_path = run_dir / "execution_journal.json"
+    journal = init_execution_journal(run_id, selected)
+    save_execution_journal(journal_path, journal)
     try:
         for i, entry in enumerate(selected, start=1):
             if args.manual:
@@ -1203,8 +1292,13 @@ def main(argv: Optional[list] = None) -> int:
                     break
                 if action == "skip":
                     results.append({"case_id": entry["id"], "status": "SKIP"})
+                    mark_journal_entry(journal, i, "SKIP")
+                    save_execution_journal(journal_path, journal)
                     continue
 
+            mark_journal_entry(journal, i, "IN_PROGRESS", start=True)
+            journal["current_test_id"], journal["current_test_index"] = entry["id"], i
+            save_execution_journal(journal_path, journal)
             LOG.info("=== [%d/%d] %s (%s) ===", i, total, entry["id"], entry["kind"])
             try:
                 if entry["kind"] == "transfer":
@@ -1261,16 +1355,31 @@ def main(argv: Optional[list] = None) -> int:
                 # never silently lose logs/results just because the run was interrupted.
                 LOG.warning("[%s] interrupted (Ctrl+C) while this case was in progress", entry["id"])
                 results.append({"case_id": entry["id"], "status": "INTERRUPTED"})
+                mark_journal_entry(journal, i, "INTERRUPTED")
+                save_execution_journal(journal_path, journal)
                 raise
             except Exception as exc:  # noqa: BLE001 -- one case's crash must never abort the whole run
                 LOG.exception("[%s] crashed unexpectedly: %s", entry["id"], exc)
                 result = {"case_id": entry["id"], "status": "CRASH", "error": str(exc)}
             results.append(result)
+            mark_journal_entry(journal, i, result.get("status", "UNKNOWN"), error=result.get("error"))
+            journal["current_test_id"] = None
+            save_execution_journal(journal_path, journal)
             LOG.info("    -> %s", result.get("status"))
     except KeyboardInterrupt:
         interrupted = True
+        journal["execution_status"] = "INTERRUPTED"
+        journal["current_test_id"] = None
+        save_execution_journal(journal_path, journal)
         LOG.warning("Interrupted by user (Ctrl+C) after %d/%d case(s) -- writing logs/reports for "
                    "everything that ran so far.", len(results), total)
+    except Exception as fatal_exc:  # noqa: BLE001 -- genuinely unexpected crash outside any one case's
+                                    # own handling (the per-case try/except above already covers those)
+        crashed = True
+        journal["execution_status"] = "CRASHED"
+        journal["current_test_id"] = None
+        save_execution_journal(journal_path, journal)
+        LOG.exception("Unexpected fatal error in the test-execution loop: %s", fatal_exc)
 
     if not args.keep_config and backup_path.exists() and not args.dry_run:
         try:
@@ -1278,6 +1387,11 @@ def main(argv: Optional[list] = None) -> int:
             LOG.info("restored original cloud_ops.json from %s", backup_path)
         except OSError as exc:
             LOG.warning("could not restore cloud_ops.json: %s", exc)
+
+    if journal["execution_status"] == "RUNNING":
+        journal["execution_status"] = "COMPLETED"
+    journal["finished"] = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
+    save_execution_journal(journal_path, journal)
 
     (run_dir / "report.json").write_text(json.dumps({
         "run_id": run_id, "selected": len(selected), "results": results,
@@ -1313,13 +1427,16 @@ def main(argv: Optional[list] = None) -> int:
     counts: dict = {}
     for r in results:
         counts[r.get("status", "UNKNOWN")] = counts.get(r.get("status", "UNKNOWN"), 0) + 1
+    header = ("PARTIAL TEST EXECUTION SUMMARY" if (interrupted or crashed) else "TEST EXECUTION SUMMARY")
+    print_journal_summary(journal, journal_path, header)
     print("\n" + "=" * 60)
-    print(f"cloud_full_test.py run {run_id} " + ("INTERRUPTED" if interrupted else "complete")
+    print(f"cloud_full_test.py run {run_id} " + ("INTERRUPTED" if interrupted else "CRASHED" if crashed else "complete")
          + f" -- {len(results)}/{total} case(s) ran")
     for status, count in counts.items():
         print(f"  {status}: {count}")
     print(f"Results directory: {run_dir}")
     print(f"  report.json: {run_dir / 'report.json'}")
+    print(f"  execution_journal.json: {journal_path}")
     if ner_results:
         print(f"  negative combined report: {run_dir / 'negative' / 'combined_report.html'}")
     if zip_path is not None:
@@ -1327,7 +1444,7 @@ def main(argv: Optional[list] = None) -> int:
     print("=" * 60 + "\n")
     if interrupted:
         return 130  # conventional 128+SIGINT exit code
-    return 1 if (counts.get("FAIL", 0) or counts.get("CRASH", 0)) else 0
+    return 1 if (counts.get("FAIL", 0) or counts.get("CRASH", 0) or crashed) else 0
 
 
 if __name__ == "__main__":
