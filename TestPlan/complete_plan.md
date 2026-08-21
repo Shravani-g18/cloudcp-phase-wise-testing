@@ -32,6 +32,7 @@ It covers testing along three orthogonal axes:
 | 6 | **Complete Functional** | Full end-to-end flow across all stages | [phases/06_complete_functional.md](phases/06_complete_functional.md) |
 | 7 | **API** | Transfer control surface (start/pause/resume/status/report) | [phases/07_api.md](phases/07_api.md) |
 | 8 | **UI (manual + automation)** | Operator-facing screens; manual test plan + automation outline | [phases/08_ui_manual.md](phases/08_ui_manual.md) |
+| 9 | **CLI (`bryckclient-cli`)** | Operator CLI: mount/eject/format/erase, cloud configure, transfer initiate/status/pause/resume/cancel/report | [phases/09_cli.md](phases/09_cli.md) |
 
 **Tooling for every phase** is documented once in [tools_guide.md](tools_guide.md).
 
@@ -215,13 +216,14 @@ tracks what assets exist today versus what is still to be added. Each phase doc 
 | Phase | Existing assets | To be added |
 |---|---|---|
 | Batch Builder | Test plan ([phases/01](phases/01_batch_builder.md)); generation via [dataset_validator.py](../dataset_cloudcp/spec_files/dataset_validator.py); catalog + manifest | Automated expected-vs-actual `batch_summary.csv` comparator; full 54-dataset run harness; config-matrix runs |
-| Scheduler | Test plan ([phases/02](phases/02_scheduler.md)); weight-shift datasets (cat 3, 6, 11); sandboxed negative harness [schedular_negative_test.py](../CloudCpSchedulerTesting/schedular_negative_test.py) (NEG-* fault injection) | Slot-sampling verdict layer; profile-diff automation; convergence measurement |
+| Scheduler | Test plan ([phases/02](phases/02_scheduler.md)); deterministic-enumeration catalog + oracle in [CloudCpSchedulerTesting/](../CloudCpSchedulerTesting/) (`test_cases.md`, `schedular_test.py` capture/replay, sandboxed `schedular_negative_test.py`); 45 P0/P1 cases (enumeration oracle, dispatch, config, pause/resume, negatives) + 3 P2 | Slot-sampling verdict layer; oracle-validation harness; profile-diff automation; convergence measurement |
 | CloudCP Binary | **Complete binary suite** in [CloudCpBinaryTesting/](../CloudCpBinaryTesting/) (`plan_cp_binary.md`, `run_cloudcp_tests.py`, `make_batches.py`, positive + negative datasets incl. hostile fs objects N01–N11 and xattr-metadata cases N12–N16, plus the **pause/resume suite PR01–PR06**) | Integrate into master harness; wire to broker-produced batches; confirm xattr preserve/drop policy; PR07 tampered-log + PR-over-malformed-batch |
-| Reporting | Test plan ([phases/04](phases/04_reporting.md)); [planv2.md](../docs/planv2.md) Phase 4 | Injected-status fixtures; CSV/JSON assertion harness |
-| Fallback | Test plan ([phases/05](phases/05_fallback.md)); [planv2.md](../docs/planv2.md) Phase 3 | Fault-injection proxy; `.lst` drain harness |
+| Reporting | **Runnable suite** in [CloudCpReportTesting/](../CloudCpReportTesting/) (`verify_and_report.py` + `report_engine.py` + `cases/`, and live `run_report_tests.py` + `live_cases/`); 18 cases — synthetic reference-engine P4-01…P4-08 + live end-to-end RT-01…RT-10 with cross-cutting checks ([phases/04](phases/04_reporting.md)) | Integrate into master harness; real-counter sampler for P4-06; swap reference engine for the real verification engine |
+| Fallback | **Runnable fault-injecting suite** in [CloudCpFallbackTesting/](../CloudCpFallbackTesting/) (`plan_cp_fallback.md` + `plan_cp_component_fallback.md`, `cloudcp_fallback_test.py`, `cloudcp_component_fallback_test.py`); 65 cases — API upload/download/min-acceptance/negative (FB-*) + component worker/mp-retry/negative (CFW/CMP-*) with break conditions B1–B9 ([phases/05](phases/05_fallback.md)) | Wire into master harness; resolve open items (plan_cp_fallback.md §16); B4/B6/B8/B9 remediation follow-ups |
 | Complete Functional | Test plan ([phases/06](phases/06_complete_functional.md)) | End-to-end runner spanning all stages |
 | API | Test plan ([phases/07](phases/07_api.md)) | Endpoint inventory; contract tests |
 | UI | Manual plan ([phases/08](phases/08_ui_manual.md)) | Automation harness (Playwright/Selenium) |
+| CLI | **Complete CLI suite** in [CloudCpCliTesting/](../CloudCpCliTesting/) (`cloud_cli_plan.md`, two-phase `cloud_cli_runner.py`, `bryckclient-cli` scripts); 41 cases — transfer matrix, live intervention incl. **pause/resume**, service restart, edge, CLI-input + AWS-config negatives ([phases/09](phases/09_cli.md)) | Integrate into master harness; resolve open items (SPARSE spec, sudo for restarts, bucket naming); multi-Bryck + GCP/Azure |
 
 Sources this plan builds on:
 
@@ -243,7 +245,11 @@ The executable step-by-step cases and their pass/fail records are tracked in the
 Per-phase test-case registers (self-contained, live next to each suite):
 
 - **Phase 1 — Batch Builder:** [../CloudCpBatchBuilderTesting/BatchBuilder_TestCases.xlsx](../CloudCpBatchBuilderTesting/BatchBuilder_TestCases.xlsx)
+- **Phase 2 — Scheduler / Broker:** [../CloudCpSchedulerTesting/CloudCpScheduler_TestCases.xlsx](../CloudCpSchedulerTesting/CloudCpScheduler_TestCases.xlsx) (enumeration oracle, dispatch/weight/work-stealing, config, pause/resume positive + negative, fault injection, performance, traceability)
 - **Phase 3 — CloudCP Binary:** [../CloudCpBinaryTesting/CloudCpBinary_TestCases.xlsx](../CloudCpBinaryTesting/CloudCpBinary_TestCases.xlsx) (incl. positive, negative/hostile, and pause/resume suites)
+- **Phase 4 — Reporting & Verification:** [../CloudCpReportTesting/CloudCpReport_TestCases.xlsx](../CloudCpReportTesting/CloudCpReport_TestCases.xlsx) (synthetic reference-engine P4 cases + live end-to-end RT cases + cross-cutting checks)
+- **Phase 5 — Fallback & Retry:** [../CloudCpFallbackTesting/CloudCpFallback_TestCases.xlsx](../CloudCpFallbackTesting/CloudCpFallback_TestCases.xlsx) (fault profiles, API upload/download/min-acceptance/negative, component worker/mp-retry/negative, break conditions)
+- **Phase 9 — CLI:** [../CloudCpCliTesting/CloudCpCli_TestCases.xlsx](../CloudCpCliTesting/CloudCpCli_TestCases.xlsx) (transfer matrix, live intervention, service/edge, CLI + AWS negatives)
 
 Each phase doc in [phases/](phases/) maps its cases to rows in that workbook (by a
 `Phase-<n>-<seq>` case ID). Keep IDs stable so results roll up to this master.
@@ -264,3 +270,4 @@ Each phase doc in [phases/](phases/) maps its cases to rows in that workbook (by
 | [phases/06_complete_functional.md](phases/06_complete_functional.md) | End-to-end functional plan |
 | [phases/07_api.md](phases/07_api.md) | API test plan |
 | [phases/08_ui_manual.md](phases/08_ui_manual.md) | UI manual + automation outline |
+| [phases/09_cli.md](phases/09_cli.md) | CLI (`bryckclient-cli`) test plan |
