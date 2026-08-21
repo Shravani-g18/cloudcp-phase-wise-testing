@@ -214,6 +214,17 @@ DATASET_SPEC_ROTATION = [
 # Environment manager — thin wrapper around TestContext
 # =============================================================================
 
+def fixture_direction(args) -> str:
+    """Primary bryck<->s3 direction for a case's own transfer fixture.
+
+    Defaults to "upload" (bryck->s3) so existing behavior/reports are
+    unchanged; --direction download flips it to s3->bryck. Only applies to
+    cases that don't already hardcode a specific direction as part of what
+    they're testing (e.g. DOWNLOAD-*, XFER-09/10).
+    """
+    return getattr(args, "direction", None) or "upload"
+
+
 class EnvironmentManager:
     """Prepares/validates state and records every command for the report.
 
@@ -861,7 +872,7 @@ def handle_aws(case_id: str, desc: str, mgr: EnvironmentManager, args, work: Pat
         if not (mgr.ensure_mounted() and mgr.ensure_cloud_configured() and mgr.ensure_dataset()):
             return blocked(case_id, "AWS", desc, baseline, "could not establish mounted+configured+dataset baseline", mgr=mgr)
         env_before = mgr.snapshot(f"{case_id}:before")
-        tid = mgr.create_transfer("upload", "IN_PROGRESS")
+        tid = mgr.create_transfer(fixture_direction(args), "IN_PROGRESS")
         if not tid:
             return blocked(case_id, "AWS", desc, baseline, "could not establish an active transfer fixture",
                           env_before, mgr)
@@ -1012,7 +1023,7 @@ def handle_life(case_id: str, desc: str, mgr: EnvironmentManager, args, work: Pa
             return blocked(case_id, "LIFE", desc, baseline, "could not establish mounted+configured+dataset baseline", mgr=mgr)
         env_before = mgr.snapshot(f"{case_id}:before")
         wanted = "PAUSED" if case_id in {"LIFE-11", "LIFE-14"} else "IN_PROGRESS"
-        tid = mgr.create_transfer("upload", "IN_PROGRESS" if wanted == "IN_PROGRESS" else "IN_PROGRESS")
+        tid = mgr.create_transfer(fixture_direction(args), "IN_PROGRESS" if wanted == "IN_PROGRESS" else "IN_PROGRESS")
         if not tid:
             return blocked(case_id, "LIFE", desc, baseline, "could not establish the required transfer state", env_before, mgr)
         if wanted == "PAUSED":
@@ -1033,7 +1044,7 @@ def handle_life(case_id: str, desc: str, mgr: EnvironmentManager, args, work: Pa
         if not (mgr.ensure_mounted() and mgr.ensure_cloud_configured() and mgr.ensure_dataset()):
             return blocked(case_id, "LIFE", desc, baseline, "could not establish mounted+configured+dataset baseline", mgr=mgr)
         env_before = mgr.snapshot(f"{case_id}:before")
-        tid = mgr.create_transfer_at("upload", "COMPLETED", timeout=7200)
+        tid = mgr.create_transfer_at(fixture_direction(args), "COMPLETED", timeout=7200)
         if not tid:
             return blocked(case_id, "LIFE", desc, baseline, "could not establish a completed transfer", env_before, mgr)
 
@@ -1076,7 +1087,7 @@ def handle_life(case_id: str, desc: str, mgr: EnvironmentManager, args, work: Pa
         if not (mgr.ensure_mounted() and mgr.ensure_cloud_configured() and mgr.ensure_dataset()):
             return blocked(case_id, "LIFE", desc, baseline, "could not establish mounted+configured+dataset baseline", mgr=mgr)
         env_before = mgr.snapshot(f"{case_id}:before")
-        tid = mgr.create_transfer("upload", "IN_PROGRESS")
+        tid = mgr.create_transfer(fixture_direction(args), "IN_PROGRESS")
         if not tid:
             return blocked(case_id, "LIFE", desc, baseline, "could not establish an active transfer", env_before, mgr)
         barrier = threading.Barrier(2)
@@ -1148,7 +1159,7 @@ def handle_data(case_id: str, desc: str, mgr: EnvironmentManager, args, work: Pa
             return blocked(case_id, "DATASET", desc, baseline, "could not establish mounted+configured+dataset baseline", mgr=mgr)
         env_before = mgr.snapshot(f"{case_id}:before")
         target_state = "PAUSED" if case_id == "DATA-04" else "IN_PROGRESS"
-        tid = mgr.create_transfer_at("upload", target_state, timeout=3600)
+        tid = mgr.create_transfer_at(fixture_direction(args), target_state, timeout=3600)
         if not tid:
             return blocked(case_id, "DATASET", desc, baseline, "could not establish the required transfer state", env_before, mgr)
         gen = mgr.cap(f"{case_id}:regenerate", ctx.run_datagen("small_1gb_fast.yaml", timeout=1800))
@@ -1418,7 +1429,9 @@ def handle_xfer(case_id: str, desc: str, mgr: EnvironmentManager, args, work: Pa
     if not (mgr.ensure_mounted() and mgr.ensure_cloud_configured() and mgr.ensure_dataset()):
         return blocked(case_id, "XFER", desc, baseline, "could not establish mounted+configured+dataset baseline", mgr=mgr)
     env_before = mgr.snapshot(f"{case_id}:before")
-    tid = mgr.create_transfer("upload", "IN_PROGRESS")
+    # XFER-11..17 are pause/resume/cancel/lifecycle checks with no direction semantics in
+    # their own name, so they honor --direction; XFER-01..10/18 stay fixed per their name.
+    tid = mgr.create_transfer(fixture_direction(args), "IN_PROGRESS")
     if not tid:
         return blocked(case_id, "XFER", desc, baseline, "could not establish an active upload transfer", env_before, mgr)
 
@@ -1598,7 +1611,7 @@ def handle_state(case_id: str, desc: str, mgr: EnvironmentManager, args, work: P
     if case_id == "STATE-09":
         if not args.confirm_destructive:
             return blocked(case_id, "STATE", desc, baseline, "requires --confirm-destructive", env_before, mgr)
-        tid = mgr.create_transfer_at("upload", "PAUSED")
+        tid = mgr.create_transfer_at(fixture_direction(args), "PAUSED")
         if not tid:
             return blocked(case_id, "STATE", desc, baseline, "could not establish a paused transfer", env_before, mgr)
         sr = mgr.cap(case_id, ctx.eject_bryck(expect_fail=True))
@@ -1608,7 +1621,7 @@ def handle_state(case_id: str, desc: str, mgr: EnvironmentManager, args, work: P
                                 cleanup_status="performed", cleanup_detail=cleanup_detail,
                                 env_after=mgr.snapshot(f"{case_id}:after"))
     if case_id == "STATE-10":
-        tid = mgr.create_transfer_at("upload", "COMPLETED", timeout=7200)
+        tid = mgr.create_transfer_at(fixture_direction(args), "COMPLETED", timeout=7200)
         if not tid:
             return blocked(case_id, "STATE", desc, baseline, "could not establish a completed transfer", env_before, mgr)
         results = [
@@ -1623,7 +1636,7 @@ def handle_state(case_id: str, desc: str, mgr: EnvironmentManager, args, work: P
                                 cleanup_status="performed", cleanup_detail=cleanup_detail,
                                 env_after=mgr.snapshot(f"{case_id}:after"))
     if case_id == "STATE-11":
-        tid = mgr.create_transfer_at("upload", "CANCELLED")
+        tid = mgr.create_transfer_at(fixture_direction(args), "CANCELLED")
         if not tid:
             return blocked(case_id, "STATE", desc, baseline, "could not establish a cancelled transfer", env_before, mgr)
         results = [
@@ -1640,8 +1653,8 @@ def handle_state(case_id: str, desc: str, mgr: EnvironmentManager, args, work: P
 
     if case_id not in STATE_SEQUENCES:
         return blocked(case_id, "STATE", desc, baseline, "no automated sequence registered for this case", env_before, mgr)
-    direction, initial_wanted, ops = STATE_SEQUENCES[case_id]
-    tid = mgr.create_transfer(direction, "IN_PROGRESS")
+    _, initial_wanted, ops = STATE_SEQUENCES[case_id]
+    tid = mgr.create_transfer(fixture_direction(args), "IN_PROGRESS")
     if not tid:
         return blocked(case_id, "STATE", desc, baseline, "could not establish the initial active transfer", env_before, mgr)
     if initial_wanted == "PAUSED":
@@ -1804,7 +1817,7 @@ def handle_race(case_id: str, desc: str, mgr: EnvironmentManager, args, work: Pa
                                 env_after=env_after)
 
     if case_id == "RACE-11":
-        tid = mgr.create_transfer("upload", "IN_PROGRESS")
+        tid = mgr.create_transfer(fixture_direction(args), "IN_PROGRESS")
         if not tid:
             return blocked(case_id, "RACE", desc, baseline, "could not establish an active transfer", env_before, mgr)
 
@@ -1884,7 +1897,7 @@ def handle_race(case_id: str, desc: str, mgr: EnvironmentManager, args, work: Pa
             needs_transfer = op_a in TRANSFER_OPS
             tid = None
             if needs_transfer:
-                tid = mgr.create_transfer("upload", "IN_PROGRESS")
+                tid = mgr.create_transfer(fixture_direction(args), "IN_PROGRESS")
                 if not tid:
                     pair_results.append((op_a, op_b, False))
                     continue
@@ -1931,7 +1944,7 @@ def handle_race(case_id: str, desc: str, mgr: EnvironmentManager, args, work: Pa
 
     if case_id not in RACE_OPS:
         return blocked(case_id, "RACE", desc, baseline, "no automated race registered for this case", env_before, mgr)
-    tid = mgr.create_transfer("upload", "IN_PROGRESS")
+    tid = mgr.create_transfer(fixture_direction(args), "IN_PROGRESS")
     if not tid:
         return blocked(case_id, "RACE", desc, baseline, "could not establish an active transfer", env_before, mgr)
 
@@ -2004,7 +2017,7 @@ def handle_dup(case_id: str, desc: str, mgr: EnvironmentManager, args, work: Pat
         if not (mgr.ensure_mounted() and mgr.ensure_cloud_configured() and mgr.ensure_dataset()):
             return blocked(case_id, "DUP", desc, baseline, "could not establish mounted+configured+dataset baseline", mgr=mgr)
         env_before = mgr.snapshot(f"{case_id}:before")
-        tid = mgr.create_transfer_at("upload", "COMPLETED", timeout=7200)
+        tid = mgr.create_transfer_at(fixture_direction(args), "COMPLETED", timeout=7200)
         if not tid:
             return blocked(case_id, "DUP", desc, baseline, "could not establish a completed transfer", env_before, mgr)
         mgr.cap(f"{case_id}:first", ctx.download_report(tid, "duplicate first"))
@@ -2020,7 +2033,7 @@ def handle_dup(case_id: str, desc: str, mgr: EnvironmentManager, args, work: Pat
         if not (mgr.ensure_mounted() and mgr.ensure_cloud_configured() and mgr.ensure_dataset()):
             return blocked(case_id, "DUP", desc, baseline, "could not establish mounted+configured+dataset baseline", mgr=mgr)
         env_before = mgr.snapshot(f"{case_id}:before")
-        tid = mgr.create_transfer_at("upload", "PAUSED")
+        tid = mgr.create_transfer_at(fixture_direction(args), "PAUSED")
         if not tid:
             return blocked(case_id, "DUP", desc, baseline, "could not establish a paused transfer", env_before, mgr)
         results = [mgr.cap(f"{case_id}:poll{i}", ctx.transfer_status(tid, f"{case_id} poll {i}")) for i in range(3)]
@@ -2067,13 +2080,13 @@ def handle_report(case_id: str, desc: str, mgr: EnvironmentManager, args, work: 
     env_before = mgr.snapshot(f"{case_id}:before")
 
     if case_id == "REPORT-04":
-        tid = mgr.create_transfer("upload", "IN_PROGRESS")
+        tid = mgr.create_transfer(fixture_direction(args), "IN_PROGRESS")
         if not tid:
             return blocked(case_id, "REPORT", desc, baseline, "could not establish an active transfer", env_before, mgr)
         sr = mgr.cap(case_id, ctx.download_report(tid, "during IN_PROGRESS"))
         expected = "Report during IN_PROGRESS returns a bounded, state-consistent result (not a false completion)."
     elif case_id == "REPORT-05":
-        tid = mgr.create_transfer_at("upload", "PAUSED")
+        tid = mgr.create_transfer_at(fixture_direction(args), "PAUSED")
         if not tid:
             return blocked(case_id, "REPORT", desc, baseline, "could not establish a paused transfer", env_before, mgr)
         sr = mgr.cap(case_id, ctx.download_report(tid, "during PAUSED"))
@@ -2082,7 +2095,7 @@ def handle_report(case_id: str, desc: str, mgr: EnvironmentManager, args, work: 
         # "During cancellation": fire cancel and report at the same instant via a barrier --
         # the same concurrency idiom already used for RACE/LIFE-16 -- rather than needing a
         # dedicated timing-fault fixture.
-        tid = mgr.create_transfer("upload", "IN_PROGRESS")
+        tid = mgr.create_transfer(fixture_direction(args), "IN_PROGRESS")
         if not tid:
             return blocked(case_id, "REPORT", desc, baseline, "could not establish an active transfer", env_before, mgr)
         barrier = threading.Barrier(2)
@@ -2104,19 +2117,19 @@ def handle_report(case_id: str, desc: str, mgr: EnvironmentManager, args, work: 
         expected = ("Requesting a report concurrently with cancellation produces a bounded, "
                     "traceback-free result either way (documented pre- or post-cancellation state); no hang.")
     elif case_id == "REPORT-07":
-        tid = mgr.create_transfer_at("upload", "CANCELLED")
+        tid = mgr.create_transfer_at(fixture_direction(args), "CANCELLED")
         if not tid:
             return blocked(case_id, "REPORT", desc, baseline, "could not establish a cancelled transfer", env_before, mgr)
         sr = mgr.cap(case_id, ctx.download_report(tid, "after CANCELLED", expect_fail=True))
         expected = "Report after CANCELLED fails cleanly or documents the cancellation; no false completion."
     elif case_id == "REPORT-08":
-        tid = mgr.create_transfer_at("upload", "COMPLETED", timeout=7200)
+        tid = mgr.create_transfer_at(fixture_direction(args), "COMPLETED", timeout=7200)
         if not tid:
             return blocked(case_id, "REPORT", desc, baseline, "could not establish a completed transfer", env_before, mgr)
         sr = mgr.cap(case_id, ctx.download_report(tid, "after COMPLETED"))
         expected = "Report after COMPLETED is non-empty and readable."
     elif case_id == "REPORT-09":
-        tid = mgr.create_transfer_at("upload", "PAUSED")
+        tid = mgr.create_transfer_at(fixture_direction(args), "PAUSED")
         if not tid:
             return blocked(case_id, "REPORT", desc, baseline, "could not establish a paused transfer", env_before, mgr)
         blocking_file = work / f"{case_id}-not-a-directory"
@@ -2126,14 +2139,14 @@ def handle_report(case_id: str, desc: str, mgr: EnvironmentManager, args, work: 
         mgr.cap(case_id, sr)
         expected = "Report generation fails in a controlled way when the output path is a file, not a directory."
     elif case_id == "REPORT-10":
-        tid = mgr.create_transfer_at("upload", "PAUSED")
+        tid = mgr.create_transfer_at(fixture_direction(args), "PAUSED")
         if not tid:
             return blocked(case_id, "REPORT", desc, baseline, "could not establish a paused transfer", env_before, mgr)
         mgr.cap(f"{case_id}:first", ctx.download_report(tid, "duplicate first"))
         sr = mgr.cap(case_id, ctx.download_report(tid, "duplicate second"))
         expected = "Duplicate report generation is deterministic and readable."
     else:  # REPORT-11: "during transition" -- report fired concurrently with pause+resume
-        tid = mgr.create_transfer("upload", "IN_PROGRESS")
+        tid = mgr.create_transfer(fixture_direction(args), "IN_PROGRESS")
         if not tid:
             return blocked(case_id, "REPORT", desc, baseline, "could not establish an active transfer", env_before, mgr)
         barrier = threading.Barrier(2)
@@ -2223,7 +2236,7 @@ def handle_fault(case_id: str, desc: str, mgr: EnvironmentManager, args, work: P
         if not (mgr.ensure_mounted() and mgr.ensure_cloud_configured() and mgr.ensure_dataset()):
             return blocked(case_id, "FAULT", desc, baseline, "could not establish mounted+configured+dataset baseline", mgr=mgr)
         env_before = mgr.snapshot(f"{case_id}:before")
-        tid = mgr.create_transfer("upload", "IN_PROGRESS")
+        tid = mgr.create_transfer(fixture_direction(args), "IN_PROGRESS")
         if not tid:
             return blocked(case_id, "FAULT", desc, baseline, "could not establish a background active transfer", env_before, mgr)
         from fault_proxy import FaultProxy
@@ -2285,7 +2298,7 @@ def handle_rec(case_id: str, desc: str, mgr: EnvironmentManager, args, work: Pat
         if not (mgr.ensure_mounted() and mgr.ensure_cloud_configured() and mgr.ensure_dataset(spec="priority_2gb.yaml")):
             return blocked(case_id, "REC", desc, baseline, "could not establish mounted+configured+dataset baseline", mgr=mgr)
         env_before = mgr.snapshot(f"{case_id}:before")
-        tid = mgr.create_transfer("upload", "IN_PROGRESS")
+        tid = mgr.create_transfer(fixture_direction(args), "IN_PROGRESS")
         if not tid:
             return blocked(case_id, "REC", desc, baseline, "could not establish an active transfer", env_before, mgr)
 
@@ -2333,7 +2346,7 @@ def handle_rec(case_id: str, desc: str, mgr: EnvironmentManager, args, work: Pat
         env_before = mgr.snapshot(f"{case_id}:before")
         proc = subprocess.Popen(
             [sys.executable, str(SCRIPT_DIR / "bryck_cloud_transfer_initiate.py"),
-             "--login", str(ctx.login_json), "--params", str(ctx.cloud_ops_json), "--mode", "upload"],
+             "--login", str(ctx.login_json), "--params", str(ctx.cloud_ops_json), "--mode", fixture_direction(args)],
             cwd=str(SCRIPT_DIR), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         )
         kill_after = 5
@@ -2407,7 +2420,7 @@ def handle_rec(case_id: str, desc: str, mgr: EnvironmentManager, args, work: Pat
         if not (mgr.ensure_mounted() and mgr.ensure_cloud_configured() and mgr.ensure_dataset()):
             return blocked(case_id, "REC", desc, baseline, "could not establish mounted+configured+dataset baseline", mgr=mgr)
         env_before = mgr.snapshot(f"{case_id}:before")
-        tid = mgr.create_transfer("upload", "IN_PROGRESS")
+        tid = mgr.create_transfer(fixture_direction(args), "IN_PROGRESS")
         if not tid:
             return blocked(case_id, "REC", desc, baseline, "could not establish an active transfer", env_before, mgr)
 
@@ -2451,13 +2464,13 @@ def handle_verify(case_id: str, desc: str, mgr: EnvironmentManager, args, work: 
         return blocked(case_id, "VERIFY", desc, baseline, "could not establish mounted+configured+dataset baseline", mgr=mgr)
     env_before = mgr.snapshot(f"{case_id}:before")
     if case_id == "VERIFY-04":
-        tid = mgr.create_transfer_at("upload", "COMPLETED", timeout=7200)
+        tid = mgr.create_transfer_at(fixture_direction(args), "COMPLETED", timeout=7200)
         if not tid:
             return blocked(case_id, "VERIFY", desc, baseline, "could not establish a completed transfer", env_before, mgr)
         sr = mgr.cap(case_id, ctx.wait_for_state(tid, {"COMPLETED"}, timeout=60))
         expected = "A completed transfer's status remains COMPLETED on re-query (no false IN_PROGRESS regression)."
     else:  # VERIFY-05
-        tid = mgr.create_transfer_at("upload", "PAUSED")
+        tid = mgr.create_transfer_at(fixture_direction(args), "PAUSED")
         if not tid:
             return blocked(case_id, "VERIFY", desc, baseline, "could not establish a paused transfer", env_before, mgr)
         mgr.cap(f"{case_id}:resume", ctx.resume_transfer(tid))
@@ -2485,7 +2498,10 @@ def handle_int(case_id: str, desc: str, mgr: EnvironmentManager, args, work: Pat
         cloud_cfg = {}
     dataset_root = cloud_cfg.get("bryck_src", "/bryck/small_1gb")
     env_before = mgr.snapshot(f"{case_id}:before")
-    tid = mgr.create_transfer("upload", "IN_PROGRESS")
+    # INT-04/05/06 mutate the bryck-side source, so they need a real upload; INT-09/10
+    # are direction-agnostic pause/resume/cancel checks and honor --direction.
+    direction = fixture_direction(args) if case_id in {"INT-09", "INT-10"} else "upload"
+    tid = mgr.create_transfer(direction, "IN_PROGRESS")
     if not tid:
         return blocked(case_id, "INT", desc, baseline, "could not establish an active upload transfer", env_before, mgr)
 
@@ -2516,9 +2532,9 @@ def handle_int(case_id: str, desc: str, mgr: EnvironmentManager, args, work: Pat
         sr = mgr.cap(f"{case_id}:final_status", ctx.wait_for_state(tid, {"IN_PROGRESS", "COMPLETED"}, timeout=1800))
         expected = "Resuming a paused upload continues rather than restarting from a corrupted state."
     else:  # INT-10
-        new_id = mgr.create_transfer("upload", "IN_PROGRESS")
+        new_id = mgr.create_transfer(direction, "IN_PROGRESS")
         collision = bool(new_id) and new_id == tid
-        sr = ctr.StepResult(step=0, name=desc, command="create_transfer(upload) after cancel", stdout=str(new_id),
+        sr = ctr.StepResult(step=0, name=desc, command=f"create_transfer({direction}) after cancel", stdout=str(new_id),
                             stderr="", returncode=0 if (new_id and not collision) else 1,
                             duration_sec=0.0, passed=bool(new_id) and not collision)
         if new_id:
@@ -2580,7 +2596,7 @@ def handle_clean(case_id: str, desc: str, mgr: EnvironmentManager, args, work: P
     env_before = mgr.snapshot(f"{case_id}:before")
 
     if case_id in {"CLEAN-01", "CLEAN-03", "CLEAN-06"}:
-        tid = mgr.create_transfer("upload", "IN_PROGRESS")
+        tid = mgr.create_transfer(fixture_direction(args), "IN_PROGRESS")
         if not tid:
             return blocked(case_id, "CLEAN", desc, baseline, "could not establish an active transfer", env_before, mgr)
         mgr.cap(f"{case_id}:cancel", ctx.cancel_transfer(tid))
@@ -2595,8 +2611,8 @@ def handle_clean(case_id: str, desc: str, mgr: EnvironmentManager, args, work: P
             sr = mgr.cap(case_id, ctx.ensure_mounted())
             expected = "Mount after cancellation succeeds or is idempotent; mount state is valid."
         else:  # CLEAN-06
-            new_id = mgr.create_transfer("upload", "IN_PROGRESS")
-            sr = ctr.StepResult(step=0, name=desc, command="create_transfer(upload) after cancellation",
+            new_id = mgr.create_transfer(fixture_direction(args), "IN_PROGRESS")
+            sr = ctr.StepResult(step=0, name=desc, command=f"create_transfer({fixture_direction(args)}) after cancellation",
                                 stdout=str(new_id), stderr="", returncode=0 if new_id else 1,
                                 duration_sec=0.0, passed=bool(new_id) and new_id != tid)
             if new_id:
@@ -2606,7 +2622,7 @@ def handle_clean(case_id: str, desc: str, mgr: EnvironmentManager, args, work: P
     elif case_id == "CLEAN-02":
         if not args.confirm_destructive:
             return blocked(case_id, "CLEAN", desc, baseline, "requires --confirm-destructive (format)", env_before, mgr)
-        tid = mgr.create_transfer("upload", "IN_PROGRESS")
+        tid = mgr.create_transfer(fixture_direction(args), "IN_PROGRESS")
         if not tid:
             return blocked(case_id, "CLEAN", desc, baseline, "could not establish an active transfer", env_before, mgr)
         mgr.cap(f"{case_id}:cancel", ctx.cancel_transfer(tid))
@@ -2617,7 +2633,7 @@ def handle_clean(case_id: str, desc: str, mgr: EnvironmentManager, args, work: P
         expected = "Format after cancellation completes cleanly or fails with a documented, recoverable error."
         cleanup_detail = "format executed after cancellation; re-mount recommended before further tests"
     elif case_id == "CLEAN-05":
-        tid = mgr.create_transfer_at("upload", "CANCELLED")
+        tid = mgr.create_transfer_at(fixture_direction(args), "CANCELLED")
         if not tid:
             return blocked(case_id, "CLEAN", desc, baseline, "could not establish a cancelled transfer", env_before, mgr)
         results = [
@@ -2630,7 +2646,7 @@ def handle_clean(case_id: str, desc: str, mgr: EnvironmentManager, args, work: P
         expected = "pause/resume/cancel/report against a cancelled transfer are all rejected or documented cleanly."
         cleanup_detail = mgr.cleanup_transfer(tid)
     elif case_id == "CLEAN-07":
-        tid = mgr.create_transfer_at("upload", "COMPLETED", timeout=7200)
+        tid = mgr.create_transfer_at(fixture_direction(args), "COMPLETED", timeout=7200)
         if not tid:
             return blocked(case_id, "CLEAN", desc, baseline, "could not establish a completed transfer", env_before, mgr)
         sr = mgr.cap(case_id, ctx.deconfigure_cloud())
@@ -2639,7 +2655,7 @@ def handle_clean(case_id: str, desc: str, mgr: EnvironmentManager, args, work: P
     else:  # CLEAN-08
         if not args.confirm_destructive:
             return blocked(case_id, "CLEAN", desc, baseline, "requires --confirm-destructive (eject)", env_before, mgr)
-        tid = mgr.create_transfer_at("upload", "COMPLETED", timeout=7200)
+        tid = mgr.create_transfer_at(fixture_direction(args), "COMPLETED", timeout=7200)
         if not tid:
             return blocked(case_id, "CLEAN", desc, baseline, "could not establish a completed transfer", env_before, mgr)
         sr = mgr.cap(case_id, ctx.eject_bryck())
@@ -2679,7 +2695,7 @@ def handle_mgmt(case_id: str, desc: str, mgr: EnvironmentManager, args, work: Pa
         if not (mgr.ensure_mounted() and mgr.ensure_cloud_configured() and mgr.ensure_dataset()):
             return blocked(case_id, "MGMT", desc, baseline, "could not establish mounted+configured+dataset baseline", mgr=mgr)
         env_before = mgr.snapshot(f"{case_id}:before")
-        tid = mgr.create_transfer("upload", "IN_PROGRESS")
+        tid = mgr.create_transfer(fixture_direction(args), "IN_PROGRESS")
         if not tid:
             return blocked(case_id, "MGMT", desc, baseline, "could not establish a background active transfer", env_before, mgr)
 
@@ -2826,7 +2842,7 @@ def handle_svc(case_id: str, desc: str, mgr: EnvironmentManager, args, work: Pat
         if not (mgr.ensure_mounted() and mgr.ensure_cloud_configured() and mgr.ensure_dataset(spec="priority_2gb.yaml")):
             return blocked(case_id, "SVC", desc, baseline, "could not establish mounted+configured+dataset baseline", mgr=mgr)
         env_before = mgr.snapshot(f"{case_id}:before")
-        tid = mgr.create_transfer("upload", "IN_PROGRESS")
+        tid = mgr.create_transfer(fixture_direction(args), "IN_PROGRESS")
         if not tid:
             return blocked(case_id, "SVC", desc, baseline, "could not establish an active transfer", env_before, mgr)
 
@@ -2870,7 +2886,7 @@ def handle_svc(case_id: str, desc: str, mgr: EnvironmentManager, args, work: Pat
     if not (mgr.ensure_mounted() and mgr.ensure_cloud_configured() and mgr.ensure_dataset(spec="priority_2gb.yaml")):
         return blocked(case_id, "SVC", desc, baseline, "could not establish mounted+configured+dataset baseline", mgr=mgr)
     env_before = mgr.snapshot(f"{case_id}:before")
-    tid = mgr.create_transfer("upload", "IN_PROGRESS")
+    tid = mgr.create_transfer(fixture_direction(args), "IN_PROGRESS")
     if not tid:
         return blocked(case_id, "SVC", desc, baseline, "could not establish an active transfer", env_before, mgr)
 
@@ -2952,19 +2968,19 @@ def handle_statematrix(case_id: str, desc: str, mgr: EnvironmentManager, args, w
     if state == "CREATED":
         # The fixture IS "immediately after initiate, before any wait" -- do not call
         # create_transfer() here since it polls for IN_PROGRESS; that would skip CREATED entirely.
-        sr, ids = ctx.initiate_transfer("upload")
+        sr, ids = ctx.initiate_transfer(fixture_direction(args))
         mgr.cap(f"{case_id}:initiate", sr)
         tid = ids[0] if ids else None
         if not tid:
             return blocked(case_id, "SM", desc, baseline, "could not establish a transfer to observe at CREATED", env_before, mgr)
     elif state == "IN_PROGRESS":
-        tid = mgr.create_transfer("upload", "IN_PROGRESS")
+        tid = mgr.create_transfer(fixture_direction(args), "IN_PROGRESS")
     elif state == "PAUSED":
-        tid = mgr.create_transfer_at("upload", "PAUSED")
+        tid = mgr.create_transfer_at(fixture_direction(args), "PAUSED")
     elif state == "COMPLETED":
-        tid = mgr.create_transfer_at("upload", "COMPLETED", timeout=7200)
+        tid = mgr.create_transfer_at(fixture_direction(args), "COMPLETED", timeout=7200)
     elif state == "CANCELLED":
-        tid = mgr.create_transfer_at("upload", "CANCELLED")
+        tid = mgr.create_transfer_at(fixture_direction(args), "CANCELLED")
     if not tid:
         return blocked(case_id, "SM", desc, baseline, f"could not establish a real transfer in state {state}", env_before, mgr)
 
@@ -3109,7 +3125,7 @@ def handle_combo(case_id: str, desc: str, mgr: EnvironmentManager, args, work: P
         return combined_result("PAUSED transfer rejects duplicate pause/lifecycle/cloud conflicts and remains PAUSED.")
 
     if case_id == "F-06":
-        tid = mgr.create_transfer_at("upload", "PAUSED")
+        tid = mgr.create_transfer_at(fixture_direction(args), "PAUSED")
         if not tid:
             return blocked(case_id, "F", desc, baseline, "could not establish a paused upload", env_before, mgr)
         barrier = threading.Barrier(4)
@@ -3221,7 +3237,7 @@ def handle_combo(case_id: str, desc: str, mgr: EnvironmentManager, args, work: P
         return combined_result("Concurrent transfers are isolated: pausing/cancelling one does not corrupt the other.")
 
     if case_id in {"F-15", "F-16", "F-17", "F-18", "F-19", "F-20"}:
-        tid = mgr.create_transfer("upload", "IN_PROGRESS")
+        tid = mgr.create_transfer(fixture_direction(args), "IN_PROGRESS")
         if not tid:
             return blocked(case_id, "F", desc, baseline, "could not establish an active upload", env_before, mgr)
         if case_id in {"F-16", "F-18"}:
@@ -3265,7 +3281,7 @@ def handle_combo(case_id: str, desc: str, mgr: EnvironmentManager, args, work: P
         if case_id == "F-23":
             tid = mgr.create_transfer("upload", "IN_PROGRESS")
         else:
-            tid = mgr.create_transfer_at("upload", "PAUSED")
+            tid = mgr.create_transfer_at(fixture_direction(args), "PAUSED")
         if not tid:
             return blocked(case_id, "F", desc, baseline, "could not establish the required transfer fixture", env_before, mgr)
         try:
@@ -3281,13 +3297,13 @@ def handle_combo(case_id: str, desc: str, mgr: EnvironmentManager, args, work: P
 
     if case_id in {"F-34", "F-35"}:
         if case_id == "F-34":
-            tid = mgr.create_transfer("upload", "IN_PROGRESS")
+            tid = mgr.create_transfer(fixture_direction(args), "IN_PROGRESS")
             if not tid:
                 return blocked(case_id, "F", desc, baseline, "could not establish an active upload", env_before, mgr)
             step("cancel", ctx.cancel_transfer(tid))
             step("verify_cancelled", ctx.wait_for_state(tid, {"CANCELLED"}, timeout=120))
         else:
-            tid = mgr.create_transfer_at("upload", "COMPLETED", timeout=7200)
+            tid = mgr.create_transfer_at(fixture_direction(args), "COMPLETED", timeout=7200)
             if not tid:
                 return blocked(case_id, "F", desc, baseline, "could not establish a completed upload", env_before, mgr)
             step("report", ctx.download_report(tid, "before reuse cleanup"))
@@ -3297,7 +3313,7 @@ def handle_combo(case_id: str, desc: str, mgr: EnvironmentManager, args, work: P
         step("mount", ctx.ensure_mounted())
         step("reconfigure", ctx.configure_cloud())
         step("dataset", ctx.run_datagen("small_1gb_fast.yaml", timeout=3600))
-        new_tid = mgr.create_transfer("upload", "IN_PROGRESS")
+        new_tid = mgr.create_transfer(fixture_direction(args), "IN_PROGRESS")
         step("new_transfer", ctx.transfer_status(new_tid, f"{case_id} fresh transfer after full reuse cycle") if new_tid else
              ctr.StepResult(step=0, name="new transfer", command="", stdout="", stderr="could not start a fresh transfer",
                             returncode=1, duration_sec=0.0, passed=False))
@@ -3307,7 +3323,7 @@ def handle_combo(case_id: str, desc: str, mgr: EnvironmentManager, args, work: P
                                "transfer cycle completes cleanly and the device is reusable.")
 
     if case_id == "F-29":
-        tid = mgr.create_transfer("upload", "IN_PROGRESS")
+        tid = mgr.create_transfer(fixture_direction(args), "IN_PROGRESS")
         if not tid:
             return blocked(case_id, "F", desc, baseline, "could not establish an active upload", env_before, mgr)
         step("report_in_progress", ctx.download_report(tid, "during IN_PROGRESS"))
@@ -3326,12 +3342,12 @@ def handle_combo(case_id: str, desc: str, mgr: EnvironmentManager, args, work: P
         step("mount", ctx.ensure_mounted())
         if not mgr.ensure_dataset():
             return blocked(case_id, "F", desc, baseline, "could not regenerate dataset after format", env_before, mgr)
-        sr1, ids1 = ctx.initiate_transfer("upload")
+        sr1, ids1 = ctx.initiate_transfer(fixture_direction(args))
         step("transfer_attempt_1", sr1)
         for tid in ids1:
             mgr.cleanup_transfer(tid)
         step("eject_again", ctx.eject_bryck())
-        sr2, ids2 = ctx.initiate_transfer("upload")
+        sr2, ids2 = ctx.initiate_transfer(fixture_direction(args))
         step("transfer_attempt_2", invert_result(sr2))
         for tid in ids2:
             mgr.cleanup_transfer(tid)
@@ -3419,7 +3435,8 @@ def handle_combo(case_id: str, desc: str, mgr: EnvironmentManager, args, work: P
         # already use) is rejected on every operation against a REAL active/paused transfer;
         # the real transfer must still be observable via a valid token afterward.
         direction_state = "IN_PROGRESS" if case_id == "F-25" else "PAUSED"
-        tid = mgr.create_transfer_at("upload", direction_state)
+        fixture_dir = "upload" if case_id == "F-25" else fixture_direction(args)
+        tid = mgr.create_transfer_at(fixture_dir, direction_state)
         if not tid:
             return blocked(case_id, "F", desc, baseline, f"could not establish a real transfer in {direction_state}",
                           env_before, mgr)
@@ -3469,7 +3486,7 @@ def handle_combo(case_id: str, desc: str, mgr: EnvironmentManager, args, work: P
                                                               "--login", str(ctx.login_json), "--params", str(bad_creds),
                                                               expect_fail=True))
         step("recover_reconfigure_real_creds", ctx.configure_cloud())
-        sr, ids = ctx.initiate_transfer("upload")
+        sr, ids = ctx.initiate_transfer(fixture_direction(args))
         step("new_transfer_after_recovery", sr)
         for tid in ids:
             mgr.cleanup_transfer(tid)
@@ -3839,6 +3856,10 @@ def parse_args(argv=None) -> argparse.Namespace:
     p.add_argument("--allow-service-faults", action="store_true")
     p.add_argument("--allow-network-faults", action="store_true")
     p.add_argument("--allow-reboot", action="store_true")
+    p.add_argument("--direction", choices=("upload", "download"), default="upload",
+                    help="Primary transfer direction (bryck->s3 vs s3->bryck) used to build each "
+                         "case's own transfer fixture, for cases where that direction isn't fixed "
+                         "by the case's own name/scenario.")
     p.add_argument("--sections", default="", help="comma-separated case-ID prefixes, e.g. CLI,AUTH,TID")
     p.add_argument("--test-id", default="", help="run only this test ID, or a comma-separated list, e.g. AWS-03,XFER-11,STATE-01")
     p.add_argument("--range", default="", help="1-indexed inclusive position range in the (possibly section-filtered) catalog, e.g. 3-88")

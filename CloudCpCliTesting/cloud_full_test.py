@@ -1156,6 +1156,12 @@ def parse_args(argv: Optional[list] = None) -> argparse.Namespace:
                          "flow (bryck_cloud_transfer_cancel.py is never invoked) -- every other step in "
                          "that case (mount, configure, initiate, pause/resume, etc.) still runs normally "
                          "and the skipped step is recorded as SKIPPED/PASS, not a failure.")
+    ex.add_argument("--direction", choices=("upload", "download"), default="upload",
+                    help="Primary transfer direction (bryck->s3 vs s3->bryck) used to build each negative "
+                         "case's own transfer fixture (default upload). Cases whose name/scenario is "
+                         "inherently direction-specific (DOWNLOAD-*, XFER-09/10, etc.) ignore this and "
+                         "always use their own fixed direction. Run the same --range twice, once per "
+                         "--direction, to get upload-side and download-side coverage under the same case IDs.")
 
     ph = p.add_argument_group("paths / hosts")
     ph.add_argument("--cli-dir", default=str(BRYCK_CLI_DIR), help="bryckclient-cli directory.")
