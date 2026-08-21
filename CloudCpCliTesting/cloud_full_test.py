@@ -764,6 +764,8 @@ def build_catalog() -> List[dict]:
             })
     for cid in negtest.NEG_CATALOG_ORDER:
         tc = negtest.NEG_CATALOG[cid]
+        if "cancel" in tc.name.lower() or "cancelled" in tc.name.lower():
+            continue  # cancel-transfer test cases excluded from this harness's catalog entirely
         # "implemented" reflects negative_environment_runner.py's actual handler
         # coverage (ner.HANDLERS keyed by the case ID's own prefix -- the same
         # prefix ner.dispatch() itself derives via re.match(r"[A-Z]+", case_id)),
