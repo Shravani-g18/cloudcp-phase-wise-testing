@@ -181,6 +181,12 @@ case list live in [phases/01_batch_builder.md](phases/01_batch_builder.md).
 Repeat for every dataset in scope, and repeat selected datasets under alternative
 `BATCH.*` / `NETWORK_PROFILE` configs.
 
+The complete Batch Builder test-case register (plan cases + currently automated checks) is
+kept as a shareable workbook at
+[../CloudCpBatchBuilderTesting/BatchBuilder_TestCases.xlsx](../CloudCpBatchBuilderTesting/BatchBuilder_TestCases.xlsx),
+and the automated validation suite lives in
+[../CloudCpBatchBuilderTesting/](../CloudCpBatchBuilderTesting/).
+
 ---
 
 ## 7. High-Level Test Flow
@@ -210,7 +216,7 @@ tracks what assets exist today versus what is still to be added. Each phase doc 
 |---|---|---|
 | Batch Builder | Test plan ([phases/01](phases/01_batch_builder.md)); generation via [dataset_validator.py](../dataset_cloudcp/spec_files/dataset_validator.py); catalog + manifest | Automated expected-vs-actual `batch_summary.csv` comparator; full 54-dataset run harness; config-matrix runs |
 | Scheduler | Test plan ([phases/02](phases/02_scheduler.md)); weight-shift datasets (cat 3, 6, 11); sandboxed negative harness [schedular_negative_test.py](../CloudCpSchedulerTesting/schedular_negative_test.py) (NEG-* fault injection) | Slot-sampling verdict layer; profile-diff automation; convergence measurement |
-| CloudCP Binary | **Complete binary suite** in [CloudCpBinaryTesting/](../CloudCpBinaryTesting/) (`plan_cp_binary.md`, `run_cloudcp_tests.py`, `make_batches.py`, positive + negative datasets incl. hostile fs objects N01–N11 and xattr-metadata cases N12–N16) | Integrate into master harness; wire to broker-produced batches; confirm xattr preserve/drop policy |
+| CloudCP Binary | **Complete binary suite** in [CloudCpBinaryTesting/](../CloudCpBinaryTesting/) (`plan_cp_binary.md`, `run_cloudcp_tests.py`, `make_batches.py`, positive + negative datasets incl. hostile fs objects N01–N11 and xattr-metadata cases N12–N16, plus the **pause/resume suite PR01–PR06**) | Integrate into master harness; wire to broker-produced batches; confirm xattr preserve/drop policy; PR07 tampered-log + PR-over-malformed-batch |
 | Reporting | Test plan ([phases/04](phases/04_reporting.md)); [planv2.md](../docs/planv2.md) Phase 4 | Injected-status fixtures; CSV/JSON assertion harness |
 | Fallback | Test plan ([phases/05](phases/05_fallback.md)); [planv2.md](../docs/planv2.md) Phase 3 | Fault-injection proxy; `.lst` drain harness |
 | Complete Functional | Test plan ([phases/06](phases/06_complete_functional.md)) | End-to-end runner spanning all stages |
@@ -232,7 +238,12 @@ Sources this plan builds on:
 
 The executable step-by-step cases and their pass/fail records are tracked in the workbook:
 
-- **Test case list:** [../docs/testcaselist.xlsx](../docs/testcaselist.xlsx)
+- **Test case list (master):** [../docs/testcaselist.xlsx](../docs/testcaselist.xlsx)
+
+Per-phase test-case registers (self-contained, live next to each suite):
+
+- **Phase 1 — Batch Builder:** [../CloudCpBatchBuilderTesting/BatchBuilder_TestCases.xlsx](../CloudCpBatchBuilderTesting/BatchBuilder_TestCases.xlsx)
+- **Phase 3 — CloudCP Binary:** [../CloudCpBinaryTesting/CloudCpBinary_TestCases.xlsx](../CloudCpBinaryTesting/CloudCpBinary_TestCases.xlsx) (incl. positive, negative/hostile, and pause/resume suites)
 
 Each phase doc in [phases/](phases/) maps its cases to rows in that workbook (by a
 `Phase-<n>-<seq>` case ID). Keep IDs stable so results roll up to this master.
