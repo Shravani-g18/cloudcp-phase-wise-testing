@@ -4,13 +4,13 @@ root: /bryck/small_1gb
 threads: 4
 seed: 42
 
-# Default dataset fixture for negative_environment_runner.py's ensure_dataset()
-# (hardcoded as spec="small_1gb_fast.yaml" everywhere in that file). Despite
-# the name, kept deliberately small/fast (a few hundred KB total, ~45 files)
-# so every negative case that just needs "some real files present" completes
-# datagen in a couple of seconds instead of timing out -- the actual root/
-# destination is rewritten by ensure_dataset() to match cloud_ops.json's
-# bryck_src at run time, so the root value above is only a fallback default.
+# This filename is only a sentinel now: ensure_dataset() in
+# negative_environment_runner.py detects the literal string
+# "small_1gb_fast.yaml" and swaps in a round-robin pick from
+# DATASET_SPEC_ROTATION (09_unicode_names.yaml / 06_sparse_files.yaml /
+# 11_mixed_realistic.yaml -- real CloudCpFallbackTesting specs) instead of
+# ever actually reading this file's content. Kept only as a harmless fallback
+# in case that rotation constant is ever removed.
 content:
   type: random
   buffer_size: 64KB

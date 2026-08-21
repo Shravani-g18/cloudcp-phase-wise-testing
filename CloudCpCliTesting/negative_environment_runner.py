@@ -202,6 +202,14 @@ def build_narrative(result: TestResult) -> str:
     )
 
 
+# Real, proven CloudCpFallbackTesting specs rotated round-robin by
+# ensure_dataset() whenever a caller doesn't ask for a specific spec.
+DATASET_SPEC_ROTATION = [
+    "09_unicode_names.yaml",
+    "06_sparse_files.yaml",
+    "11_mixed_realistic.yaml",
+]
+
 # =============================================================================
 # Environment manager — thin wrapper around TestContext
 # =============================================================================
@@ -218,6 +226,7 @@ class EnvironmentManager:
         self.ctx = ctx
         self.commands: list[CommandRecord] = []
         self._expired_token: str | None = None
+        self._dataset_spec_idx = 0
 
     def get_expired_token(self) -> str | None:
         """Return a JWT that was genuinely issued and has genuinely expired.
@@ -371,7 +380,15 @@ class EnvironmentManager:
         exist." Rewriting the spec's root here keeps generation aligned with
         whatever bryck_src is actually configured on this run's device, and
         also re-generates fresh data every time (e.g. after a format wiped it).
+
+        When called with the default spec name (i.e. the caller didn't ask
+        for a specific one), rotate round-robin through the 3 real,
+        proven CloudCpFallbackTesting specs instead of always using the same
+        file -- so different cases get varied real datasets over a run.
         """
+        if spec == "small_1gb_fast.yaml":
+            spec = DATASET_SPEC_ROTATION[self._dataset_spec_idx % len(DATASET_SPEC_ROTATION)]
+            self._dataset_spec_idx += 1
         try:
             cloud_cfg = json.loads(self.ctx.cloud_ops_json.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):

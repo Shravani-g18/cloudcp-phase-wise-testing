@@ -2,40 +2,58 @@ version: 1
 mode: tree
 root: /bryck/priority_2gb
 threads: 8
-seed: 7
+seed: 42
 
-# Dataset fixture for negative_environment_runner.py's REC-01/SVC service-
-# restart-during-transfer fixtures (ensure_dataset(spec="priority_2gb.yaml")).
-# These need a transfer that stays IN_PROGRESS long enough to stop/restart
-# services mid-flight, so files are deliberately larger than small_1gb_fast.yaml
-# -- tens of MB each, ~50-100MB total -- a practical middle ground that gives a
-# real timing window without requiring an actual multi-GB transfer for a test
-# fixture. Adjust min/max below if the target device needs a longer window.
+# Replaced with the real CloudCpFallbackTesting 11_mixed_realistic.yaml spec
+# (weighted extensions, tiny -> large logical sizes) so REC-01 and the 2
+# service-restart-mid-transfer cases get a proven-real dataset instead of an
+# invented one, while keeping this filename (ensure_dataset(spec="priority_2gb.yaml")
+# is explicitly requested by those 3 call sites, so it isn't covered by
+# ensure_dataset()'s DATASET_SPEC_ROTATION sentinel-swap).
 content:
   type: random
-  buffer_size: 1MB
+  buffer_size: 8MB
+  direct_io:
+    enabled: true
+    min_size: 256MB
 
 naming:
   charset: mixed
   alphabet: [lower, upper, digit]
-  prefix: "pri-"
-  length: 10
+  unicode_blocks:
+    - latin-supplement
+  special_chars: " _-"
+  prefix: "obj-"
+  length: 12
   collision_strategy: append-index
 
 tree:
-  fanout: 2
-  depth: 2
-  files_per_dir: 3
+  fanout: 5
+  depth: 3
+  files_per_dir: 8
   files_in_each_dir: false
 
 size:
   type: range
-  min: 4MB
-  max: 16MB
+  min: 4KB
+  max: 8MB
   distribution: log-uniform
 
 extensions:
+  - ext: .txt
+    weight: 35
+  - ext: .json
+    weight: 25
+    size: { type: range, min: 1KB, max: 2MB }
+  - ext: .csv
+    weight: 15
+    size: { type: range, min: 1KB, max: 4MB }
   - ext: .bin
-    weight: 60
-  - ext: .dat
-    weight: 40
+    weight: 15
+    size: { type: range, min: 1MB, max: 32MB }
+  - ext: .mp4
+    weight: 7
+    size: { type: range, min: 64MB, max: 512MB }
+  - ext: .mxf
+    weight: 3
+    size: { type: range, min: 512MB, max: 2GB }
