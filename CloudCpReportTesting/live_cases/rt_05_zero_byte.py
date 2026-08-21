@@ -1,18 +1,22 @@
-"""RT-05: Zero-byte files."""
+"""RT-05: Zero-byte files, reusing the real CloudCpFallbackTesting datagen
+spec (01_zero_byte.yaml, root: /bryck/cloudcp_fallback/zero_byte) instead of
+a duplicate.
+"""
 import live_common as lc
 
 CASE_ID = "RT-05"
 DESCRIPTION = "Zero-byte files (upload)"
+SPEC_REF = "../CloudCpFallbackTesting/spec_files/01_zero_byte.yaml"
 STEPS = [
     "Cleanup RT-05 source dir and S3 prefix",
-    "datagen 10 zero-byte files",
+    "datagen (01_zero_byte.yaml): 200 zero-byte files",
     "Initiate upload transfer, poll until COMPLETED",
     "Download + parse report",
-    "Assert all 10 appear with size==0, SUCCESS, non-empty ETag",
+    "Assert all 200 appear with size==0, SUCCESS, non-empty ETag",
     "Cleanup source dir + S3 prefix",
 ]
 
-EXPECTED_COUNT = 10
+EXPECTED_COUNT = 200
 
 _EMPTY_OBJECT_ETAG = "d41d8cd98f00b204e9800998ecf8427e"
 
@@ -31,5 +35,5 @@ def _extra(entries, report_rows, summary, parsed):
 
 
 def run(ctx, out_dir):
-    return lc.run_upload_case(ctx, CASE_ID, "RT-05_zero_byte.yaml", EXPECTED_COUNT,
+    return lc.run_upload_case(ctx, CASE_ID, SPEC_REF, EXPECTED_COUNT,
                                out_dir, extra_assert=_extra)

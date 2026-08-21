@@ -1,18 +1,23 @@
-"""RT-03: Filename encoding variants (spaces, punctuation, unicode)."""
+"""RT-03: Filename encoding variants, reusing the real CloudCpFallbackTesting
+datagen spec (09_unicode_names.yaml, root: /bryck/cloudcp_fallback/unicode_names)
+instead of a duplicate - already covers spaces/parentheses/brackets plus
+Latin/Cyrillic/CJK/emoji unicode.
+"""
 import live_common as lc
 
 CASE_ID = "RT-03"
 DESCRIPTION = "Filename encoding variants (upload)"
+SPEC_REF = "../CloudCpFallbackTesting/spec_files/09_unicode_names.yaml"
 STEPS = [
     "Cleanup RT-03 source dir and S3 prefix",
-    "datagen 60 files with spaces/parentheses/brackets/commas/periods/CJK names",
+    "datagen (09_unicode_names.yaml): 150 files, unicode/emoji/CJK/spaces names",
     "Initiate upload transfer, poll until COMPLETED",
     "Download + parse report",
     "Assert paths round-trip through the CSV without truncation or corruption",
     "Cleanup source dir + S3 prefix",
 ]
 
-EXPECTED_COUNT = 60
+EXPECTED_COUNT = 150
 
 
 def _extra(entries, report_rows, summary, parsed):
@@ -29,5 +34,5 @@ def _extra(entries, report_rows, summary, parsed):
 
 
 def run(ctx, out_dir):
-    return lc.run_upload_case(ctx, CASE_ID, "RT-03_filename_variants.yaml", EXPECTED_COUNT,
+    return lc.run_upload_case(ctx, CASE_ID, SPEC_REF, EXPECTED_COUNT,
                                out_dir, extra_assert=_extra)

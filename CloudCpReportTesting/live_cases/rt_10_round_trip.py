@@ -1,12 +1,17 @@
-"""RT-10: Round-trip - upload then download, cross-check sizes/ETags."""
+"""RT-10: Round-trip - upload then download, cross-check sizes/ETags.
+
+Reuses the real CloudCpFallbackTesting datagen spec (03_small_files.yaml,
+same one RT-01 uses) instead of a duplicate.
+"""
 import live_common as lc
 import bryck_client as bc
 
 CASE_ID = "RT-10"
 DESCRIPTION = "Round-trip: upload + download"
+SPEC_REF = "../CloudCpFallbackTesting/spec_files/03_small_files.yaml"
 STEPS = [
     "Cleanup RT-10-src/RT-10-dst dirs and S3 prefix",
-    "datagen 120 files (reuses RT-01 spec) into RT-10-src",
+    "datagen (03_small_files.yaml) 120 files into RT-10-src",
     "Upload transfer RT-10-src -> S3, poll until COMPLETED",
     "Download transfer S3 -> RT-10-dst, poll until COMPLETED",
     "Cross-check: size (and ETag where possible) match between upload and download reports",
@@ -25,8 +30,7 @@ def run(ctx, out_dir):
 
     try:
         lc.setup_case(ctx, [src_dir, dst_dir], [s3_uri])
-        entries = lc.generate_data(ctx, CASE_ID, "RT-01_small_flat.yaml", src_dir,
-                                    spec_case_dir="RT-01")
+        entries = lc.generate_data(ctx, CASE_ID, SPEC_REF, src_dir)
     except bc.LiveClientError as exc:
         details["error"] = str(exc)
         return "SETUP_ERROR", details

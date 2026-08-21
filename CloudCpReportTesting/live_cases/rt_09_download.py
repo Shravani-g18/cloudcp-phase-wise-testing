@@ -3,16 +3,18 @@
 Self-contained: seeds its own upload first (RT-09-src -> RT-09 S3 prefix)
 rather than depending on RT-01 having already run and left data in S3, so
 this case can be run standalone (--one RT-09) or after --all with any
-per-case cleanup policy.
+per-case cleanup policy. Reuses the real CloudCpFallbackTesting datagen spec
+(03_small_files.yaml, same one RT-01 uses) instead of a duplicate.
 """
 import live_common as lc
 import bryck_client as bc
 
 CASE_ID = "RT-09"
 DESCRIPTION = "Download transfer (S3 -> /bryck)"
+SPEC_REF = "../CloudCpFallbackTesting/spec_files/03_small_files.yaml"
 STEPS = [
     "Cleanup RT-09 source/download dirs and S3 prefix",
-    "datagen 120 files (reuses RT-01 spec) into RT-09-src, upload to seed S3",
+    "datagen (03_small_files.yaml) 120 files into RT-09-src, upload to seed S3",
     "Initiate DOWNLOAD transfer S3 -> RT-09-download, poll until COMPLETED",
     "Download + parse report",
     "Assert 120 rows, all SUCCESS, sizes match the seeded upload, files present on disk",
@@ -30,8 +32,7 @@ def run(ctx, out_dir):
 
     try:
         lc.setup_case(ctx, [src_dir, dl_dir], [s3_uri])
-        entries = lc.generate_data(ctx, CASE_ID, "RT-01_small_flat.yaml", src_dir,
-                                    spec_case_dir="RT-01")
+        entries = lc.generate_data(ctx, CASE_ID, SPEC_REF, src_dir)
     except bc.LiveClientError as exc:
         details["error"] = str(exc)
         return "SETUP_ERROR", details
