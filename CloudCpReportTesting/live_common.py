@@ -50,8 +50,14 @@ def build_context(args, cfg=None):
     return Context(cfg=cfg, args=args, session=session, api=api)
 
 
-def spec_path(case_id, filename):
-    return SCRIPT_DIR / "spec_files" / case_id / filename
+def spec_path(spec_ref):
+    """Resolve a spec_ref to an absolute path. spec_ref is a path to a real,
+    already-existing datagen YAML elsewhere in the repo (e.g.
+    '../CloudCpFallbackTesting/spec_files/03_small_files.yaml'), relative to
+    this file's directory - RT-* cases deliberately do NOT ship their own
+    duplicate copies of these specs."""
+    p = Path(spec_ref)
+    return p if p.is_absolute() else (SCRIPT_DIR / p).resolve()
 
 
 def setup_case(ctx, remote_dirs, s3_uris):
@@ -64,20 +70,19 @@ def setup_case(ctx, remote_dirs, s3_uris):
             bc.s3_rm_recursive(ctx.cfg, uri)
 
 
-def generate_data(ctx, case_id, spec_file, remote_dir, spec_case_dir=None):
-    """Step 2: push the datagen spec, run it, enumerate the resulting files.
-
-    spec_case_dir lets a case reuse another case's spec folder (e.g. RT-08/09/10
-    reuse spec_files/RT-01/RT-01_small_flat.yaml) while remote paths/S3 prefixes
-    still use this case's own case_id.
+def generate_data(ctx, case_id, spec_ref, remote_dir):
+    """Step 2: push the real datagen spec (see spec_path), run it, enumerate
+    the resulting files. push_spec_file rewrites the spec's root: to
+    remote_dir at upload time, so reusing another phase's/case's spec file
+    verbatim is always safe - it never writes into that other suite's dir.
     """
     if getattr(ctx.args, "no_datagen", False):
         entries = bc.enumerate_remote_files(ctx.ssh(), remote_dir)
         return entries
-    local_spec = spec_path(spec_case_dir or case_id, spec_file)
+    local_spec = spec_path(spec_ref)
     if not local_spec.is_file():
         raise bc.LiveClientError(f"spec file not found: {local_spec}")
-    remote_spec = bc.push_spec_file(ctx.ssh(), local_spec, case_id, root_override=remote_dir)
+    remote_spec = bc.push_spec_file(ctx.ssh(), local_spec, case_id, remote_dir=remote_dir)
     bc.run_datagen(ctx.ssh(), ctx.cfg, remote_spec)
     entries = bc.enumerate_remote_files(ctx.ssh(), remote_dir)
     if not entries:
@@ -162,11 +167,13 @@ def cross_cutting(report_rows, summary):
     return re_.cross_cutting_checks(report_rows, summary)
 
 
-def run_upload_case(ctx, case_id, spec_file, expected_count, out_dir, extra_assert=None,
+def run_upload_case(ctx, case_id, spec_ref, expected_count, out_dir, extra_assert=None,
                      remote_suffix=None, s3_suffix=None):
     """Generic single-upload flow (RT-01..RT-07): setup -> datagen -> upload ->
     poll -> download+parse -> assert -> cleanup. Returns (status, details).
 
+    spec_ref points at a real, already-existing datagen spec elsewhere in the
+    repo (see spec_path) - no per-case duplicate spec files are shipped here.
     extra_assert, if given, is called as
     extra_assert(source_entries, report_rows, summary, parsed) -> (bool, dict)
     for case-specific checks layered on top of the RT-01 baseline assertions.
@@ -177,7 +184,7 @@ def run_upload_case(ctx, case_id, spec_file, expected_count, out_dir, extra_asse
 
     try:
         setup_case(ctx, [remote_dir], [s3_uri])
-        entries = generate_data(ctx, case_id, spec_file, remote_dir)
+        entries = generate_data(ctx, case_id, spec_ref, remote_dir)
     except bc.LiveClientError as exc:
         details["error"] = str(exc)
         return "SETUP_ERROR", details

@@ -116,26 +116,33 @@ def ssh_dir_exists(ssh, remote_path):
     return rc == 0
 
 
-def push_spec_file(ssh, local_spec_path, case_id, root_override=None):
-    """SFTP-upload a datagen YAML spec to a per-case /tmp path and return it.
+def push_spec_file(ssh, local_spec_path, case_id, remote_dir=None):
+    """SFTP-upload a datagen YAML spec to a per-case /tmp path.
 
-    root_override replaces the spec's root: field so datagen writes to the
-    directory this case actually expects, regardless of what the YAML hardcodes.
+    When remote_dir is given, the spec's top-level `root:` is rewritten to
+    exactly match it before upload - the checked-in spec files under
+    spec_files/ hardcode a root: path, and it must stay in lockstep with
+    bryck_local_root in config.json or datagen ends up writing files to a
+    directory the runner never enumerates/uploads from. Rewriting at push
+    time removes that class of bug regardless of what config.json says.
     """
     basename = os.path.basename(local_spec_path)
     remote_path = f"/tmp/report_testing_{case_id}_{basename}"
-    if root_override is not None:
-        content = Path(local_spec_path).read_text(encoding="utf-8")
-        content = re.sub(r"^root:[ \t]*.*$", f"root: {root_override}", content, flags=re.MULTILINE)
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as tf:
-            tf.write(content)
-            tmp_local = tf.name
-        try:
-            ssh.put(tmp_local, remote_path)
-        finally:
-            os.unlink(tmp_local)
-    else:
+    if remote_dir is None:
         ssh.put(str(local_spec_path), remote_path)
+        return remote_path
+
+    text = Path(local_spec_path).read_text(encoding="utf-8")
+    text, n = re.subn(r"(?m)^root:[^\n]*$", f"root: {remote_dir}", text, count=1)
+    if n == 0:
+        raise LiveClientError(f"{local_spec_path}: no top-level 'root:' field found to rewrite")
+    fd, tmp_path = tempfile.mkstemp(suffix=".yaml")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as tmp:
+            tmp.write(text)
+        ssh.put(tmp_path, remote_path)
+    finally:
+        os.unlink(tmp_path)
     return remote_path
 
 

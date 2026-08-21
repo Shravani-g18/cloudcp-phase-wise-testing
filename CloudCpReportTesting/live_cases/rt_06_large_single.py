@@ -1,11 +1,15 @@
-"""RT-06: Single large file (600MB-1GB), multipart upload."""
+"""RT-06: Single large file, reusing the real dataset_cloudcp datagen spec
+(DS-P9-06, root: /bryck/cloudcp/DS-P9-06/large/1gb/fn08, fixed 1GB file)
+instead of a duplicate.
+"""
 import live_common as lc
 
 CASE_ID = "RT-06"
 DESCRIPTION = "Single large file (upload, multipart)"
+SPEC_REF = "../dataset_cloudcp/spec_files/DS-P9-06/DS-P9-06__large__1gb__fn08.yaml"
 STEPS = [
     "Cleanup RT-06 source dir and S3 prefix",
-    "datagen 1 file, 600MB-1GB",
+    "datagen (DS-P9-06): 1 file, fixed 1GB",
     "Initiate upload transfer, poll until COMPLETED",
     "Download + parse report",
     "Assert exactly 1 SUCCESS row, size matches source, ETag present",
@@ -26,5 +30,5 @@ def _extra(entries, report_rows, summary, parsed):
 
 
 def run(ctx, out_dir):
-    return lc.run_upload_case(ctx, CASE_ID, "RT-06_large_single.yaml", EXPECTED_COUNT,
+    return lc.run_upload_case(ctx, CASE_ID, SPEC_REF, EXPECTED_COUNT,
                                out_dir, extra_assert=_extra)

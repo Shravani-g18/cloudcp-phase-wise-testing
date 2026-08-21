@@ -1,12 +1,17 @@
-"""RT-08: Re-upload to same destination (idempotency) - two uploads, no S3 cleanup between."""
+"""RT-08: Re-upload to same destination (idempotency) - two uploads, no S3 cleanup between.
+
+Reuses the real CloudCpFallbackTesting datagen spec (03_small_files.yaml,
+same one RT-01 uses) instead of a duplicate.
+"""
 import live_common as lc
 import bryck_client as bc
 
 CASE_ID = "RT-08"
 DESCRIPTION = "Re-upload to same destination (idempotency)"
+SPEC_REF = "../CloudCpFallbackTesting/spec_files/03_small_files.yaml"
 STEPS = [
     "Cleanup RT-08 source dir and S3 prefix",
-    "datagen fresh data set (reuses RT-01 spec)",
+    "datagen (03_small_files.yaml) fresh data set",
     "First upload transfer -> confirm COMPLETED",
     "Second upload transfer to the SAME S3 dest, without cleaning S3 first -> confirm COMPLETED",
     "Assert second report: every row SUCCESS or SKIPPED, zero FAILED-by-already-exists rows",
@@ -24,8 +29,7 @@ def run(ctx, out_dir):
 
     try:
         lc.setup_case(ctx, [remote_dir], [s3_uri])
-        entries = lc.generate_data(ctx, CASE_ID, "RT-01_small_flat.yaml", remote_dir,
-                                    spec_case_dir="RT-01")
+        entries = lc.generate_data(ctx, CASE_ID, SPEC_REF, remote_dir)
     except bc.LiveClientError as exc:
         details["error"] = str(exc)
         return "SETUP_ERROR", details

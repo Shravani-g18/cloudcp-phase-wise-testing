@@ -1,18 +1,23 @@
-"""RT-04: Nested directory tree (5 levels deep)."""
+"""RT-04: Nested directory tree, reusing the real CloudCpFallbackTesting
+datagen spec (08_deep_tree.yaml, root: /bryck/cloudcp_fallback/deep_tree)
+instead of a duplicate - fanout 2 x depth 12 = 4096 files, one per leaf
+directory, 12 levels deep.
+"""
 import live_common as lc
 
 CASE_ID = "RT-04"
-DESCRIPTION = "Nested directory tree, 5 levels (upload)"
+DESCRIPTION = "Nested directory tree, 12 levels (upload)"
+SPEC_REF = "../CloudCpFallbackTesting/spec_files/08_deep_tree.yaml"
 STEPS = [
     "Cleanup RT-04 source dir and S3 prefix",
-    "datagen 100 files spread across 5 levels of subdirectories",
+    "datagen (08_deep_tree.yaml): 4096 files, one per leaf dir, 12 levels deep",
     "Initiate upload transfer, poll until COMPLETED",
     "Download + parse report",
     "Assert full relative path preserved and S3 path mirrors directory structure",
     "Cleanup source dir + S3 prefix",
 ]
 
-EXPECTED_COUNT = 100
+EXPECTED_COUNT = 4096
 
 
 def _extra(entries, report_rows, summary, parsed):
@@ -34,5 +39,5 @@ def _extra(entries, report_rows, summary, parsed):
 
 
 def run(ctx, out_dir):
-    return lc.run_upload_case(ctx, CASE_ID, "RT-04_nested_dirs.yaml", EXPECTED_COUNT,
+    return lc.run_upload_case(ctx, CASE_ID, SPEC_REF, EXPECTED_COUNT,
                                out_dir, extra_assert=_extra)

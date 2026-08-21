@@ -1,13 +1,20 @@
-"""RT-01: Happy path - small flat files, upload."""
+"""RT-01: Happy path - small flat files, upload.
+
+Reuses the real CloudCpFallbackTesting datagen spec (03_small_files.yaml,
+root: /bryck/cloudcp_fallback/small_files) rather than shipping a duplicate -
+push_spec_file() rewrites root: to this case's own /bryck/report_testing/RT-01
+at upload time, so it's safe to reuse verbatim.
+"""
 import live_common as lc
 
 CASE_ID = "RT-01"
 DESCRIPTION = "Happy path: small flat files (upload)"
+SPEC_REF = "../CloudCpFallbackTesting/spec_files/03_small_files.yaml"
 STEPS = [
     "Cleanup /bryck/report_testing/RT-01 and s3://.../RT-01 (idempotent reset)",
-    "datagen 120 files, 1-20MB each, flat dir",
+    "datagen (03_small_files.yaml): 120 files, 1-16MB each, flat dir",
     "Initiate upload transfer, poll until COMPLETED",
-    "Download + unzip report, parse transfer_report_89.csv + transfer_summary.txt",
+    "Download + unzip report, parse transfer_report_<id>.csv + transfer_summary.txt",
     "Assert: 120 rows, all SUCCESS, sizes match source, missing count == 0",
     "Cleanup source dir + S3 prefix, verify both empty",
 ]
@@ -35,5 +42,5 @@ def _extra(entries, report_rows, summary, parsed):
 
 
 def run(ctx, out_dir):
-    return lc.run_upload_case(ctx, CASE_ID, "RT-01_small_flat.yaml", EXPECTED_COUNT,
+    return lc.run_upload_case(ctx, CASE_ID, SPEC_REF, EXPECTED_COUNT,
                                out_dir, extra_assert=_extra)

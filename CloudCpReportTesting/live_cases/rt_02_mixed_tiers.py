@@ -1,18 +1,24 @@
-"""RT-02: Mixed-tier upload (tiny + small + medium)."""
+"""RT-02: Mixed-tier upload (tiny + small + medium + large), reusing the real
+CloudCpFallbackTesting datagen spec (11_mixed_realistic.yaml, root:
+/bryck/cloudcp_fallback/mixed_realistic) instead of a duplicate - weighted
+extensions there span 4KB (.txt) to 2GB (.mxf), so all three size tiers this
+case checks for are genuinely present.
+"""
 import live_common as lc
 
 CASE_ID = "RT-02"
-DESCRIPTION = "Mixed tier upload (tiny/small/medium)"
+DESCRIPTION = "Mixed tier upload (tiny/small/medium/large)"
+SPEC_REF = "../CloudCpFallbackTesting/spec_files/11_mixed_realistic.yaml"
 STEPS = [
     "Cleanup RT-02 source dir and S3 prefix",
-    "datagen 250 files across 3 tiers: 80 tiny, 120 small, 50 medium (~8GB)",
+    "datagen (11_mixed_realistic.yaml): 1000 files, weighted extensions 4KB-2GB",
     "Initiate upload transfer, poll until COMPLETED",
     "Download + parse report",
     "Assert all RT-01 checks, plus: all 3 tiers present, byte totals reconcile",
     "Cleanup source dir + S3 prefix",
 ]
 
-EXPECTED_COUNT = 250
+EXPECTED_COUNT = 1000
 
 
 def _extra(entries, report_rows, summary, parsed):
@@ -35,5 +41,5 @@ def _extra(entries, report_rows, summary, parsed):
 
 
 def run(ctx, out_dir):
-    return lc.run_upload_case(ctx, CASE_ID, "RT-02_mixed_tiers.yaml", EXPECTED_COUNT,
+    return lc.run_upload_case(ctx, CASE_ID, SPEC_REF, EXPECTED_COUNT,
                                out_dir, extra_assert=_extra)
