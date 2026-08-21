@@ -1292,6 +1292,19 @@ def main(argv: Optional[list] = None) -> int:
             encoding="utf-8")
         LOG.info("Combined negative report: %s", neg_report_dir / "combined_report.html")
 
+    zip_path: Optional[pathlib.Path] = None
+    try:
+        # Package the entire run directory (report.json, combined_report.html,
+        # every per-case perf/summary folder) into one .zip next to it -- a
+        # single file that's easy to download/extract on any OS, instead of
+        # relying on tar (which failed for the user: wrong path/permissions/
+        # taring before the run finished all produce an empty archive).
+        zip_base = shutil.make_archive(str(run_dir), "zip", root_dir=str(run_dir.parent), base_dir=run_dir.name)
+        zip_path = pathlib.Path(zip_base)
+        LOG.info("Results directory zipped -> %s", zip_path)
+    except OSError as exc:
+        LOG.warning("could not zip results directory %s: %s", run_dir, exc)
+
     counts: dict = {}
     for r in results:
         counts[r.get("status", "UNKNOWN")] = counts.get(r.get("status", "UNKNOWN"), 0) + 1
@@ -1304,6 +1317,8 @@ def main(argv: Optional[list] = None) -> int:
     print(f"  report.json: {run_dir / 'report.json'}")
     if ner_results:
         print(f"  negative combined report: {run_dir / 'negative' / 'combined_report.html'}")
+    if zip_path is not None:
+        print(f"  zip archive: {zip_path}")
     print("=" * 60 + "\n")
     if interrupted:
         return 130  # conventional 128+SIGINT exit code
