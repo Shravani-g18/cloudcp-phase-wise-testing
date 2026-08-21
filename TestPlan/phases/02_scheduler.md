@@ -41,6 +41,12 @@ large / medium / small / tiny.
 > [../../CloudCpSchedulerTesting/test_cases.md](../../CloudCpSchedulerTesting/test_cases.md). This is
 > the phase-level index. `SCH-*` IDs map 1:1 to that file.
 
+> **Register (Excel):** the full case list is maintained as a shareable workbook at
+> [../../CloudCpSchedulerTesting/CloudCpScheduler_TestCases.xlsx](../../CloudCpSchedulerTesting/CloudCpScheduler_TestCases.xlsx)
+> (sheets: *Overview*, *Datasets & Tiers*, *A - Enumeration Oracle*, *B - Scheduler Dispatch*,
+> *C - Configuration*, *E1 - Pause-Resume Positive*, *E2 - Pause-Resume Negative*,
+> *D - Negative Fault*, *Performance (P2)*, *Traceability*) — 45 P0/P1 cases plus 3 P2.
+
 ### 2.0 Enumeration Oracle (P0 — deterministic precondition)
 
 Proves the pending set that every scheduler test relies on. Run with `BATCH_BUILDER_ONLY=true` on
